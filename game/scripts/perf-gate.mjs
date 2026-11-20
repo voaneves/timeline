@@ -50,7 +50,10 @@ async function runProfile(browser, name, p)
     })
     const page = await context.newPage()
     const errors = []
-    page.on('pageerror', (e) => errors.push(e.message))
+    page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`))
+    page.on('console', (m) => { if(m.type() === 'error') errors.push(`console.error: ${m.text()}`) })
+    page.on('requestfailed', (r) => errors.push(`requestfailed: ${r.url()} (${r.failure()?.errorText})`))
+    page.on('response', (r) => { if(r.status() >= 400) errors.push(`http ${r.status()}: ${r.url()}`) })
     await page.bringToFront()
     const cdp = await context.newCDPSession(page)
     if(p.cpuThrottle > 1) await cdp.send('Emulation.setCPUThrottlingRate', { rate: p.cpuThrottle })
@@ -60,12 +63,22 @@ async function runProfile(browser, name, p)
     await page.waitForTimeout((budgets.warmupSec ?? 3) * 1000)
 
     const t0 = await page.evaluate(() => ({ count: window.__perf.count, t: performance.now() }))
-    await page.waitForTimeout(budgets.durationSec * 1000)
+    // Sample across the whole window: draw calls / triangles are the max, not the value of the last frame
+    let maxDrawCalls = 0, maxTriangles = 0
+    const sampleMs = budgets.sampleMs ?? 500
+    const end = Date.now() + budgets.durationSec * 1000
+    while(Date.now() < end)
+    {
+        await page.waitForTimeout(sampleMs)
+        const s = await page.evaluate(() => { const x = window.__perf.snapshot(); return { drawCalls: x.drawCalls, triangles: x.triangles } })
+        maxDrawCalls = Math.max(maxDrawCalls, s.drawCalls ?? 0)
+        maxTriangles = Math.max(maxTriangles, s.triangles ?? 0)
+    }
     const snap = await page.evaluate(() => ({ ...window.__perf.snapshot(), count: window.__perf.count, t: performance.now(), dpr: devicePixelRatio, size: [innerWidth, innerHeight] }))
     await context.close()
 
     const avgFps = ((snap.count - t0.count) / (snap.t - t0.t)) * 1000
-    return { name, errors, avgFps, snap }
+    return { name, errors, avgFps, snap, maxDrawCalls, maxTriangles }
 }
 
 function judge(name, p, r)
@@ -74,8 +87,8 @@ function judge(name, p, r)
         ['avg fps', r.avgFps, '>=', p.minFps],
         ['p50 fps', r.snap.fps, '>=', p.minFps],
         ['frame p95 ms', r.snap.frameMsP95, '<=', p.maxP95Ms],
-        ['draw calls', r.snap.drawCalls, '<=', p.maxDrawCalls],
-        ['triangles', r.snap.triangles, '<=', p.maxTriangles],
+        ['draw calls max', r.maxDrawCalls, '<=', p.maxDrawCalls],
+        ['triangles max', r.maxTriangles, '<=', p.maxTriangles],
     ]
     let ok = true
     console.log(`\n[${name}] backend=${r.snap.backend} viewport=${r.snap.size.join('x')} dpr=${r.snap.dpr} gpuMs=${typeof r.snap.gpuMs === 'number' ? r.snap.gpuMs.toFixed(2) : r.snap.gpuMs} programs=${r.snap.programs}`)
@@ -83,9 +96,14 @@ function judge(name, p, r)
     {
         const pass = op === '>=' ? value >= limit : value <= limit
         if(!pass) ok = false
-        console.log(`  ${pass ? 'ok  ' : 'FAIL'} ${label.padEnd(13)} ${Number(value).toFixed(2).padStart(10)} ${op} ${limit}`)
+        console.log(`  ${pass ? 'ok  ' : 'FAIL'} ${label.padEnd(14)} ${Number(value).toFixed(2).padStart(10)} ${op} ${limit}`)
     }
-    if(r.errors.length) { ok = false; console.log('  FAIL page errors:', r.errors.join(' | ')) }
+    if(p.expectBackend && r.snap.backend !== p.expectBackend)
+    {
+        ok = false
+        console.log(`  FAIL backend       expected ${p.expectBackend}, got ${r.snap.backend}`)
+    }
+    if(r.errors.length) { ok = false; console.log('  FAIL errors:', r.errors.join(' | ')) }
     return ok
 }
 

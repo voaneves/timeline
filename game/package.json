@@ -22,6 +22,7 @@
     "audit:originality": "node scripts/audit-originality.mjs",
     "audit:originality:update": "node scripts/audit-originality.mjs --update-manifest",
     "preview:publish": "node scripts/publish-preview.mjs",
+    "gate:replay": "npm run ghost:verify",
     "ghost:verify": "node tools/capture/ghost-verify.mjs --runs 3 --record"
   },
   "dependencies": {

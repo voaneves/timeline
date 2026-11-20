@@ -24,19 +24,28 @@ function walk(_dir, _root = _dir, _out = [])
     return _out.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
 }
 
+// BUILD_ID ends up in a file name and in the JS bundle: alphanumerics only (no path separators, dots, quotes).
+export function sanitizeBuildId(_id)
+{
+    if(typeof _id !== 'string' || !/^[A-Za-z0-9]{1,64}$/.test(_id))
+        throw new Error(`BUILD_ID must match /^[A-Za-z0-9]{1,64}$/ (got ${JSON.stringify(_id)})`)
+    return _id
+}
+
 // Deterministic id of the asset set (names + contents). BUILD_ID env overrides it.
 export function computeBuildId(_staticDir = 'static')
 {
     if(process.env.BUILD_ID)
-        return process.env.BUILD_ID
+        return sanitizeBuildId(process.env.BUILD_ID)
     const h = createHash('sha256')
     for(const file of walk(resolve(_staticDir)))
         h.update(`${file.name}\0${sha(readFileSync(file.full))}\n`)
     return h.digest('hex').slice(0, 8)
 }
 
-export function hashAssets({ staticDir = 'static', outDir = 'dist', buildId = computeBuildId(staticDir) } = {})
+export function hashAssets({ staticDir = 'static', outDir = 'dist', buildId = computeBuildId(staticDir), licensesFile = fileURLToPath(new URL('../LICENSES.md', import.meta.url)) } = {})
 {
+    sanitizeBuildId(buildId)
     const assetsDir = join(resolve(outDir), 'assets')
     mkdirSync(assetsDir, { recursive: true })
 
@@ -52,6 +61,11 @@ export function hashAssets({ staticDir = 'static', outDir = 'dist', buildId = co
 
     const manifestName = `asset-manifest.${buildId}.json`
     writeFileSync(join(resolve(outDir), manifestName), JSON.stringify({ buildId, assets }, null, 2) + '\n')
+
+    // Licence texts must ship with the bundle (MIT / Apache-2.0 notices): dist/LICENSES.md on every build
+    const licenses = resolve(licensesFile)
+    if(existsSync(licenses))
+        copyFileSync(licenses, join(resolve(outDir), 'LICENSES.md'))
     return { buildId, manifestName, assets }
 }
 

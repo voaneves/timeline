@@ -1,6 +1,7 @@
 // Size gate (plan T0.14, sections 6.5 + 7.4): gzip + brotli bytes of dist/ per category against budgets.json.
 // Sources: dist/index.html (entry + modulepreload), dist/asset-manifest.*.json (hashed static assets), dist/assets/*.
 // (Vite's own manifest is not enabled in vite.config.js; the HTML + file-name rules cover the same ground.)
+// Related: `npm run gate:replay` runs the ghost determinism check (tools/capture/ghost-verify.mjs, headless Chrome); not part of `npm test`.
 // CLI: node scripts/check-size.mjs [--dist dist] [--budgets budgets.json] [--json]
 import { readFileSync, readdirSync, existsSync } from 'node:fs'
 import { join, resolve } from 'node:path'
@@ -40,13 +41,18 @@ export function measure({ dist = 'dist', budgets })
     const rules = budgets.categories.map((c) => ({ name: c.name, re: new RegExp(c.match, 'i') }))
     const categories = Object.fromEntries(budgets.categories.map((c) => [c.name, { files: [], raw: 0, gz: 0, br: 0 }]))
     const unclassified = []
+    const ignored = []
+    const ignoreRes = (budgets.ignore ?? []).map((m) => new RegExp(m, 'i'))
+    const fileCat = new Map()
 
     for(const full of walk(root))
     {
         const rel = full.slice(root.length + 1).replaceAll('\\', '/')
         const name = logical.get(rel) ?? rel
         const rule = rules.find((r) => r.re.test(name) || r.re.test(rel))
+        if(ignoreRes.some((r) => r.test(rel))) { ignored.push(rel); continue }
         if(!rule) { unclassified.push(rel); continue }
+        fileCat.set(rel, rule.name)
         const buf = readFileSync(full)
         const cat = categories[rule.name]
         cat.files.push(rel)
@@ -66,7 +72,38 @@ export function measure({ dist = 'dist', budgets })
             groups[g.name].raw += categories[c]?.raw ?? 0
         }
     }
-    return { categories, groups, unclassified }
+
+    // Files the entry HTML pulls in (script src, modulepreload, stylesheet) must be counted in "critical"
+    const html = readFileSync(join(root, 'index.html'), 'utf8')
+    const referenced = []
+    for(const m of html.matchAll(/<(script|link)\b[^>]*>/gi))
+    {
+        const tag = m[0]
+        if(m[1].toLowerCase() === 'link' && !/rel=["']?(modulepreload|stylesheet|preload)/i.test(tag)) continue
+        const ref = tag.match(/\b(?:src|href)=["']([^"']+)["']/i)?.[1]
+        if(!ref || /^(https?:)?\/\//i.test(ref) || ref.startsWith('data:')) continue
+        referenced.push(ref.replace(/^\.?\//, '').split(/[?#]/)[0])
+    }
+    const critical = new Set((budgets.groups ?? []).find((g) => g.name === 'critical')?.of ?? [])
+    const missing = (budgets.requiredFiles ?? []).filter((f) => !existsSync(join(root, f)))
+    const referencedProblems = []
+    for(const ref of referenced)
+    {
+        if(!existsSync(join(root, ref))) { referencedProblems.push(`${ref}: referenced by index.html but missing`); continue }
+        const cat = fileCat.get(ref)
+        if(!cat || !critical.has(cat)) referencedProblems.push(`${ref}: referenced by index.html but not counted in the critical group (category: ${cat ?? 'none'})`)
+    }
+    return { categories, groups, unclassified, ignored, referenced, missing, referencedProblems }
+}
+
+// Structural failures (independent of byte budgets)
+export function integrity(result)
+{
+    return [
+        ...result.unclassified.map((f) => `unclassified file (add a category or an "ignore" entry in budgets.json): ${f}`),
+        ...result.missing.map((f) => `required file missing from dist: ${f}`),
+        ...result.referencedProblems,
+    ]
 }
 
 export function evaluate(result, budgets)
@@ -90,8 +127,7 @@ export function report(result, rows)
     console.log('kind      name              gzip         brotli       budget(gz)   fail(gz)   status')
     for(const r of rows)
         console.log(`${r.kind.padEnd(9)} ${r.name.padEnd(16)} ${fmt(r.gz)} ${fmt(r.br)} ${String(r.maxKB).padStart(9)} KB ${String(r.failKB).padStart(7)} KB  ${r.status}`)
-    if(result.unclassified.length)
-        console.log('unclassified (not counted):', result.unclassified.join(', '))
+    for(const p of integrity(result)) console.log('  FAIL', p)
 }
 
 if(process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1]))
@@ -101,9 +137,10 @@ if(process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1]
     const budgets = JSON.parse(readFileSync(resolve(arg('--budgets', process.env.BUDGETS ?? 'budgets.json')), 'utf8'))
     const result = measure({ dist: arg('--dist', 'dist'), budgets: budgets.size })
     const rows = evaluate(result, budgets.size)
-    if(args.includes('--json')) console.log(JSON.stringify({ rows, unclassified: result.unclassified }, null, 2))
+    const problems = integrity(result)
+    if(args.includes('--json')) console.log(JSON.stringify({ rows, unclassified: result.unclassified, problems }, null, 2))
     else report(result, rows)
     const failed = rows.filter((r) => r.status === 'FAIL')
-    if(failed.length) { console.error(`size gate FAILED: ${failed.map((r) => r.name).join(', ')}`); process.exit(1) }
+    if(failed.length || problems.length) { console.error(`size gate FAILED: ${[...failed.map((r) => r.name), ...problems].join('; ')}`); process.exit(1) }
     console.log('size gate passed')
 }
