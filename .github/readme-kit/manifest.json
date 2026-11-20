@@ -3,9 +3,9 @@
   "branch": "main",
   "lang": "en",
   "license": "MIT",
-  "name": "Super Victor Timeline",
-  "tagline": "A personal career timeline as a side-scrolling stage: click a pipe to reveal a milestone.",
-  "description": "Interactive career timeline in Super Mario World style: click a pipe and Mario walks there to reveal a milestone.",
+  "name": "Timeline",
+  "tagline": "A personal career timeline and projects page, with an optional explorable 3D diorama.",
+  "description": "Victor Neves' timeline: a semantic 2D page of career milestones and open-source projects, plus an optional low-poly 3D world to explore.",
   "logo": {
     "mark": "Tl"
   },
@@ -42,9 +42,9 @@
     }
   ],
   "features": [
-    "One pipe per milestone, defined in assets/js/timeline.js.",
-    "Sound effects and theme music loaded after the first click.",
-    "Light and dark theme toggle and service worker caching."
+    "Semantic 2D timeline that works without JavaScript.",
+    "Optional 3D diorama built with three.js, loaded only on request.",
+    "Light and dark theme, self-hosted fonts and service worker caching."
   ],
   "landing": false,
   "live_url": "https://voaneves.github.io/timeline/"
