@@ -1,0 +1,34 @@
+{
+  "$comment": "Plan 6.5 (critical path, gz) + 7.4 (perf). maxKB = target (WARN above), failKB = hard fail. Categories are matched against the logical asset name then the dist path; first match wins. Tune 'match' when new content lands (palette, victor, era batches, audio).",
+  "size": {
+    "categories": [
+      { "name": "html",       "match": "^index\\.html$",                         "budget": { "maxKB": 15,   "failKB": 30 } },
+      { "name": "css",        "match": "\\.css$",                                "budget": { "maxKB": 15,   "failKB": 30 } },
+      { "name": "three",      "match": "assets/three\\.webgpu-.*\\.js$",         "budget": { "maxKB": 330,  "failKB": 380 } },
+      { "name": "rapierJs",   "match": "assets/rapier-.*\\.js$",                 "budget": { "maxKB": 60,   "failKB": 120 } },
+      { "name": "rapierWasm", "match": "\\.wasm$",                               "budget": { "maxKB": 1200, "failKB": 1300 } },
+      { "name": "lazyDebug",  "match": "assets/(Inspector|PerfHud|PhysicsSmoke)-.*\\.js$", "budget": null },
+      { "name": "engine",     "match": "assets/(index|rolldown-runtime)-.*\\.js$", "budget": { "maxKB": 120, "failKB": 160 } },
+      { "name": "content",    "match": "(content.*\\.json|asset-manifest\\..*\\.json)$", "budget": { "maxKB": 12, "failKB": 20 } },
+      { "name": "palette",    "match": "palette.*\\.png$",                       "budget": { "maxKB": 2,    "failKB": 8 } },
+      { "name": "platform",   "match": "(^|/)(platform|kit)[^/]*\\.(glb|bin|png|ktx2)$", "budget": { "maxKB": 150, "failKB": 200 } },
+      { "name": "victor",     "match": "(^|/)victor[^/]*\\.(glb|bin|png)$",      "budget": { "maxKB": 200,  "failKB": 260 } },
+      { "name": "eraOrigens", "match": "(^|/)origens[^/]*\\.(glb|bin|png|ktx2|json)$", "budget": { "maxKB": 850, "failKB": 1000 } },
+      { "name": "audio",      "match": "\\.(ogg|mp3|m4a|opus|wav)$",             "budget": { "maxKB": 750,  "failKB": 900 } },
+      { "name": "testAssets", "match": "(^|/)probe[^/]*\\.glb$",                 "budget": null }
+    ],
+    "groups": [
+      { "name": "mainJs",   "of": ["three", "engine"],                         "budget": { "maxKB": 420,  "failKB": 460 } },
+      { "name": "rapier",   "of": ["rapierJs", "rapierWasm"],                   "budget": { "maxKB": 1250, "failKB": 1400 } },
+      { "name": "critical", "of": ["html", "css", "three", "engine", "rapierJs", "rapierWasm", "content", "palette", "platform", "victor", "eraOrigens"],
+                            "budget": { "maxKB": 3072, "failKB": 3277 } }
+    ]
+  },
+  "perf": {
+    "durationSec": 10,
+    "warmupSec": 3,
+    "desktop": { "viewport": [1280, 720], "cpuThrottle": 1, "minFps": 55, "maxP95Ms": 20, "maxDrawCalls": 250, "maxTriangles": 800000 },
+    "mobile":  { "viewport": [390, 844], "dpr": 2, "cpuThrottle": 4, "query": "?q=1&webgl", "minFps": 50, "maxP95Ms": 24, "maxDrawCalls": 120, "maxTriangles": 250000 },
+    "$notes": "Plan 7.4 targets: desktop 60 fps / p99<=16.7 ms / draw<=250 / tris<=800k; mobile >=55 fps / p95<=20 ms / draw<=120 / tris<=250k. Gate floors are looser (55/20 desktop, 50/24 mobile-throttled) because it runs on a shared dev machine with CPU throttle; tighten once the real-device gate (7.5) exists. gpuMs <=6 desktop is recorded, not gated (timer queries opt-in)."
+  }
+}

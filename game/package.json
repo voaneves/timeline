@@ -12,12 +12,16 @@
     "dev": "vite --mode development",
     "build": "npm run content && vite build --mode production && node scripts/hash-assets.mjs",
     "preview": "vite preview --host 127.0.0.1 --port 4173 --strictPort",
+    "gate:size": "node scripts/check-size.mjs",
+    "gate:perf": "node scripts/perf-gate.mjs",
+    "gate": "npm run build && npm run gate:size && npm run gate:perf",
     "test": "node --test tests/",
     "build:debug": "vite build --mode debug --outDir ../dist-debug",
     "check:no-tweakpane": "node -e \"const{execSync}=require('child_process');const fs=require('fs'),path=require('path');const w=d=>fs.readdirSync(d,{withFileTypes:true}).flatMap(e=>e.isDirectory()?w(path.join(d,e.name)):[path.join(d,e.name)]);const bad=w('dist').filter(f=>/tweakpane/i.test(f)||/tweakpane/i.test(fs.readFileSync(f).toString('latin1')));if(bad.length){console.error('tweakpane found in',bad);process.exit(1)}console.log('dist has no tweakpane')\"",
     "content": "node scripts/extract-content.mjs",
     "audit:originality": "node scripts/audit-originality.mjs",
-    "audit:originality:update": "node scripts/audit-originality.mjs --update-manifest"
+    "audit:originality:update": "node scripts/audit-originality.mjs --update-manifest",
+    "preview:publish": "node scripts/publish-preview.mjs"
   },
   "dependencies": {
     "@dimforge/rapier3d": "0.19.3",
