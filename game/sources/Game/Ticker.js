@@ -24,9 +24,10 @@ export class Ticker
         // (1/60 s of scaled/world time at scale 2), independent of the display frame rate. 'tick' stays per frame
         // (rendering, camera, visuals). `fixedSteps` counts completed fixed steps since boot.
         this.fixedDelta = Ticker.FIXED_DELTA
-        this.fixedDeltaScaled = this.fixedDelta * this.scale
         this.fixedSteps = 0
         this.accumulator = 0
+        this.inFixedStep = false // true while 'fixedTick' listeners run (reset in a finally, even if a listener throws)
+        this.alpha = 0 // accumulator / fixedDelta after the steps of the frame: render interpolation factor (0..1)
 
         this.elapsedUniform = uniform(this.elapsed)
         this.deltaUniform = uniform(this.delta)
@@ -64,11 +65,20 @@ export class Ticker
         this.accumulator += this.delta
         while(this.accumulator >= this.fixedDelta - 1e-9)
         {
-            this.fixedDeltaScaled = this.fixedDelta * this.scale
-            this.events.trigger('fixedTick')
+            this.inFixedStep = true
+            try
+            {
+                this.events.trigger('fixedTick')
+            }
+            finally
+            {
+                this.inFixedStep = false
+            }
             this.fixedSteps++
             this.accumulator -= this.fixedDelta
         }
+        // Slightly negative after the 1e-9 tolerance: clamp. Render-only, never read by the simulation.
+        this.alpha = Math.min(Math.max(this.accumulator / this.fixedDelta, 0), 1)
 
         for(let i = 0; i < this.waits.length; i++)
         {
@@ -84,6 +94,12 @@ export class Ticker
         }
         
         this.events.trigger('tick')
+    }
+
+    // Read by Physics inside 'fixedTick', after Time has updated `scale` for this step (Time, order 0).
+    get fixedDeltaScaled()
+    {
+        return this.fixedDelta * this.scale
     }
 
     wait(frames, callback)

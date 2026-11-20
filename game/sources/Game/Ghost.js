@@ -11,13 +11,17 @@
 //   not depend on the display frame rate. Ghost time is the fixed-step index: t = step / 120.
 // - Math.random is replaced while a ghost is active. Calls made INSIDE a fixed step draw from a stream re-seeded
 //   per step (seedrandom(SEED + ':' + step)), so gameplay randomness is frame-rate independent. Calls outside a
-//   fixed step (render, DOM handlers) use a separate stream. Gameplay must therefore only use Math.random from
+//   fixed step (render, DOM handlers) use a separate stream. "In a fixed step" is Ticker.inFixedStep, which the Ticker
+//   resets in a finally, so a throwing listener cannot leave the game stuck on the per-step stream. Gameplay must therefore only use Math.random from
 //   'fixedTick' listeners (not from DOM event handlers) and must not use wall-clock time (Date.now, performance.now).
 // - Rapier is deterministic for the same wasm and the same sequence of calls.
 //
 // Ghost file: { v: 1, dt: 0.008333.., seed, steps, events: [ { t, action, value, trigger, toggle? } ] }
 // (a bare array of events is accepted too; then `steps` = last event step + 120). `trigger` defaults as in
-// Inputs.applyAction. `t` is in seconds and must be a multiple of 1/120.
+// Inputs.applyAction. `t` is in seconds and must be a multiple of 1/120; events with a non-finite `t` are skipped
+// (with a warning), as are non-object entries.
+// Bullet time (Time.js) is disabled while a ghost exists. Other non-gameplay Date.now/Math.random uses (day/weather
+// Cycles, View camera roll kick) are visual only and not part of the simulation, so they may stay.
 import seedrandom from 'seedrandom'
 import { Game } from './Game.js'
 import { Ticker } from './Ticker.js'
@@ -48,9 +52,9 @@ export class Ghost
 
         this.frameRandom = seedrandom(SEED + ':frame')
         this.stepRandom = seedrandom(SEED + ':0')
-        this.inStep = false
         this.nativeRandom = Math.random
-        Math.random = () => (this.inStep ? this.stepRandom() : this.frameRandom())
+        this.ours = () => (this.inStep ? this.stepRandom() : this.frameRandom())
+        this.installRandom()
 
         // Live input is ignored while replaying (also before the ghost JSON has loaded)
         if(this.mode === 'play')
@@ -60,6 +64,26 @@ export class Ghost
         this.game.ticker.events.on('fixedTick', () => this.afterStep(), 1000)
 
         Object.defineProperty(window, '__ghost', { value: this, configurable: true })
+    }
+
+    get inStep()
+    {
+        return this.running && this.game.ticker.inFixedStep
+    }
+
+    installRandom()
+    {
+        if(Math.random !== this.ours)
+        {
+            this.nativeRandom = Math.random
+            Math.random = this.ours
+        }
+    }
+
+    restoreRandom()
+    {
+        if(Math.random === this.ours)
+            Math.random = this.nativeRandom
     }
 
     async load()
@@ -93,11 +117,15 @@ export class Ghost
     static normalize(raw)
     {
         const source = Array.isArray(raw) ? { events: raw } : raw
-        const events = source.events
+        const valid = source.events.filter((event) => event && typeof event === 'object' && Number.isFinite(event.t))
+        if(valid.length !== source.events.length)
+            console.warn(`[ghost] skipped ${source.events.length - valid.length} event(s) with a missing or non-finite t`)
+        const events = valid
             .map((event) => ({ ...event, step: Math.round(event.t / DT) }))
             .sort((a, b) => a.step - b.step) // stable: keeps same-step order
         const last = events.length ? events[events.length - 1].step : 0
-        return { v: 1, steps: source.steps ?? last + Math.round(1 / DT), events }
+        const steps = Number.isFinite(source.steps) ? source.steps : last + Math.round(1 / DT)
+        return { v: 1, steps, events }
     }
 
     // Called synchronously at the end of Game.init, right before `ready`: the first physics step comes after this.
@@ -108,6 +136,7 @@ export class Ghost
         this.finished = false
         this.result = null
         this.frameRandom = seedrandom(SEED + ':frame')
+        this.installRandom()
 
         if(this.mode === 'rec')
         {
@@ -130,7 +159,6 @@ export class Ghost
         if(!this.running)
             return
 
-        this.inStep = true
         this.stepRandom = seedrandom(`${SEED}:${this.step}`)
 
         if(this.mode !== 'play')
@@ -150,7 +178,6 @@ export class Ghost
             this.result = this.snapshot()
             this.finished = true
             this.running = false
-            this.inStep = false
             this.game.inputs.locked = false
         }
     }
@@ -160,7 +187,6 @@ export class Ghost
         if(!this.running)
             return
 
-        this.inStep = false
         this.step++
     }
 
@@ -188,6 +214,7 @@ export class Ghost
     {
         this.running = false
         this.game.inputs.onAction = null
+        this.restoreRandom()
         return this.export()
     }
 

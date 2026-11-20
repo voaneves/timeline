@@ -17,14 +17,26 @@ export class ResourcesLoader
         this.manifestPromise = null
     }
 
-    // Assets are only requested through the manifest of THIS build (old JS -> old manifest -> old assets)
+    // Assets are only requested through the manifest of THIS build (same BUILD_ID as the JS), never a 'latest' one.
+    // Whether an older build's files still exist depends on the deploy: published previews are an orphan single-commit
+    // branch, so old hashed files do NOT persist there (a tab holding old JS can 404 after a new publish).
+    // The promise is cached, but reset on failure (one automatic retry first) so a transient error is not permanent.
     getManifest()
     {
         if(!this.manifestPromise)
         {
             if(!BUILD_ID)
                 return Promise.reject(new Error('Resources > no __BUILD_ID__, assets need a vite build + hash-assets'))
-            this.manifestPromise = fetchManifest(BUILD_ID, document.baseURI)
+
+            const promise = fetchManifest(BUILD_ID, document.baseURI)
+                .catch(() => fetchManifest(BUILD_ID, document.baseURI))
+                .catch((error) =>
+                {
+                    if(this.manifestPromise === promise)
+                        this.manifestPromise = null
+                    throw error
+                })
+            this.manifestPromise = promise
         }
         return this.manifestPromise
     }

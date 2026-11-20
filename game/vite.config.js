@@ -20,6 +20,12 @@ export default ({ mode }) => ({
         __DEBUG_PANEL__: JSON.stringify(mode !== 'production'),
         __BUILD_ID__: JSON.stringify(computeBuildId('static')) // T0.15: embedded in the JS, names the manifest
     },
+    // Dev server only: Rapier's wasm glue must not be pre-bundled (the optimized copy breaks wasm-bindgen's
+    // `getObject(...).now is not a function` on the first world.step()); vite-plugin-wasm handles it from source.
+    optimizeDeps:
+    {
+        exclude: [ '@dimforge/rapier3d' ]
+    },
     build:
     {
         outDir: '../dist',

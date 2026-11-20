@@ -1,3 +1,4 @@
+import * as THREE from 'three/webgpu'
 import { Game } from './Game.js'
 
 let i = 0
@@ -11,6 +12,17 @@ export class Objects
         this.roundedViewPosition = { x: 0, z: 0 }
         this.tempPosition = { x: 0, y: 0, z: 0 }
         this.tempRotation = { x: 0, y: 0, z: 0, w: 1 }
+
+        // Render interpolation: the physics runs at a fixed 120 Hz, the display at 60/75/144 Hz. After every physics step
+        // the pose of each moving body is captured (previous + current); every frame the visual is placed between them
+        // with `ticker.alpha`. Visual only: the simulation (bodies, forces) is never touched, so determinism is unaffected.
+        // The visual lags the physics by up to one step (8.3 ms). Code that follows a moving body per frame (camera, UI)
+        // should read the visual's position, not `body.translation()`. Teleports (setTranslation) are smeared over one
+        // step unless `snapInterpolation(object)` is called.
+        this.game.ticker.events.on('fixedTick', () =>
+        {
+            this.capture()
+        }, 4)
 
         this.game.ticker.events.on('tick', () =>
         {
@@ -236,6 +248,7 @@ export class Objects
             return
 
         object.reseting = true
+        this.snapInterpolation(object)
 
         const isEnabled = object.physical.body.isEnabled()
         object.physical.body.setEnabled(false)
@@ -303,6 +316,75 @@ export class Objects
             object.visual.parent.add(object.visual.object3D)
     }
 
+    // Next captured pose becomes both previous and current (no interpolation across a teleport)
+    snapInterpolation(object)
+    {
+        if(object.interpolation)
+        {
+            object.interpolation.valid = false
+            object.interpolation.settled = false
+            object.interpolation.snapped = false
+        }
+    }
+
+    // After the physics step (fixedTick order 3): previous <- current, current <- body
+    capture()
+    {
+        this.list.forEach((_object) =>
+        {
+            if(!_object.visual || !_object.physical || _object.physical.type === 'fixed')
+                return
+
+            const body = _object.physical.body
+            if(!body.isEnabled())
+                return
+
+            let interpolation = _object.interpolation
+            if(!interpolation)
+            {
+                interpolation = _object.interpolation = {
+                    valid: false,
+                    settled: false, // asleep and `current` is its final pose
+                    snapped: false, // visual already written with that final pose
+                    previousPosition: new THREE.Vector3(),
+                    currentPosition: new THREE.Vector3(),
+                    previousQuaternion: new THREE.Quaternion(),
+                    currentQuaternion: new THREE.Quaternion(),
+                }
+            }
+
+            const sleeping = body.isSleeping()
+            if(sleeping && interpolation.settled)
+                return
+
+            if(interpolation.valid)
+            {
+                interpolation.previousPosition.copy(interpolation.currentPosition)
+                interpolation.previousQuaternion.copy(interpolation.currentQuaternion)
+            }
+            interpolation.currentPosition.copy(body.translation(this.tempPosition))
+            interpolation.currentQuaternion.copy(body.rotation(this.tempRotation))
+            if(!interpolation.valid)
+            {
+                interpolation.previousPosition.copy(interpolation.currentPosition)
+                interpolation.previousQuaternion.copy(interpolation.currentQuaternion)
+                interpolation.valid = true
+            }
+
+            if(sleeping)
+            {
+                interpolation.previousPosition.copy(interpolation.currentPosition)
+                interpolation.previousQuaternion.copy(interpolation.currentQuaternion)
+                interpolation.settled = true
+                interpolation.snapped = false
+            }
+            else
+            {
+                interpolation.settled = false
+            }
+        })
+    }
+
     update()
     {
         const roundedViewPosition = {
@@ -322,21 +404,44 @@ export class Objects
             const position = _object.physical ? _object.physical.body.translation(this.tempPosition) : null
 
             // Apply physical to visual
-            if(
-                _object.visual &&
-                _object.physical &&
-                (
-                    _object.needsUpdate ||
-                    (
-                        !_object.physical.body.isSleeping() &&
-                        _object.physical.body.isEnabled()
-                    )
-                )
-            )
+            if(_object.visual && _object.physical)
             {
-                _object.needsUpdate = false
-                _object.visual.object3D.position.copy(position)
-                _object.visual.object3D.quaternion.copy(_object.physical.body.rotation(this.tempRotation))
+                const interpolation = _object.interpolation
+                const body = _object.physical.body
+
+                if(_object.needsUpdate)
+                {
+                    // Exact pose (after a reset)
+                    _object.needsUpdate = false
+                    _object.visual.object3D.position.copy(position)
+                    _object.visual.object3D.quaternion.copy(body.rotation(this.tempRotation))
+                }
+                else if(body.isEnabled())
+                {
+                    if(!body.isSleeping())
+                    {
+                        if(interpolation && interpolation.valid)
+                        {
+                            // Between the last two physics steps
+                            const alpha = this.game.ticker.alpha
+                            _object.visual.object3D.position.lerpVectors(interpolation.previousPosition, interpolation.currentPosition, alpha)
+                            _object.visual.object3D.quaternion.slerpQuaternions(interpolation.previousQuaternion, interpolation.currentQuaternion, alpha)
+                            interpolation.snapped = false
+                        }
+                        else
+                        {
+                            _object.visual.object3D.position.copy(position)
+                            _object.visual.object3D.quaternion.copy(body.rotation(this.tempRotation))
+                        }
+                    }
+                    else if(interpolation && interpolation.settled && !interpolation.snapped)
+                    {
+                        // Asleep: land exactly on the final pose once, then leave the visual alone
+                        _object.visual.object3D.position.copy(interpolation.currentPosition)
+                        _object.visual.object3D.quaternion.copy(interpolation.currentQuaternion)
+                        interpolation.snapped = true
+                    }
+                }
             }
 
 

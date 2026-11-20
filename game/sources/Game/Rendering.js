@@ -101,7 +101,7 @@ export class Rendering
             {
                 this.postProcessing.outputNode = this.cheapDOFPass.add(this.bloomPass)
             }
-            else if(level === 1)
+            else // tiers 1 and 2 (tier 2 differs only from T2.29 on)
             {
                 this.postProcessing.outputNode = scenePassColor.add(this.bloomPass)
             }

@@ -26,6 +26,7 @@ export class Physics
         this.eventQueue = new this.game.RAPIER.EventQueue(true)
 
         this.physicals = []
+        this.steps = 0 // physics steps taken since this world was created (ticker.fixedSteps counts from boot, so it is not comparable run to run)
         this.tempPosition = { x: 0, y: 0, z: 0 }
 
         this.groups = {
@@ -262,6 +263,7 @@ export class Physics
         
         // this.world.step()
         this.world.step(this.eventQueue)
+        this.steps++
 
         // // Works but not handy
         // this.eventQueue.drainCollisionEvents((handle1, handle2, started) =>
