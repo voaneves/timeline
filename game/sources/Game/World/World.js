@@ -4,6 +4,7 @@
 import * as THREE from 'three/webgpu'
 import { Debug } from '../Debug.js'
 import { Game } from '../Game.js'
+import { Player } from '../Character/Player.js'
 
 // Name of a glTF root node -> how the engine reads it (docs/PLAN-3D.md 5.3, Objects.getFromModel):
 //   `...Physical<Fixed|Dynamic|KinematicPositionBased>`  one rigid body; children cuboid*/tube*/hull*/trimesh*/ball* are its colliders
@@ -58,7 +59,7 @@ export class World
 
         this.setRespawn()
         this.setMovingPlatform()
-        this.setPlayerMarker()
+        this.setPlayer()
     }
 
     addPhysicalNode(node)
@@ -141,17 +142,11 @@ export class World
         }, 2)
     }
 
-    // Visual-only stand-in for the player (capsule radius 0.28 m, total height 1.2 m, plan 3.1) until T1.2
-    setPlayerMarker()
+    // The player (T1.2): kinematic capsule on the Rapier KCC, spawned at the default respawn. Created after the moving
+    // platform so its fixed-step update (order 2) runs after the platform's (T1.5 reads the platform delta).
+    setPlayer()
     {
-        const respawn = this.game.respawns.getDefault()
-        const mesh = new THREE.Mesh(
-            new THREE.CapsuleGeometry(0.28, 0.64, 4, 16),
-            new THREE.MeshStandardMaterial({ name: 'greyMarker', color: '#e0e0e0' })
-        )
-        mesh.name = 'playerMarker'
-        mesh.position.set(respawn.position.x, respawn.position.y + 0.6, respawn.position.z)
-        this.game.objects.add({ model: mesh })
+        this.player = new Player()
     }
 
     setGround()

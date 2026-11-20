@@ -1,6 +1,6 @@
 // Ghost determinism check (PLAN-3D T0.16). Headless Chrome via playwright-core, NO screen capture.
 //
-// Usage: node tools/capture/ghost-verify.mjs [--url http://127.0.0.1:5199/] [--ghost demo-push] [--runs 3] [--record]
+// Usage: node tools/capture/ghost-verify.mjs [--demo 0] [--modes native,fps15,jitter,fast] [--url http://127.0.0.1:5199/] [--ghost demo-push] [--runs 3] [--record]
 //   Replays the ghost N times per frame-rate mode (native rAF, 15 fps, jittery 5-80 ms, ~240 fps) and compares the
 //   final snapshot (window.__ghost.result, taken at the exact final fixed step) across ALL runs: max |delta| <= 1 mm.
 //   --record: also records a live keyboard session (?ghost=rec), replays the exported ghost and compares it with the
@@ -20,6 +20,8 @@ const BASE = opt('url', 'http://127.0.0.1:5199/');
 const GHOST = opt('ghost', 'demo-push');
 const RUNS = +opt('runs', 3);
 const TOL = 0.001; // 1 mm
+const DEMO = opt('demo', '1') !== '0'; // --demo 0: the default greybox world (T1.x ghosts); the --record check needs the demo cube
+const MODE_NAMES = opt('modes', 'native,fps15,jitter,fast').split(',');
 
 const MODES = {
   native: null,
@@ -48,7 +50,7 @@ async function open(query, mode, route) {
     })()`);
   }
   if (route) await page.route(route.pattern, (r) => r.fulfill({ contentType: 'application/json', body: JSON.stringify(route.body) }));
-  await page.goto(`${BASE}?webgl&expose&demo&${query}`);
+  await page.goto(`${BASE}?webgl&expose${DEMO ? '&demo' : ''}&${query}`);
   await page.waitForFunction(() => window.game?.ready === true, null, { timeout: 60000 });
   return { page, context, errors };
 }
@@ -58,7 +60,7 @@ const maxDelta = (a, b) => Math.max(...a.map((v, i) => Math.abs(v - b[i])));
 
 // 1. Replays
 const results = [];
-for (const mode of Object.keys(MODES)) {
+for (const mode of MODE_NAMES) {
   for (let run = 1; run <= RUNS; run++) {
     const { page, context, errors } = await open(`ghost=${GHOST}`, mode);
     const t0 = Date.now();
@@ -66,11 +68,11 @@ for (const mode of Object.keys(MODES)) {
     const info = await page.evaluate(() => ({
       result: window.__ghost.result,
       frames: window.__perf?.count ?? null,
-      cube: (() => { const t = window.game.world.cube.physical.body.translation(); return [t.x, t.y, t.z]; })(),
+      cube: window.game.world.cube ? (() => { const t = window.game.world.cube.physical.body.translation(); return [t.x, t.y, t.z]; })() : null,
     }));
     await context.close();
-    results.push({ mode, run, ms: Date.now() - t0, steps: info.result.step, frames: info.frames, p: info.result.bodies[0].p, flat: flatten(info.result), errors });
-    console.log(`${mode.padEnd(7)} run ${run}: ${(Date.now() - t0 + '').padStart(6)} ms, ${info.frames} frames, step ${info.result.step}, cube = (${info.result.bodies[0].p.map((v) => v.toFixed(5)).join(', ')})${errors.length ? '  ERRORS: ' + errors.join(' | ') : ''}`);
+    results.push({ mode, run, ms: Date.now() - t0, steps: info.result.step, frames: info.frames, p: info.result.bodies.at(DEMO ? 0 : -1).p, flat: flatten(info.result), errors });
+    console.log(`${mode.padEnd(7)} run ${run}: ${(Date.now() - t0 + '').padStart(6)} ms, ${info.frames} frames, step ${info.result.step}, ${DEMO ? 'cube' : 'last body (player)'} = (${info.result.bodies.at(DEMO ? 0 : -1).p.map((v) => v.toFixed(5)).join(', ')})${errors.length ? '  ERRORS: ' + errors.join(' | ') : ''}`);
   }
 }
 const ref = results[0].flat;
