@@ -1,4 +1,3 @@
-// Adapted from folio-2025 by Bruno Simon (MIT) — https://github.com/brunosimon/folio-2025
 import { color, float, mix, positionWorld, rangeFogFactor, screenCoordinate, uniform, vec2, vec3, viewportUV } from 'three/tsl'
 import { Game } from './Game.js'
 

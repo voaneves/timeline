@@ -1,4 +1,3 @@
-// Adapted from folio-2025 by Bruno Simon (MIT) — https://github.com/brunosimon/folio-2025
 import * as THREE from 'three/webgpu'
 import { Game } from './Game.js'
 import { uniform, color, float, Fn, vec4, positionWorld, vec3, mix, max, If, frontFacing } from 'three/tsl'

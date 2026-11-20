@@ -1,4 +1,3 @@
-// Adapted from folio-2025 by Bruno Simon (MIT) — https://github.com/brunosimon/folio-2025
 // Change: callbacks are grouped by order in a Map and triggered in numeric ascending order,
 // so fractional orders (5.5) run between 5 and 7. Upstream used a sparse array + for...in,
 // which enumerates integer keys first and string keys (5.5) last (after the render at 998).

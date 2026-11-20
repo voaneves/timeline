@@ -1,4 +1,3 @@
-// Adapted from folio-2025 by Bruno Simon (MIT) — https://github.com/brunosimon/folio-2025
 // Reduced to the uniforms read by MeshDefaultMaterial (and Grid later) + update().
 // Upstream also drove the intro reveal steps (intro, grid, audio, server, menu): removed.
 // `distance` starts huge so nothing is discarded; Phase 2 reintroduces a reveal animation.

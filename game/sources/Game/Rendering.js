@@ -1,4 +1,3 @@
-// Adapted from folio-2025 by Bruno Simon (MIT) — https://github.com/brunosimon/folio-2025
 import * as THREE from 'three/webgpu'
 import { pass, mrt, output, emissive, renderOutput, vec4 } from 'three/tsl'
 import { bloom } from 'three/addons/tsl/display/BloomNode.js'

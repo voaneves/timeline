@@ -1,4 +1,3 @@
-// Adapted from folio-2025 by Bruno Simon (MIT) — https://github.com/brunosimon/folio-2025
 import * as THREE from 'three/webgpu'
 import { Game } from '../Game.js'
 import { lerp, remap, smoothstep } from '../utilities/maths.js'

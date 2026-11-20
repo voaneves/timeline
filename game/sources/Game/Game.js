@@ -1,4 +1,3 @@
-// Adapted from folio-2025 by Bruno Simon (MIT) — https://github.com/brunosimon/folio-2025
 // Rewritten for the empty engine (plan T0.6): no Server, Audio, Player, Menu, Areas, Weather cycles,
 // no resources to load. Construction order follows ENGINE-INVENTORY.md 3.3.
 import * as THREE from 'three/webgpu'

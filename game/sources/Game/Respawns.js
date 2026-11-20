@@ -1,4 +1,3 @@
-// Adapted from folio-2025 by Bruno Simon (MIT) — https://github.com/brunosimon/folio-2025
 // Change: respawns are defined in code (upstream read them from a GLB of reference empties).
 import * as THREE from 'three/webgpu'
 import { Game } from './Game.js'

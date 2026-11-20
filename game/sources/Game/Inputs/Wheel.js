@@ -1,4 +1,3 @@
-// Adapted from folio-2025 by Bruno Simon (MIT) — https://github.com/brunosimon/folio-2025
 // Change: no `normalize-wheel` dependency (unmaintained, BSD-3). One notch ≈ 1 unit (deltaY 100 px).
 import { Events } from '../Events.js'
 

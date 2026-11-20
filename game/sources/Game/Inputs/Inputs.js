@@ -1,4 +1,3 @@
-// Adapted from folio-2025 by Bruno Simon (MIT) — https://github.com/brunosimon/folio-2025
 import { Events } from '../Events.js'
 import { Game } from '../Game.js'
 import { Gamepad } from './Gamepad.js'

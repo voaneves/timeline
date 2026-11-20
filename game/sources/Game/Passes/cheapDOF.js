@@ -1,4 +1,3 @@
-// Adapted from folio-2025 by Bruno Simon (MIT) — https://github.com/brunosimon/folio-2025
 import { hashBlur } from 'three/examples/jsm/tsl/display/hashBlur.js'
 import { convertToTexture, Fn, mix, nodeObject, uniform, uv } from 'three/tsl'
 import { Node } from 'three/webgpu'

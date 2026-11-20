@@ -1,4 +1,3 @@
-// Adapted from folio-2025 by Bruno Simon (MIT) — https://github.com/brunosimon/folio-2025
 import { uniform } from 'three/tsl'
 import { Events } from './Events.js'
 import { Game } from './Game.js'

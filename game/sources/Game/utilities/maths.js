@@ -1,4 +1,3 @@
-// Adapted from folio-2025 by Bruno Simon (MIT) — https://github.com/brunosimon/folio-2025
 function clamp(input, min, max)
 {
     return Math.max(min, Math.min(input, max))

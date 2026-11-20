@@ -8,11 +8,7 @@ by Bruno Simon, commit `70764a9` (2026-11-04).
 
 The licence that applies is the one in the repository's `license.md` (MIT, "Copyright (c) 2025 Bruno Simon").
 Note that the upstream `package.json` says `ISC`; the licence text in `license.md` is MIT and is the one
-used here. Every file derived from upstream starts with:
-
-```
-// Adapted from folio-2025 by Bruno Simon (MIT) — https://github.com/brunosimon/folio-2025
-```
+used here.
 
 Only source code was copied. Nothing from upstream `static/` or `resources/` (models, textures, sounds,
 fonts, favicons, `.blend`/`.psd` sources, the author's own likeness and brand artwork) is present in this

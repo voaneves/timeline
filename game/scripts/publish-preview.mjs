@@ -92,6 +92,7 @@ for(const file of walkHtml(outDir))
     writeFileSync(file, injectNoindex(readFileSync(file, 'utf8')))
 writeFileSync(join(outDir, 'robots.txt'), 'User-agent: *\nDisallow: /\n')
 writeFileSync(join(outDir, '.nojekyll'), '')
+writeFileSync(join(outDir, 'LICENSES.md'), readFileSync(join(ROOT, 'LICENSES.md')))
 
 const name = run('git', ['config', 'user.name'], ROOT)
 const email = run('git', ['config', 'user.email'], ROOT)

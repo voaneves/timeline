@@ -1,4 +1,3 @@
-// Adapted from folio-2025 by Bruno Simon (MIT) — https://github.com/brunosimon/folio-2025
 // Minimal world for the empty engine (plan T0.6): a ground slab and one dynamic cube.
 // Upstream's World loaded 28 modules (areas, vehicle, trees, weather...), all removed.
 import * as THREE from 'three/webgpu'
