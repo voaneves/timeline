@@ -1113,6 +1113,7 @@ Integração:
 | T5.6 | JSON-LD + OG do `play/` | E | 20 min | T5.1 | `G:sources\index.html` | Validador OG sem erro | 1 validação |
 | T5.7 | Revisão final | R | 25 min | T5.1–T5.6 | — | Nenhum "alto" | — |
 | T5.8 | **Gate G4:** o dono aprova e a sessão principal faz commit e push | dono | — | T5.7 | — | Live atualizado e smoke test OK | 1 smoke |
+| T5.9 | Limpeza dos documentos internos | E | 25 min | T5.8 | `T:docs\**` | Remover `docs/PLAN-3D.md` do repositório (e o que mais for só de planejamento); reescrever os documentos que ficam (inventário do motor, baseline, rubrica) **sem citar Bruno Simon**, usando termos neutros ("motor base", "site de referência"); o crédito permanece apenas em `game/LICENSES.md` | `grep -ri "bruno\|folio" docs/` vazio; `LICENSES.md` intacto | 1 grep |
 
 **Total da Fase 5: 9 tarefas.**
 
