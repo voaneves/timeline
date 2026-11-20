@@ -66,7 +66,7 @@ export class Rendering
             return a.renderOrder - b.renderOrder
         })
 
-        if(location.hash.match(/inspector/i))
+        if(__DEV_TOOLS__ && location.hash.match(/inspector/i))
         {
             const { Inspector } = await import('three/addons/inspector/Inspector.js')
             this.renderer.inspector = new Inspector()

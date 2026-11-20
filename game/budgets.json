@@ -2,39 +2,237 @@
   "$comment": "Plan 6.5 (critical path, gz) + 7.4 (perf). maxKB = target (WARN above), failKB = hard fail. prodForbidden categories (debug-only chunks, test assets) fail in a production dist, allowed with --debug. Categories are matched against the logical asset name then the dist path; first match wins. Any dist file that matches no category and no ignore entry FAILS the gate; every file referenced by index.html (script src, modulepreload, stylesheet) must be in a category of the critical group; requiredFiles must exist in dist/. Tune 'match' when new content lands (palette, victor, era batches, audio).",
   "size": {
     "categories": [
-      { "name": "html",       "match": "^index\\.html$",                         "budget": { "maxKB": 15,   "failKB": 30 } },
-      { "name": "css",        "match": "\\.css$",                                "budget": { "maxKB": 15,   "failKB": 30 } },
-      { "name": "three",      "match": "assets/three\\.webgpu-.*\\.js$",         "budget": { "maxKB": 330,  "failKB": 380 } },
-      { "name": "rapierJs",   "match": "assets/rapier-.*\\.js$",                 "budget": { "maxKB": 60,   "failKB": 120 } },
-      { "name": "rapierWasm", "match": "\\.wasm$",                               "budget": { "maxKB": 1200, "failKB": 1300 } },
-      { "name": "lazyDebug",  "match": "assets/(Inspector|PerfHud|PhysicsSmoke)-.*\\.js$", "budget": { "maxKB": 200, "failKB": 400 }, "prodForbidden": true },
-      { "name": "game",       "match": "assets/Game-.*\\.js$",                  "budget": { "maxKB": 110,  "failKB": 150 } },
-      { "name": "ghost",      "match": "assets/Ghost-.*\\.js$",                "budget": { "maxKB": 10,   "failKB": 30 } },
-      { "name": "licenses",   "match": "^LICENSES\\.md$",                       "budget": { "maxKB": 40,   "failKB": 80 } },
-      { "name": "engine",     "match": "assets/(index|rolldown-runtime)-.*\\.js$", "budget": { "maxKB": 120, "failKB": 160 } },
-      { "name": "content",    "match": "(content.*\\.json|asset-manifest\\..*\\.json)$", "budget": { "maxKB": 12, "failKB": 20 } },
-      { "name": "palette",    "match": "palette.*\\.png$",                       "budget": { "maxKB": 2,    "failKB": 8 } },
-      { "name": "platform",   "match": "(^|/)(platform|kit)[^/]*\\.(glb|bin|png|ktx2)$", "budget": { "maxKB": 150, "failKB": 200 } },
-      { "name": "victor",     "match": "(^|/)victor[^/]*\\.(glb|bin|png)$",      "budget": { "maxKB": 200,  "failKB": 260 } },
-      { "name": "eraOrigens", "match": "(^|/)origens[^/]*\\.(glb|bin|png|ktx2|json)$", "budget": { "maxKB": 850, "failKB": 1000 } },
-      { "name": "audio",      "match": "\\.(ogg|mp3|m4a|opus|wav)$",             "budget": { "maxKB": 750,  "failKB": 900 } },
-      { "name": "testAssets", "match": "(^|/)probe[^/]*\\.glb$",                 "budget": { "maxKB": 100, "failKB": 500 }, "prodForbidden": true }
+      {
+        "name": "html",
+        "match": "^index\\.html$",
+        "budget": {
+          "maxKB": 15,
+          "failKB": 30
+        }
+      },
+      {
+        "name": "css",
+        "match": "\\.css$",
+        "budget": {
+          "maxKB": 15,
+          "failKB": 30
+        }
+      },
+      {
+        "name": "three",
+        "match": "assets/three\\.webgpu-.*\\.js$",
+        "budget": {
+          "maxKB": 330,
+          "failKB": 380
+        }
+      },
+      {
+        "name": "rapierJs",
+        "match": "assets/rapier-.*\\.js$",
+        "budget": {
+          "maxKB": 60,
+          "failKB": 120
+        }
+      },
+      {
+        "name": "rapierWasm",
+        "match": "\\.wasm$",
+        "budget": {
+          "maxKB": 1200,
+          "failKB": 1300
+        }
+      },
+      {
+        "name": "lazyDebug",
+        "match": "assets/(Inspector|PerfHud|PhysicsSmoke)-.*\\.js$",
+        "budget": {
+          "maxKB": 200,
+          "failKB": 400
+        },
+        "prodForbidden": true
+      },
+      {
+        "name": "game",
+        "match": "assets/Game-.*\\.js$",
+        "budget": {
+          "maxKB": 110,
+          "failKB": 150
+        }
+      },
+      {
+        "name": "ghost",
+        "match": "assets/Ghost-.*\\.js$",
+        "budget": {
+          "maxKB": 10,
+          "failKB": 30
+        }
+      },
+      {
+        "name": "licenses",
+        "match": "^LICENSES\\.md$",
+        "budget": {
+          "maxKB": 40,
+          "failKB": 80
+        }
+      },
+      {
+        "name": "engine",
+        "match": "assets/(index|rolldown-runtime)-.*\\.js$",
+        "budget": {
+          "maxKB": 120,
+          "failKB": 160
+        }
+      },
+      {
+        "name": "content",
+        "match": "(content.*\\.json|asset-manifest\\..*\\.json)$",
+        "budget": {
+          "maxKB": 12,
+          "failKB": 20
+        }
+      },
+      {
+        "name": "palette",
+        "match": "palette.*\\.png$",
+        "budget": {
+          "maxKB": 2,
+          "failKB": 8
+        }
+      },
+      {
+        "name": "platform",
+        "match": "(^|/)(platform|kit)[^/]*\\.(glb|bin|png|ktx2)$",
+        "budget": {
+          "maxKB": 150,
+          "failKB": 200
+        }
+      },
+      {
+        "name": "victor",
+        "match": "(^|/)victor[^/]*\\.(glb|bin|png)$",
+        "budget": {
+          "maxKB": 200,
+          "failKB": 260
+        }
+      },
+      {
+        "name": "greybox",
+        "match": "assets/greybox\\.[0-9a-f]{8}\\.glb$",
+        "budget": {
+          "maxKB": 80,
+          "failKB": 150
+        },
+        "$note": "Phase 1 test level (default world until the Origens slice replaces it)"
+      },
+      {
+        "name": "eraOrigens",
+        "match": "(^|/)origens[^/]*\\.(glb|bin|png|ktx2|json)$",
+        "budget": {
+          "maxKB": 850,
+          "failKB": 1000
+        }
+      },
+      {
+        "name": "audio",
+        "match": "\\.(ogg|mp3|m4a|opus|wav)$",
+        "budget": {
+          "maxKB": 750,
+          "failKB": 900
+        }
+      },
+      {
+        "name": "testAssets",
+        "match": "(^|/)probe[^/]*\\.glb$",
+        "budget": {
+          "maxKB": 100,
+          "failKB": 500
+        },
+        "prodForbidden": true
+      }
     ],
     "ignore": [],
-    "requiredFiles": ["index.html", "LICENSES.md"],
+    "requiredFiles": [
+      "index.html",
+      "LICENSES.md"
+    ],
     "groups": [
-      { "name": "mainJs",   "of": ["three", "engine", "game"],                         "budget": { "maxKB": 420,  "failKB": 460 } },
-      { "name": "rapier",   "of": ["rapierJs", "rapierWasm"],                   "budget": { "maxKB": 1250, "failKB": 1400 } },
-      { "name": "critical", "of": ["html", "css", "three", "engine", "game", "rapierJs", "rapierWasm", "content", "palette", "platform", "victor", "eraOrigens"],
-                            "budget": { "maxKB": 3072, "failKB": 3277 } }
+      {
+        "name": "mainJs",
+        "of": [
+          "three",
+          "engine",
+          "game"
+        ],
+        "budget": {
+          "maxKB": 420,
+          "failKB": 460
+        }
+      },
+      {
+        "name": "rapier",
+        "of": [
+          "rapierJs",
+          "rapierWasm"
+        ],
+        "budget": {
+          "maxKB": 1250,
+          "failKB": 1400
+        }
+      },
+      {
+        "name": "critical",
+        "of": [
+          "html",
+          "css",
+          "three",
+          "engine",
+          "game",
+          "rapierJs",
+          "rapierWasm",
+          "content",
+          "palette",
+          "platform",
+          "victor",
+          "eraOrigens",
+          "greybox"
+        ],
+        "budget": {
+          "maxKB": 3072,
+          "failKB": 3277
+        }
+      }
     ]
   },
   "perf": {
     "durationSec": 10,
     "warmupSec": 3,
     "sampleMs": 500,
-    "desktop": { "expectBackend": "webgpu", "viewport": [1280, 720], "cpuThrottle": 1, "minFps": 55, "maxP95Ms": 20, "maxDrawCalls": 250, "maxTriangles": 800000 },
-    "mobile":  { "expectBackend": "webgl2", "viewport": [390, 844], "dpr": 2, "cpuThrottle": 4, "query": "?q=1&webgl", "minFps": 50, "maxP95Ms": 24, "maxDrawCalls": 120, "maxTriangles": 250000 },
+    "desktop": {
+      "expectBackend": "webgpu",
+      "viewport": [
+        1280,
+        720
+      ],
+      "cpuThrottle": 1,
+      "minFps": 55,
+      "maxP95Ms": 20,
+      "maxDrawCalls": 250,
+      "maxTriangles": 800000
+    },
+    "mobile": {
+      "expectBackend": "webgl2",
+      "viewport": [
+        390,
+        844
+      ],
+      "dpr": 2,
+      "cpuThrottle": 4,
+      "query": "?q=1&webgl",
+      "minFps": 50,
+      "maxP95Ms": 24,
+      "maxDrawCalls": 120,
+      "maxTriangles": 250000
+    },
     "$notes": "expectBackend is asserted per profile (desktop webgpu; mobile webgl2 forced by the explicit ?webgl query, Rendering.js matches /[?&]webgl(?:[=&]|$)/ so ?webgl=0 would ALSO force WebGL2: the gate only ever passes the bare ?webgl). drawCalls/triangles are the MAX over samples taken every sampleMs across the whole measured window. Console errors, page errors, failed requests and HTTP >=400 fail the profile. Plan 7.4 targets: desktop 60 fps / p99<=16.7 ms / draw<=250 / tris<=800k; mobile >=55 fps / p95<=20 ms / draw<=120 / tris<=250k. Gate floors are looser (55/20 desktop, 50/24 mobile-throttled) because it runs on a shared dev machine with CPU throttle; tighten once the real-device gate (7.5) exists. gpuMs <=6 desktop is recorded, not gated (timer queries opt-in)."
   }
 }

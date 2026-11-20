@@ -88,7 +88,7 @@ export class Game
         this.rendering.setPostprocessing()
         this.rendering.start()
         this.perf = new PerfProbe() // window.__perf
-        if(Debug.isRequested())
+        if(__DEV_TOOLS__ && Debug.isRequested())
             import('./PerfHud.js').then(({ PerfHud }) => { this.perfHud = new PerfHud(this.perf) })
         this.reveal = new Reveal()
         this.weather = new Weather()
@@ -108,7 +108,7 @@ export class Game
         await this.world.ready // greybox glb (the `?demo` world is synchronous)
 
         // `?debug=physics`: Rapier smoke test (T0.7), separate chunk, results in window.__physicsSmoke
-        if(Debug.getParam('debug') === 'physics')
+        if(__DEV_TOOLS__ && Debug.getParam('debug') === 'physics')
             this.physicsSmoke = import('./Physics/PhysicsSmoke.js').then(({ runPhysicsSmoke }) => runPhysicsSmoke(this.RAPIER))
 
         // Ghost starts counting fixed steps here: nothing has stepped the physics yet and nothing awaits until `ready`

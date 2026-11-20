@@ -1,7 +1,7 @@
 // Content-hashed asset naming + manifest (plan T0.15, risk R13).
 // static/** -> <out>/assets/<name>.<hash8>.<ext>, plus <out>/asset-manifest.<buildId>.json.
 // Additive within one output folder (never deletes). Note: vite empties dist/ and previews are orphan single commits, so deployed OLD builds are not kept; clients recover via the loader retry + page reload.
-// CLI: node scripts/hash-assets.mjs [--static static] [--out dist] [--no-verify]
+// CLI: node scripts/hash-assets.mjs [--static static] [--out dist] [--no-verify] [--include-test]
 import { createHash } from 'node:crypto'
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { basename, extname, join, relative, resolve, sep } from 'node:path'
@@ -24,6 +24,12 @@ function walk(_dir, _root = _dir, _out = [])
     return _out.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
 }
 
+// static/test/** (probe glb etc.) is test-only: skipped unless includeTest (CLI: --include-test, for debug builds)
+function walkAssets(_staticDir, _includeTest)
+{
+    return walk(resolve(_staticDir)).filter(f => _includeTest || !f.name.startsWith('test/'))
+}
+
 // BUILD_ID ends up in a file name and in the JS bundle: alphanumerics only (no path separators, dots, quotes).
 export function sanitizeBuildId(_id)
 {
@@ -33,24 +39,24 @@ export function sanitizeBuildId(_id)
 }
 
 // Deterministic id of the asset set (names + contents). BUILD_ID env overrides it.
-export function computeBuildId(_staticDir = 'static')
+export function computeBuildId(_staticDir = 'static', _includeTest = true)
 {
     if(process.env.BUILD_ID)
         return sanitizeBuildId(process.env.BUILD_ID)
     const h = createHash('sha256')
-    for(const file of walk(resolve(_staticDir)))
+    for(const file of walkAssets(_staticDir, _includeTest))
         h.update(`${file.name}\0${sha(readFileSync(file.full))}\n`)
     return h.digest('hex').slice(0, 8)
 }
 
-export function hashAssets({ staticDir = 'static', outDir = 'dist', buildId = computeBuildId(staticDir), licensesFile = fileURLToPath(new URL('../LICENSES.md', import.meta.url)) } = {})
+export function hashAssets({ staticDir = 'static', outDir = 'dist', includeTest = true, buildId = computeBuildId(staticDir, includeTest), licensesFile = fileURLToPath(new URL('../LICENSES.md', import.meta.url)) } = {})
 {
     sanitizeBuildId(buildId)
     const assetsDir = join(resolve(outDir), 'assets')
     mkdirSync(assetsDir, { recursive: true })
 
     const assets = {}
-    for(const file of walk(resolve(staticDir)))
+    for(const file of walkAssets(staticDir, includeTest))
     {
         const buffer = readFileSync(file.full)
         const ext = extname(file.full)
@@ -84,7 +90,8 @@ if(process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href)
     const opt = (_name, _def) => { const i = args.indexOf(_name); return i >= 0 ? args[i + 1] : _def }
     const staticDir = opt('--static', 'static')
     const outDir = opt('--out', 'dist')
-    const result = hashAssets({ staticDir, outDir })
+    const includeTest = args.includes('--include-test')
+    const result = hashAssets({ staticDir, outDir, includeTest })
     console.log(`hash-assets: ${Object.keys(result.assets).length} asset(s) -> ${outDir}/${result.manifestName}`)
     if(!args.includes('--no-verify') && !verifyEmbedded(outDir, result.buildId))
     {
