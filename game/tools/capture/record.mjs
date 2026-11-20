@@ -2,13 +2,16 @@
 // + rAF frame-time sampler + window.__perf (optional) -> mp4 (60 fps) + metrics.json + contact sheet.
 //
 // Usage: node record.mjs --profile desktop|mobile --seconds 10 --url <url> [--start] [--name x] [--out dir]
-//                        [--encoder h264_amf|libx264] [--no-sheet]
+//                        [--encoder h264_amf|libx264] [--no-sheet] [--script file.mjs]
+// --script: ES module, default export async ({ page, cdp, P, seconds, mark, sleep, remaining }) => {}; runs right after
+//   recording starts (replaces --start). mark(name) stores ms since navigation + bytes transferred so far in metrics.marks.
+// Always collected: CDP Network transfer (sum encodedDataLength) and draw calls (WebGL + WebGPU prototype hooks).
 // NOTE: playwright-core is borrowed from D:/GitHub/site until T0.5 adds it as a devDependency of game/.
 import { createRequire } from 'node:module';
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { FFMPEG, makeSheet } from './sheet.mjs';
 
 const require = createRequire(import.meta.url);
@@ -24,6 +27,7 @@ const opt = (k, d) => { const i = argv.indexOf('--' + k); return i >= 0 && argv[
 const flag = (k) => argv.includes('--' + k);
 
 const profileName = opt('profile', 'desktop');
+const scriptPath = opt('script');
 const seconds = +opt('seconds', 10);
 const url = opt('url');
 if (!url) { console.error('missing --url'); process.exit(1); }
@@ -68,10 +72,30 @@ if (P.mobile) {
 }
 if (P.cpu > 1) await cdp.send('Emulation.setCPUThrottlingRate', { rate: P.cpu });
 
-// rAF sampler, installed before any page script. Reset right when recording starts.
+// CDP network accounting: sum of encodedDataLength (bytes on the wire, headers included) over finished requests.
+let netBytes = 0, netReqs = 0;
+await cdp.send('Network.enable');
+cdp.on('Network.loadingFinished', (e) => { netBytes += e.encodedDataLength || 0; netReqs++; });
+
+// rAF sampler + draw-call counters (WebGL2/WebGL1 draw* and WebGPU render-pass draw*), installed before any page script.
+// d = draws since the previous rAF tick; dpf holds the per-frame counts while recording. Reset right when recording starts.
 await page.addInitScript(() => {
-  const s = (window.__cap = { t: [], on: false });
-  const tick = (now) => { if (s.on) s.t.push(now); requestAnimationFrame(tick); };
+  const s = (window.__cap = { t: [], dpf: [], on: false, d: 0, total: 0 });
+  const wrap = (proto, names) => {
+    if (!proto) return;
+    for (const n of names) {
+      const o = proto[n];
+      if (typeof o !== 'function') continue;
+      proto[n] = function (...a) { s.d++; return o.apply(this, a); };
+    }
+  };
+  const gl = ['drawArrays', 'drawElements', 'drawArraysInstanced', 'drawElementsInstanced', 'drawRangeElements'];
+  wrap(window.WebGL2RenderingContext?.prototype, gl);
+  wrap(window.WebGLRenderingContext?.prototype, gl.slice(0, 2));
+  const gpu = ['draw', 'drawIndexed', 'drawIndirect', 'drawIndexedIndirect'];
+  wrap(window.GPURenderPassEncoder?.prototype, gpu);
+  wrap(window.GPURenderBundleEncoder?.prototype, gpu);
+  const tick = (now) => { if (s.on) { s.t.push(now); s.dpf.push(s.d); s.total += s.d; } s.d = 0; requestAnimationFrame(tick); };
   requestAnimationFrame(tick);
 });
 
@@ -97,16 +121,27 @@ const ff = spawn(FFMPEG, [
 const ffDone = new Promise((res) => ff.on('close', res));
 await page.waitForTimeout(1000); // encoder warm-up
 
-await page.evaluate(() => { window.__cap.t.length = 0; window.__cap.on = true; });
+await page.evaluate(() => { window.__cap.t.length = 0; window.__cap.dpf.length = 0; window.__cap.total = 0; window.__cap.on = true; });
 const t0 = Date.now();
-if (flag('start')) {
+const marks = [];
+const mark = (n) => { marks.push({ name: n, msSinceNav: Date.now() - navStart, msSinceRecStart: Date.now() - t0, bytes: netBytes }); console.log('[record] mark', n); };
+const sleep = (ms) => page.waitForTimeout(ms);
+const remaining = () => seconds * 1000 - (Date.now() - t0);
+let scriptRun = Promise.resolve();
+if (scriptPath) {
+  const mod = await import(pathToFileURL(path.resolve(scriptPath)).href);
+  scriptRun = Promise.resolve(mod.default({ page, cdp, P, seconds, mark, sleep, remaining })).catch((e) => console.warn('[record] script error:', e.message));
+} else if (flag('start')) {
   await page.keyboard.press('Enter');
   if (P.mobile) await page.touchscreen.tap(P.w / 2, P.h / 2).catch(() => {});
 }
 await page.waitForTimeout(seconds * 1000);
+await Promise.race([scriptRun, sleep(2000)]);
 const elapsed = (Date.now() - t0) / 1000;
 
-const cap = await page.evaluate(() => { window.__cap.on = false; return window.__cap.t; });
+const capAll = await page.evaluate(() => { window.__cap.on = false; return { t: window.__cap.t, dpf: window.__cap.dpf }; });
+const cap = capAll.t;
+const dpf = capAll.dpf;
 const perf = await page.evaluate(() => { try { return window.__perf ? JSON.parse(JSON.stringify(window.__perf)) : null; } catch { return { error: 'unserializable' }; } });
 
 try { ff.stdin.write('q'); } catch {}
@@ -125,6 +160,11 @@ const metrics = {
   durationSec: r2(elapsed), frames: cap.length,
   avgFps: span ? r2((cap.length - 1) / span) : null,
   frameTimeMs: { p50: r2(pct(0.5)), p95: r2(pct(0.95)), p99: r2(pct(0.99)), max: r2(sorted[sorted.length - 1] ?? null) },
+  transfer: { bytes: netBytes, requests: netReqs, mb: r2(netBytes / 1048576) },
+  drawCalls: dpf.length && dpf.some((v) => v > 0)
+    ? { avg: r2(dpf.reduce((a, b) => a + b, 0) / dpf.length), max: Math.max(...dpf), note: 'GL draw* / GPURenderPassEncoder draw* per rAF frame; executeBundles not expanded' }
+    : 'n/a (no draw calls seen via GL/WebGPU hooks)',
+  marks,
   perf: perf ?? 'window.__perf absent',
   video: 'video.mp4',
 };
