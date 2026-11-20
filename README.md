@@ -5,7 +5,7 @@
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/voaneves/timeline/main/assets/logo/logo-dark.svg" />
   <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/voaneves/timeline/main/assets/logo/logo-light.svg" />
-  <img alt="Super Victor Timeline logo: a split ink and paper disc with the monogram Tl and a red signal dot" src="https://raw.githubusercontent.com/voaneves/timeline/main/assets/logo/logo-light.svg" width="112" height="112" />
+  <img alt="Timeline logo: a T whose crossbar is a timeline path, with a red dot for now" src="https://raw.githubusercontent.com/voaneves/timeline/main/assets/logo/logo-light.svg" width="112" height="112" />
 </picture>
 
 <h1>Super Victor Timeline</h1>

@@ -7,6 +7,7 @@
   "tagline": "A personal career timeline and projects page, with an optional explorable 3D diorama.",
   "description": "Victor Neves' timeline: a semantic 2D page of career milestones and open-source projects, plus an optional low-poly 3D world to explore.",
   "logo": {
+    "glyph": "timeline",
     "mark": "Tl"
   },
   "buttons": [
