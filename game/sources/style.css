@@ -1,0 +1,52 @@
+html, body
+{
+    margin: 0;
+    height: 100%;
+    overflow: hidden;
+    background: #10266f;
+}
+
+.game
+{
+    position: fixed;
+    inset: 0;
+}
+
+.js-canvas
+{
+    display: block;
+    width: 100%;
+    height: 100%;
+    touch-action: none;
+}
+
+.touch-buttons
+{
+    display: none;
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+}
+
+html.is-mode-touch .touch-buttons
+{
+    display: block;
+}
+
+.touch-buttons .buttons
+{
+    position: absolute;
+    right: 16px;
+    bottom: 16px;
+}
+
+.touch-buttons .js-button
+{
+    display: none;
+    pointer-events: auto;
+}
+
+.touch-buttons .js-button.is-visible
+{
+    display: block;
+}

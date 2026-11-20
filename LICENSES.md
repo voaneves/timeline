@@ -35,3 +35,14 @@ THE SOFTWARE.
 `assets/fonts/schibsted-grotesk.woff2` and `assets/fonts/jetbrains-mono.woff2`
 are subsets of Schibsted Grotesk and JetBrains Mono. Licence texts:
 `assets/fonts/OFL-schibsted-grotesk.txt` and `assets/fonts/OFL-jetbrains-mono.txt`.
+
+## folio-2025 (Bruno Simon), MIT
+
+The 3D game engine in `game/sources/**` is adapted from
+[folio-2025](https://github.com/brunosimon/folio-2025) by Bruno Simon (commit `70764a9`).
+The applicable licence is `license.md` of that repository (MIT, "Copyright (c) 2025 Bruno Simon");
+its `package.json` says ISC, which is not the licence text shipped. Each derived file carries the header
+`// Adapted from folio-2025 by Bruno Simon (MIT) — https://github.com/brunosimon/folio-2025`.
+No upstream `static/` or `resources/` asset is copied. Full text and the list of the game's other
+dependencies (Rapier Apache-2.0, GSAP "no charge" licence, tweakpane, camera-controls, ...) are in
+`game/LICENSES.md`.
