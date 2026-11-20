@@ -1,6 +1,6 @@
-// Boot script: theme toggle, service worker and the gate for the optional 3D mode.
-// three.js is never requested from here until the visitor starts 3D (or a returning
-// visitor who left 3D on is auto-started on idle, see canAutostart).
+// Boot script: theme toggle, service worker, title screen and the gate for the fullscreen
+// 3D game. three.js is never requested until the visitor presses Start (title screen, or the
+// "Jogar em 3D" button on the 2D page). The 2D page stays in the DOM for SEO and readers.
 (() => {
   "use strict";
 
@@ -39,26 +39,27 @@
     });
   }
 
-  // 3D gate.
-  const btn = document.getElementById("start-3d");
-  const stage = document.getElementById("world");
-  const frame = document.getElementById("world-frame");
-  const status = document.getElementById("world-status");
-  if (!btn || !stage || !frame) return;
+  const $ = (id) => document.getElementById(id);
+  const title = $("title-screen");
+  const startBtn = $("ts-start");
+  const heroBtn = $("start-3d");
+  const stage = $("world");
+  const frame = $("world-frame");
+  const status = $("world-status");
+  const tsStatus = $("ts-status");
+  const pageParts = [...document.querySelectorAll("[data-page]")];
+  if (!stage || !frame) return;
 
-  const label = btn.querySelector(".label");
-  const IDLE = "Explorar em 3D";
+  const say = (text) => {
+    if (status) status.textContent = text;
+    if (tsStatus) tsStatus.textContent = text;
+  };
+  const titleVisible = () => !!title && !title.hidden && !root.classList.contains("no-title");
+
   let handle = null;
   let loading = false;
 
-  const setLabel = (text) => {
-    if (label) label.textContent = text;
-  };
-  const say = (text) => {
-    if (status) status.textContent = text;
-  };
-
-  // The probe context is created only on Start (or idle autostart), never at page load.
+  // The probe context is created only on Start, never at page load.
   const hasWebGL2 = () => {
     try {
       const gl = document.createElement("canvas").getContext("webgl2");
@@ -71,20 +72,44 @@
     }
   };
 
-  const canAutostart = () => {
-    const conn = navigator.connection;
-    return (
-      read(KEY_MODE) === "3d" &&
-      !window.matchMedia("(prefers-reduced-motion: reduce)").matches &&
-      !(conn && conn.saveData) &&
-      (navigator.deviceMemory === undefined || navigator.deviceMemory >= 4)
-    );
+  const showPage = () => {
+    root.classList.remove("playing");
+    pageParts.forEach((el) => {
+      el.inert = false;
+      el.removeAttribute("aria-hidden");
+    });
+  };
+  const hidePage = () => {
+    root.classList.add("playing");
+    pageParts.forEach((el) => {
+      el.inert = true;
+      el.setAttribute("aria-hidden", "true");
+    });
+  };
+
+  const closeTitle = () => {
+    if (title) title.hidden = true;
+    root.classList.add("no-title");
+  };
+
+  // Fall back to the plain page (also used when WebGL2 or the chunk is unavailable).
+  const simple = (message) => {
+    closeTitle();
+    showPage();
+    write(KEY_MODE, "2d");
+    if (message) say(message);
+    const target = $("carreira");
+    if (target) {
+      target.scrollIntoView();
+      target.setAttribute("tabindex", "-1");
+      target.focus({ preventScroll: true });
+    }
   };
 
   const unavailable = () => {
-    btn.hidden = true;
+    if (heroBtn) heroBtn.hidden = true;
     stage.hidden = true;
-    say("3D indisponível neste dispositivo. A linha do tempo continua abaixo.");
+    simple("3D indisponível neste dispositivo. Mostrando a versão simples.");
   };
 
   const leave = (byUser) => {
@@ -93,43 +118,86 @@
       handle = null;
     }
     stage.hidden = true;
-    setLabel(IDLE);
-    write(KEY_MODE, "2d");
-    if (byUser) btn.focus();
-    else say("O 3D foi interrompido. A linha do tempo continua abaixo.");
+    showPage();
+    write(KEY_MODE, "3d-exit");
+    if (title) {
+      title.hidden = false;
+      title.classList.remove("leaving", "loading");
+      root.classList.remove("no-title");
+      pageParts.forEach((el) => (el.inert = true));
+    }
+    if (startBtn) startBtn.querySelector(".ts-label").textContent = "Press start";
+    if (byUser && startBtn) startBtn.focus();
+    else say("O 3D foi interrompido. Mostrando a versão simples.");
+    if (!byUser) simple();
   };
 
   const enter = async () => {
     if (handle || loading) return;
     if (!hasWebGL2()) return unavailable();
     loading = true;
-    btn.disabled = true;
-    setLabel("Carregando 3D…");
+    if (title) title.classList.add("loading");
+    if (startBtn) startBtn.querySelector(".ts-label").textContent = "Carregando";
+    if (heroBtn) heroBtn.disabled = true;
     try {
       const mod = await import("./world/world.min.js?v=" + __WORLD_VERSION__);
+      hidePage();
       stage.hidden = false;
-      handle = await mod.start({ container: frame, onFallback: () => leave(false) });
+      handle = await mod.start({
+        container: frame,
+        onFallback: () => leave(false),
+        onExit: () => leave(true),
+      });
       write(KEY_MODE, "3d");
-      setLabel("Voltar ao 2D");
+      if (title && titleVisible()) {
+        title.classList.add("leaving");
+        setTimeout(() => {
+          title.hidden = true;
+          title.classList.remove("leaving", "loading");
+        }, 650);
+      }
+      root.classList.add("no-title");
     } catch (e) {
       handle = null;
+      showPage();
       stage.hidden = true;
-      setLabel(IDLE);
       unavailable();
     } finally {
       loading = false;
-      btn.disabled = false;
+      if (heroBtn) heroBtn.disabled = false;
     }
   };
 
-  btn.addEventListener("click", () => (handle ? leave(true) : enter()));
-
-  if (canAutostart()) {
-    window.addEventListener("load", () => {
-      setTimeout(() => {
-        if (window.requestIdleCallback) window.requestIdleCallback(enter);
-        else enter();
-      }, 2000);
+  if (startBtn) startBtn.addEventListener("click", enter);
+  if (heroBtn) heroBtn.addEventListener("click", enter);
+  const simpleLink = $("ts-simple");
+  const contactLink = $("ts-contact");
+  if (simpleLink) simpleLink.addEventListener("click", (e) => (e.preventDefault(), simple()));
+  if (contactLink) {
+    contactLink.addEventListener("click", (e) => {
+      e.preventDefault();
+      simple();
+      const c = $("contato");
+      if (c) c.scrollIntoView();
     });
+  }
+  // Enter / Space / tap anywhere on the title screen starts the game.
+  if (title) {
+    title.inert = false;
+    document.addEventListener("keydown", (e) => {
+      if (!titleVisible() || handle || loading) return;
+      if ((e.key === "Enter" || e.key === " ") && !(e.target instanceof HTMLAnchorElement)) {
+        e.preventDefault();
+        enter();
+      }
+    });
+    title.addEventListener("pointerdown", (e) => {
+      if (e.target.closest("a")) return;
+      if (e.pointerType === "touch") enter();
+    });
+    if (titleVisible()) {
+      pageParts.forEach((el) => (el.inert = true));
+      if (startBtn) startBtn.focus({ preventScroll: true });
+    }
   }
 })();

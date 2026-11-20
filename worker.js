@@ -3,7 +3,7 @@
 // and the activate handler removes every cache that is not current.
 // The 3D chunk (assets/js/world/*) is never precached, so it is only fetched
 // after the visitor starts the 3D mode.
-const VERSION = "v3";
+const VERSION = "v4";
 const PRECACHE = `precache-${VERSION}`;
 const RUNTIME = `runtime-${VERSION}`;
 

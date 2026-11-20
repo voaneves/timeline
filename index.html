@@ -52,6 +52,7 @@
         try {
           var t = localStorage.getItem("timeline-theme");
           if (t === "light" || t === "dark") d.setAttribute("data-theme", t);
+          if (location.hash || localStorage.getItem("timeline-mode") === "2d") d.className += " no-title";
         } catch (e) {}
       })();
     </script>
@@ -81,9 +82,32 @@
     <script defer src="assets/js/console.min.js"></script>
   </head>
   <body>
-    <a class="skip" href="#conteudo">Pular para o conteúdo</a>
-    <a class="skip" href="#contato">Ir para contato</a>
-    <header class="site-header">
+    <div class="title-screen" id="title-screen" role="region" aria-label="Victor Neves, linha do tempo interativa">
+      <div class="ts-bg" aria-hidden="true">
+        <i class="ts-sun"></i>
+        <i class="ts-cloud c1"></i><i class="ts-cloud c2"></i><i class="ts-cloud c3"></i>
+        <i class="ts-hill h1"></i><i class="ts-hill h2"></i>
+        <i class="ts-block"></i>
+        <i class="ts-pipe p1"></i><i class="ts-pipe p2"></i>
+        <i class="ts-ground"></i>
+      </div>
+      <div class="ts-card">
+        <p class="ts-kicker">Linha do tempo interativa</p>
+        <p class="ts-title">Victor Neves</p>
+        <p class="ts-tag">Do Tocantins à transformação digital. Ande, pule e bata nos blocos para descobrir a minha história.</p>
+        <button type="button" class="ts-start" id="ts-start"><span class="play" aria-hidden="true"></span><span class="ts-label">Press start</span></button>
+        <p class="ts-hint" id="ts-hint">Enter, Espaço ou toque</p>
+        <div class="ts-bar" aria-hidden="true"><i></i></div>
+        <p class="sr-only" id="ts-status" role="status" aria-live="polite"></p>
+        <nav class="ts-links" aria-label="Alternativas">
+          <a href="#carreira" id="ts-simple">Ver versão simples</a>
+          <a href="#contato" id="ts-contact">Contato</a>
+        </nav>
+      </div>
+    </div>
+    <a class="skip" data-page href="#conteudo">Pular para o conteúdo</a>
+    <a class="skip" data-page href="#contato">Ir para contato</a>
+    <header class="site-header" data-page>
       <a class="brand" href="./" aria-label="Victor Neves, início">
         <img src="assets/brand/mark-duo.svg" width="40" height="40" alt="" />
       </a>
@@ -106,7 +130,7 @@
       </div>
     </header>
 
-    <main id="conteudo" tabindex="-1">
+    <main id="conteudo" tabindex="-1" data-page>
       <section class="hero" aria-labelledby="titulo">
         <div class="wrap">
           <p class="kicker">Linha do tempo e projetos</p>
@@ -118,24 +142,9 @@
           <div class="hero-actions">
             <button type="button" class="btn start3d" id="start-3d">
               <span class="play" aria-hidden="true"></span>
-              <span class="label">Explorar em 3D</span>
+              <span class="label">Jogar em 3D</span>
             </button>
           </div>
-          <div class="world" id="world" hidden>
-            <div
-              class="world-frame"
-              id="world-frame"
-              role="application"
-              tabindex="0"
-              aria-label="Cena 3D interativa"
-              aria-describedby="world-help"
-            ></div>
-            <p class="sr-only" id="world-help">
-              Cena 3D decorativa em construção. Todo o conteúdo está na linha do
-              tempo e na lista de projetos logo abaixo.
-            </p>
-          </div>
-          <p class="sr-only" id="world-status" role="status" aria-live="polite"></p>
         </div>
       </section>
 
@@ -395,7 +404,61 @@
       </section>
     </main>
 
-    <footer>
+    <div class="world" id="world" hidden>
+      <div
+        class="world-frame"
+        id="world-frame"
+        role="application"
+        tabindex="0"
+        aria-label="Mundo 3D interativo: use as setas para andar, Espaço para pular, E para abrir, Esc para sair"
+        aria-describedby="world-help"
+      ></div>
+      <p class="sr-only" id="world-help">
+        Mundo 3D decorativo em tela cheia. Setas ou WASD andam, Espaço pula, E ou a seta para baixo
+        interagem, M liga o som, H abre a ajuda, Esc fecha cartões e depois sai do jogo. Todo o conteúdo
+        também está na versão simples da página.
+      </p>
+      <div class="hud" id="hud">
+        <div class="hud-left">
+          <p class="hud-count">
+            <span class="sr-only">Marcos encontrados: </span><span id="hud-found">0</span>/<span id="hud-found-total">15</span> marcos
+            <span class="hud-sep" aria-hidden="true">·</span>
+            <span class="sr-only">Moedas: </span><span id="hud-coins">0</span>/<span id="hud-total">0</span> moedas
+          </p>
+          <p class="hud-zone" id="hud-zone"></p>
+          <div class="hud-links">
+            <button type="button" class="pill" id="hud-projects">Projetos</button>
+            <button type="button" class="pill pill-signal" id="hud-contact">Contato</button>
+          </div>
+        </div>
+        <div class="hud-right">
+          <button type="button" class="icon" id="hud-mute" aria-pressed="false" aria-label="Som desligado. Ativar som">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4Z"/><path class="wave" d="M16 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path class="slash" d="M3 3l18 18" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>
+          </button>
+          <button type="button" class="icon" id="hud-help" aria-expanded="false" aria-controls="help-panel" aria-label="Ajuda e controles">?</button>
+          <button type="button" class="icon" id="hud-exit" aria-label="Sair do jogo (Esc)">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5l14 14M19 5L5 19" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></svg>
+          </button>
+        </div>
+      </div>
+      <p class="toast" id="world-toast" aria-hidden="true" hidden></p>
+      <div class="help-panel" id="help-panel" hidden>
+        <p><strong>Teclado:</strong> ←→↑↓ ou WASD andam · Espaço pula (segure para pular mais alto) · E ou ↓ entram em tubos e abrem blocos · M som · Esc fecha e sai.</p>
+        <p><strong>Toque:</strong> arraste na metade esquerda para andar, botão Pular à direita, ou toque em um bloco ou tubo.</p>
+        <p><strong>Mouse:</strong> clique no chão para andar, em um bloco ou tubo para interagir.</p>
+      </div>
+      <button type="button" class="jump-btn" id="jump-btn" aria-label="Pular">Pular</button>
+      <div class="fade" id="world-fade"></div>
+      <dialog class="card" id="card" aria-labelledby="card-title">
+        <div id="card-body"></div>
+        <div class="card-actions">
+          <button type="button" class="btn btn-sm" id="card-list">Ver na linha do tempo</button>
+          <button type="button" class="btn btn-sm btn-primary" id="card-close">Fechar</button>
+        </div>
+      </dialog>
+    </div>
+    <p class="sr-only" id="world-status" role="status" aria-live="polite"></p>
+    <footer data-page>
       <p>
         Victor Neves ·
         <a href="https://github.com/voaneves/timeline">Código-fonte no GitHub</a>

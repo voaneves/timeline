@@ -1,18 +1,30 @@
-import { WebGLRenderer, Scene, PerspectiveCamera } from "three";
+import {
+  ACESFilmicToneMapping,
+  PCFSoftShadowMap,
+  PerspectiveCamera,
+  PMREMGenerator,
+  Scene,
+  WebGLRenderer,
+} from "three";
+import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 
-// Renderer shell: DPR clamp, resize observer, visibility/offscreen pause and
-// context-lost fallback. The scene content lives in main.js.
+// Renderer shell: DPR clamp, resize observer, visibility/offscreen pause, context-lost
+// fallback, procedural PMREM environment and AgX tone mapping. Scene content lives in main.js.
 export function createRenderer(container, { onFallback, animate = true } = {}) {
   const coarse = window.matchMedia("(pointer: coarse)").matches;
-  const dpr = Math.min(window.devicePixelRatio || 1, coarse ? 1.5 : 2);
+  const maxDpr = coarse ? 1.5 : 2;
+  const dpr = Math.min(window.devicePixelRatio || 1, maxDpr);
 
   const renderer = new WebGLRenderer({
-    antialias: dpr < 2,
+    antialias: false, // MSAA comes from the post render target; level 2 re-enables it below
     powerPreference: "high-performance",
     alpha: false,
   });
   renderer.setPixelRatio(dpr);
+  renderer.toneMapping = ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 0.85;
   renderer.shadowMap.enabled = !coarse;
+  renderer.shadowMap.type = PCFSoftShadowMap;
 
   const canvas = renderer.domElement;
   canvas.setAttribute("aria-hidden", "true");
@@ -20,9 +32,18 @@ export function createRenderer(container, { onFallback, animate = true } = {}) {
   container.appendChild(canvas);
 
   const scene = new Scene();
-  const camera = new PerspectiveCamera(35, 1, 0.1, 200);
+  const camera = new PerspectiveCamera(36, 1, 0.1, 300);
+
+  const pmrem = new PMREMGenerator(renderer);
+  const env = new RoomEnvironment();
+  scene.environment = pmrem.fromScene(env, 0.04).texture;
+  scene.environmentIntensity = 0.4;
+  env.dispose();
+  pmrem.dispose();
 
   let tick = () => {};
+  let draw = () => renderer.render(scene, camera);
+  const resizers = [];
   let raf = 0;
   let last = 0;
   let visible = !document.hidden;
@@ -37,7 +58,7 @@ export function createRenderer(container, { onFallback, animate = true } = {}) {
     const dt = Math.min((now - last) / 1000, 0.1);
     last = now;
     tick(dt, now / 1000);
-    renderer.render(scene, camera);
+    draw(dt);
     raf = requestAnimationFrame(frame);
   };
 
@@ -53,10 +74,6 @@ export function createRenderer(container, { onFallback, animate = true } = {}) {
     }
   };
 
-  const renderOnce = () => {
-    if (!disposed) renderer.render(scene, camera);
-  };
-
   const resize = () => {
     const w = container.clientWidth;
     const h = container.clientHeight;
@@ -64,7 +81,8 @@ export function createRenderer(container, { onFallback, animate = true } = {}) {
     renderer.setSize(w, h, false);
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
-    if (!animate) renderOnce();
+    for (const fn of resizers) fn(w, h);
+    if (!animate) draw(0);
   };
 
   const ro = new ResizeObserver(resize);
@@ -87,21 +105,27 @@ export function createRenderer(container, { onFallback, animate = true } = {}) {
   };
   canvas.addEventListener("webglcontextlost", onLost);
 
-  resize();
-
   return {
     renderer,
     scene,
     camera,
     canvas,
+    coarse,
+    dpr,
     setTick(fn) {
       tick = fn;
     },
-    start() {
-      sync();
-      if (!animate) renderOnce();
+    setDraw(fn) {
+      draw = fn;
     },
-    renderOnce,
+    onResize(fn) {
+      resizers.push(fn);
+    },
+    start() {
+      resize();
+      sync();
+    },
+    renderOnce: () => draw(0),
     dispose() {
       if (disposed) return;
       disposed = true;
@@ -114,11 +138,12 @@ export function createRenderer(container, { onFallback, animate = true } = {}) {
         if (obj.geometry) obj.geometry.dispose();
         const mats = obj.material ? [].concat(obj.material) : [];
         for (const m of mats) {
-          if (m.map) m.map.dispose();
+          for (const k of ["map", "emissiveMap", "gradientMap"]) if (m[k]) m[k].dispose();
           m.dispose();
         }
       });
       if (scene.background && scene.background.dispose) scene.background.dispose();
+      if (scene.environment) scene.environment.dispose();
       renderer.dispose();
       renderer.forceContextLoss();
       canvas.remove();
