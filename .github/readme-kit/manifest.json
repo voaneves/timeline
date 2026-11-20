@@ -1,0 +1,51 @@
+{
+  "repo": "timeline",
+  "branch": "main",
+  "lang": "en",
+  "license": "MIT",
+  "name": "Super Victor Timeline",
+  "tagline": "A personal career timeline as a side-scrolling stage: click a pipe to reveal a milestone.",
+  "description": "Interactive career timeline in Super Mario World style: click a pipe and Mario walks there to reveal a milestone.",
+  "logo": {
+    "mark": "Tl"
+  },
+  "buttons": [
+    {
+      "id": "live",
+      "text": "Open the timeline",
+      "kind": "primary",
+      "font": "sans",
+      "href": "https://voaneves.github.io/timeline/"
+    },
+    {
+      "id": "how",
+      "text": "How it works",
+      "kind": "secondary",
+      "font": "sans",
+      "href": "https://github.com/voaneves/timeline#how-it-works"
+    },
+    {
+      "id": "hire",
+      "text": "Let's talk",
+      "kind": "primary",
+      "font": "sans",
+      "href": "https://voaneves.com/en/#contact",
+      "landing": false
+    },
+    {
+      "id": "site",
+      "text": "voaneves.com",
+      "kind": "secondary",
+      "font": "sans",
+      "href": "https://voaneves.com/en/",
+      "landing": false
+    }
+  ],
+  "features": [
+    "One pipe per milestone, defined in assets/js/timeline.js.",
+    "Sound effects and theme music loaded after the first click.",
+    "Light and dark theme toggle and service worker caching."
+  ],
+  "landing": false,
+  "live_url": "https://voaneves.github.io/timeline/"
+}
