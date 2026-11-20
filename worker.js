@@ -3,7 +3,7 @@
 // and the activate handler removes every cache that is not current.
 // The 3D chunk (assets/js/world/*) is never precached, so it is only fetched
 // after the visitor starts the 3D mode.
-const VERSION = "v7";
+const VERSION = "v8";
 const PRECACHE = `precache-${VERSION}`;
 const RUNTIME = `runtime-${VERSION}`;
 
@@ -59,6 +59,9 @@ self.addEventListener("fetch", (event) => {
   if (url.origin !== self.location.origin) return;
   // World chunk and anything else under assets/js/world/ goes straight to the network.
   if (url.pathname.includes("/assets/js/world/")) return;
+  // The 3D game (play/, next/) and all its binaries (glb, png, webp, wasm, mp3, json live under those paths) are never handled by the worker:
+  // no caching, straight to the network.
+  if (/\/(play|next)(\/|$)/.test(url.pathname)) return;
 
   if (request.mode === "navigate") {
     // Network first, so returning visitors always get the latest page.
