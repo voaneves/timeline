@@ -67,6 +67,16 @@ export class Game
         this.time = new Time()
         this.dayCycles = new DayCycles()
         this.inputs = new Inputs([], [])
+
+        // `?ghost=rec|<name>` (T0.16): input recorder / replayer, separate chunk, only fetched when requested
+        const ghostMode = Debug.getParam('ghost')
+        if(ghostMode)
+        {
+            const { Ghost } = await import('./Ghost.js')
+            this.ghost = new Ghost(ghostMode)
+            await this.ghost.load()
+        }
+
         this.viewport = new Viewport(this.domElement)
         this.rendering = new Rendering()
         await this.rendering.setRenderer()
@@ -100,6 +110,9 @@ export class Game
         // `?debug=physics`: Rapier smoke test (T0.7), separate chunk, results in window.__physicsSmoke
         if(Debug.getParam('debug') === 'physics')
             this.physicsSmoke = import('./Physics/PhysicsSmoke.js').then(({ runPhysicsSmoke }) => runPhysicsSmoke(this.RAPIER))
+
+        // Ghost starts counting fixed steps here: nothing has stepped the physics yet and nothing awaits until `ready`
+        this.ghost?.begin()
 
         this.ready = true
     }

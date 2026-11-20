@@ -21,7 +21,8 @@
     "content": "node scripts/extract-content.mjs",
     "audit:originality": "node scripts/audit-originality.mjs",
     "audit:originality:update": "node scripts/audit-originality.mjs --update-manifest",
-    "preview:publish": "node scripts/publish-preview.mjs"
+    "preview:publish": "node scripts/publish-preview.mjs",
+    "ghost:verify": "node tools/capture/ghost-verify.mjs --runs 3 --record"
   },
   "dependencies": {
     "@dimforge/rapier3d": "0.19.3",

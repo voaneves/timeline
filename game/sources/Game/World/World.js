@@ -12,6 +12,7 @@ export class World
 
         this.setGround()
         this.setCube()
+        this.setDemoControls()
     }
 
     setGround()
@@ -62,5 +63,50 @@ export class World
                 ],
             }
         )
+    }
+
+    // Demo gameplay for the ghost tests (T0.16): arrow keys / WASD push the cube, Space kicks it up with a seeded
+    // random sideways nudge. Forces are applied on 'fixedTick' (before physics, order 3), never from event handlers.
+    setDemoControls()
+    {
+        const direction = { demoLeft: [ - 1, 0 ], demoRight: [ 1, 0 ], demoForward: [ 0, - 1 ], demoBack: [ 0, 1 ] }
+        this.game.inputs.addActions([
+            { name: 'demoLeft', categories: [ 'wandering' ], keys: [ 'Keyboard.ArrowLeft', 'Keyboard.KeyA' ] },
+            { name: 'demoRight', categories: [ 'wandering' ], keys: [ 'Keyboard.ArrowRight', 'Keyboard.KeyD' ] },
+            { name: 'demoForward', categories: [ 'wandering' ], keys: [ 'Keyboard.ArrowUp', 'Keyboard.KeyW' ] },
+            { name: 'demoBack', categories: [ 'wandering' ], keys: [ 'Keyboard.ArrowDown', 'Keyboard.KeyS' ] },
+            { name: 'demoJump', categories: [ 'wandering' ], keys: [ 'Keyboard.Space' ] },
+        ])
+
+        let jumpPending = false
+        this.game.inputs.events.on('demoJump', (action) =>
+        {
+            if(action.active)
+                jumpPending = true
+        })
+
+        this.game.ticker.events.on('fixedTick', () =>
+        {
+            const body = this.cube.physical.body
+            let x = 0
+            let z = 0
+            for(const name in direction)
+            {
+                if(this.game.inputs.actions.get(name).active)
+                {
+                    x += direction[name][0]
+                    z += direction[name][1]
+                }
+            }
+
+            if(x !== 0 || z !== 0)
+                body.applyImpulse({ x: x * 0.03, y: 0, z: z * 0.03 }, true)
+
+            if(jumpPending)
+            {
+                jumpPending = false
+                body.applyImpulse({ x: (Math.random() - 0.5) * 0.6, y: 3, z: (Math.random() - 0.5) * 0.6 }, true)
+            }
+        }, 2)
     }
 }

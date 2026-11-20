@@ -6,6 +6,8 @@ import gsap from 'gsap'
 
 export class Ticker
 {
+    static FIXED_DELTA = 1 / 120
+
     constructor()
     {
         this.game = Game.getInstance()
@@ -18,6 +20,14 @@ export class Ticker
         this.elapsedScaled = 0
         this.waits = []
         this.lastDeltas = []
+
+        // Fixed step (plan T0.16): physics and gameplay run on 'fixedTick' at a constant 1/120 s of real time
+        // (1/60 s of scaled/world time at scale 2), independent of the display frame rate. 'tick' stays per frame
+        // (rendering, camera, visuals). `fixedSteps` counts completed fixed steps since boot.
+        this.fixedDelta = Ticker.FIXED_DELTA
+        this.fixedDeltaScaled = this.fixedDelta * this.scale
+        this.fixedSteps = 0
+        this.accumulator = 0
 
         this.elapsedUniform = uniform(this.elapsed)
         this.deltaUniform = uniform(this.delta)
@@ -49,6 +59,17 @@ export class Ticker
         this.deltaUniform.value = this.delta
         this.elapsedScaledUniform.value = this.elapsedScaled
         this.deltaScaledUniform.value = this.deltaScaled
+
+        // Fixed steps: delta is capped at maxDelta (1/30), so at most 4-5 steps per frame, never a spiral of death.
+        // The step sequence (not the number of steps per frame) is what matters, hence the frame-rate independence.
+        this.accumulator += this.delta
+        while(this.accumulator >= this.fixedDelta - 1e-9)
+        {
+            this.fixedDeltaScaled = this.fixedDelta * this.scale
+            this.events.trigger('fixedTick')
+            this.fixedSteps++
+            this.accumulator -= this.fixedDelta
+        }
 
         for(let i = 0; i < this.waits.length; i++)
         {

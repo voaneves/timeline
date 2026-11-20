@@ -40,6 +40,8 @@ export class Inputs
             }
         })
         this.mode = Inputs.MODE_MOUSEKEYBOARD
+        this.locked = false // Ghost replay: ignore live input
+        this.onAction = null // Ghost recorder hook
 
         this.setKeyboard()
         this.setGamepad()
@@ -202,102 +204,148 @@ export class Inputs
         return false
     }
 
+    // Ghost (T0.16): `onAction(name, trigger, value, isToggle)` is called after an action fired (recorder);
+    // `locked` ignores live input (DOM, gamepad, pointer) while a ghost replays through applyAction().
     start(key, value = 1, isToggle = true)
     {
+        if(this.locked)
+            return
+
         const filteredActions = [...this.actions.values()].filter((_action) => _action.keys.indexOf(key) !== - 1 )
             
         for(const action of filteredActions)
+            this.startAction(action, key, value, isToggle)
+    }
+
+    startAction(action, key, value = 1, isToggle = true)
+    {
+        if(action && this.checkCategory(action))
         {
-            if(action && this.checkCategory(action))
+            action.value = value
+            action.activeKeys.add(key)
+            action.trigger = 'start'
+
+            // Can be active or inactive => trigger event only on change
+            if(isToggle)
             {
-                action.value = value
-                action.activeKeys.add(key)
-                action.trigger = 'start'
-
-                // Can be active or inactive => trigger event only on change
-                if(isToggle)
+                if(!action.active)
                 {
-                    if(!action.active)
-                    {
-                        action.active = true
-                        
-                        this.events.trigger('actionStart', [ action ])
-                        this.events.trigger(action.name, [ action ])
-                    }
-                }
-
-                // Trigger event whenever action starts (no "end")
-                else
-                {
+                    action.active = true
+                    
                     this.events.trigger('actionStart', [ action ])
                     this.events.trigger(action.name, [ action ])
+                    this.onAction?.(action.name, 'start', value, true)
                 }
+            }
+
+            // Trigger event whenever action starts (no "end")
+            else
+            {
+                this.events.trigger('actionStart', [ action ])
+                this.events.trigger(action.name, [ action ])
+                this.onAction?.(action.name, 'start', value, false)
             }
         }
     }
 
     end(key, value = 0)
     {
+        if(this.locked)
+            return
+
         const filteredActions = [...this.actions.values()].filter((_action) => _action.keys.indexOf(key) !== - 1 )
             
         for(const action of filteredActions)
+            this.endAction(action, key, value)
+    }
+
+    endAction(action, key, value = 0)
+    {
+        if(action && action.active)
         {
-            if(action && action.active)
+            action.activeKeys.delete(key)
+
+            if(action.activeKeys.size === 0)
             {
-                action.activeKeys.delete(key)
+                action.active = false
+                action.value = value
+                action.trigger = 'end'
 
-                if(action.activeKeys.size === 0)
-                {
-                    action.active = false
-                    action.value = value
-                    action.trigger = 'end'
-
-                    this.events.trigger('actionEnd', [ action ])
-                    this.events.trigger(action.name, [ action ])
-                }
+                this.events.trigger('actionEnd', [ action ])
+                this.events.trigger(action.name, [ action ])
+                this.onAction?.(action.name, 'end', value, true)
             }
         }
     }
 
     change(key, value = 1)
     {
+        if(this.locked)
+            return
+
         const filteredActions = [...this.actions.values()].filter((_action) => _action.keys.indexOf(key) !== - 1 )
             
         for(const action of filteredActions)
-        {
-            if(action && this.checkCategory(action))
-            {
-                // Test if value has changed
-                // - number => Direct comparaison
-                // - object => Every property comparaison
-                let hasChanged = false
+            this.changeAction(action, value)
+    }
 
-                if(typeof value === 'number')
+    changeAction(action, value = 1)
+    {
+        if(action && this.checkCategory(action))
+        {
+            // Test if value has changed
+            // - number => Direct comparaison
+            // - object => Every property comparaison
+            let hasChanged = false
+
+            if(typeof value === 'number')
+            {
+                if(action.value !== value)
+                    hasChanged = true
+            }
+            else if(typeof value === 'object')
+            {
+                const keys = Object.keys(value)
+
+                for(const key of keys)
                 {
-                    if(action.value !== value)
+                    if(action.value[key] !== value[key])
                         hasChanged = true
                 }
-                else if(typeof value === 'object')
-                {
-                    const keys = Object.keys(value)
+            }
 
-                    for(const key of keys)
-                    {
-                        if(action.value[key] !== value[key])
-                            hasChanged = true
-                    }
-                }
+            if(hasChanged)
+            {
+                action.value = value
+                action.trigger = 'change'
 
-                if(hasChanged)
-                {
-                    action.value = value
-                    action.trigger = 'change'
-
-                    this.events.trigger('actionChange', [ action ])
-                    this.events.trigger(action.name, [ action ])
-                }
+                this.events.trigger('actionChange', [ action ])
+                this.events.trigger(action.name, [ action ])
+                this.onAction?.(action.name, 'change', value, true)
             }
         }
+    }
+
+    // Ghost injection point: same code path as live input (startAction / endAction / changeAction), keyed by action
+    // name instead of by device key. `trigger` is 'start' | 'end' | 'change'; when omitted it is derived from the value
+    // (0 or null => end; else change when the action is active, start otherwise). Returns false for an unknown action.
+    applyAction(name, trigger, value = 1, isToggle = true)
+    {
+        const action = this.actions.get(name)
+        if(!action)
+            return false
+
+        if(!trigger)
+            trigger = (value === 0 || value === null) ? 'end' : (action.active ? 'change' : 'start')
+
+        if(trigger === 'start')
+            this.startAction(action, 'Ghost', value, isToggle)
+        else if(trigger === 'end')
+            this.endAction(action, 'Ghost', value === null ? 0 : value)
+        else
+            this.changeAction(action, value)
+
+        return true
     }
 
     updateMode(mode)

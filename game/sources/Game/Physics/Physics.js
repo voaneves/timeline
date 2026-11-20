@@ -58,7 +58,8 @@ export class Physics
         // this.world.lengthUnit = 1 // 1
         // this.world.integrationParameters.lengthUnit = 1 // 1
         
-        this.game.ticker.events.on('tick', () =>
+        // Fixed step (T0.16): physics is stepped by the Ticker's fixed-step accumulator, not once per frame
+        this.game.ticker.events.on('fixedTick', () =>
         {
             this.update()
         }, 3)
@@ -241,7 +242,7 @@ export class Physics
 
     update()
     {
-        this.world.timestep = this.game.ticker.deltaScaled
+        this.world.timestep = this.game.ticker.fixedDeltaScaled
     
         for(const physical of this.physicals)
         {
