@@ -132,6 +132,28 @@
     if (!byUser) simple();
   };
 
+  // Resolves when the title curtain has actually covered the screen (read from the running CSS
+  // animation, not a timer), so the world's crane intro starts as the curtain lifts.
+  const curtainCovered = () =>
+    new Promise((resolve) => {
+      if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return resolve();
+      const t0 = performance.now();
+      const poll = () => {
+        let anim = null;
+        try {
+          anim = title.getAnimations({ subtree: true }).find((a) => a.animationName === "ts-curtain");
+        } catch (e) {}
+        const elapsed = performance.now() - t0;
+        if (anim) {
+          const total = anim.effect.getComputedTiming().duration;
+          if (anim.playState === "finished" || (anim.currentTime || 0) >= total * 0.46) return resolve();
+        } else if (elapsed > 500) return resolve();
+        if (elapsed > 2500) return resolve();
+        setTimeout(poll, 16);
+      };
+      poll();
+    });
+
   const enter = async () => {
     if (handle || loading) return;
     if (!hasWebGL2()) return unavailable();
@@ -149,14 +171,18 @@
         onExit: () => leave(true),
       });
       write(KEY_MODE, "3d");
+      const running = handle;
       if (title && titleVisible()) {
+        // The curtain needs the title in the layout, so "no-title" is set only once it has finished.
         title.classList.add("leaving");
         setTimeout(() => {
           title.hidden = true;
           title.classList.remove("leaving", "loading");
+          root.classList.add("no-title");
         }, 1250);
-      }
-      root.classList.add("no-title");
+        await curtainCovered();
+      } else root.classList.add("no-title");
+      if (running && running.begin) running.begin();
     } catch (e) {
       handle = null;
       showPage();

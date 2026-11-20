@@ -40,7 +40,8 @@ export function createAvatar() {
 
   // Head (big)
   const head = new Group();
-  head.position.y = 1.58;
+  head.position.y = 1.64;
+  head.scale.setScalar(1.14); // a slightly bigger head reads better at poster distance
   const skull = outline(new Mesh(new SphereGeometry(0.42, 22, 16), skin));
   skull.scale.set(1.04, 1, 0.98);
   const hairCap = (new Mesh(new SphereGeometry(0.45, 20, 12, 0, Math.PI * 2, 0, Math.PI * 0.52), hair));
@@ -63,15 +64,15 @@ export function createAvatar() {
   tail.position.set(0.12, 1.32, -0.24);
   const segs = [];
   let parent = tail;
-  for (let i = 0; i < 3; i++) {
+  for (let i = 0; i < 5; i++) {
     const g = new Group();
-    const m = new Mesh(new RoundedBoxGeometry(0.2, 0.05, 0.22, 1, 0.02), i % 2 ? cream : jacket);
-    m.position.z = -0.11;
+    const m = new Mesh(new RoundedBoxGeometry(0.2 - i * 0.012, 0.05, 0.25, 1, 0.02), i % 2 ? cream : jacket);
+    m.position.z = -0.125;
     g.add(m);
-    g.position.z = i === 0 ? 0 : -0.22;
+    g.position.z = i === 0 ? 0 : -0.25;
     parent.add(g);
     parent = g;
-    segs.push({ g, ang: -0.9 });
+    segs.push({ g, ang: -0.9, vel: 0 });
   }
 
   const armGeo = new RoundedBoxGeometry(0.22, 0.56, 0.22, 2, 0.09);
@@ -158,7 +159,15 @@ export function createAvatar() {
       const flutter = clock * 11;
       segs.forEach((sg, i) => {
         const target = -0.95 + sp * 1.25 + Math.sin(flutter + i * 0.9) * 0.12 * (0.3 + sp) + (s.grounded ? 0 : s.vy ? clamp(-s.vy * 0.04, -0.5, 0.5) : 0);
-        sg.ang += (target - sg.ang) * Math.min(1, dt * (16 - i * 3));
+        // Underdamped spring per segment: the further down the tail, the softer and later it follows.
+        const k = 150 - i * 20;
+        const c = 11 - i * 1.2;
+        const n = Math.max(1, Math.ceil(dt / 0.008));
+        const h = dt / n;
+        for (let q = 0; q < n; q++) {
+          sg.vel += ((target - sg.ang) * k - sg.vel * c) * h;
+          sg.ang += sg.vel * h;
+        }
         sg.g.rotation.x = i === 0 ? sg.ang : (sg.ang - segs[i - 1].ang) * 0.8 + 0.05;
       });
       let want = 0;

@@ -824,6 +824,33 @@ html.playing body {
   .toast {
     bottom: 6.5rem;
   }
+  /* Title card sits at the bottom (about 40% of the viewport) so the 3D poster shows above it. */
+  .title-screen {
+    align-items: flex-end;
+    padding-bottom: max(1.25rem, env(safe-area-inset-bottom));
+  }
+  .ts-card {
+    max-height: 52vh;
+    max-height: 52dvh;
+    padding: 0.9rem 1.1rem 0.8rem;
+  }
+  .ts-title {
+    font-size: clamp(2.4rem, 12vw, 3.4rem);
+  }
+  .ts-tag {
+    font-size: 0.9375rem;
+    line-height: 1.4;
+  }
+  .ts-start {
+    margin-top: 0.9rem;
+    min-height: 52px;
+  }
+  .ts-hint {
+    margin-top: 0.4rem;
+  }
+  .ts-links {
+    margin-top: 0.3rem;
+  }
 }
 @media (prefers-reduced-motion: reduce) {
   .fade,

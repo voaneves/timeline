@@ -7,6 +7,7 @@ import {
   DirectionalLight,
   FogExp2,
   HemisphereLight,
+  Float32BufferAttribute,
   InstancedMesh,
   Mesh,
   MeshBasicMaterial,
@@ -16,10 +17,12 @@ import {
   SphereGeometry,
   SRGBColorSpace,
   Vector2,
+  Vector3,
 } from "three";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
-import { mat, uniforms } from "./materials.js";
-import { createTerrain, createCloudsRound, rand } from "./terrain.js";
+import { mat, uniforms, cloudBlobs } from "./materials.js";
+import { createTerrain, createCloudsRound, rand, vnoise } from "./terrain.js";
+import { createCrates } from "./crates.js";
 import { createLife } from "./life.js";
 import { createPost } from "./post.js";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
@@ -36,7 +39,8 @@ import { createBody, stepBody, boxAt, STEP } from "./physics.js";
 import { Spring, createTweens, clamp, easeOut, easeInOut } from "./springs.js";
 
 // Sky colours mirror the world.sky tokens (tokens/timeline.tokens.json).
-const SKY = { light: ["#9fd4f5", "#e6f4ff"], dark: ["#0a0a0a", "#1a1a1a"] };
+// Light: a warm gradient (clear blue overhead into a cream horizon); fog is the horizon colour.
+const SKY = { light: ["#8fc7ff", "#ffe9c2"], dark: ["#0a0a0a", "#1a1a1a"] };
 const isDark = () => {
   const forced = document.documentElement.getAttribute("data-theme");
   if (forced) return forced === "dark";
@@ -81,7 +85,7 @@ export async function start({ container, onFallback, onExit }) {
     const [top, bottom] = SKY[isDark() ? "dark" : "light"];
     if (scene.background && scene.background.dispose) scene.background.dispose();
     scene.background = skyTexture(top, bottom);
-    scene.fog = new FogExp2(new Color(bottom).lerp(new Color(0xffffff), 0.05), 0.0042);
+    scene.fog = new FogExp2(new Color(bottom), 0.004);
   };
   applySky();
   const themeObserver = new MutationObserver(applySky);
@@ -113,6 +117,7 @@ export async function start({ container, onFallback, onExit }) {
   const boxes = []; // static colliders
   const interactables = [];
   const statics = new Statics();
+  statics.groundNoise = (x, z) => 1 + (vnoise(x * 0.11 + 3.1, z * 0.11 - 1.7) - 0.5) * 0.12; // +-6% on the beige tiles
   const labels = []; // label atlas texts
   const labelSpots = []; // [index, x, y, z]
   const addLabel = (text, x, y, z, w = 3) => {
@@ -175,6 +180,8 @@ export async function start({ container, onFallback, onExit }) {
   T.scatter(statics, (x, z) => Math.abs(z) < 10.5 || keepClear(x, z));
   const grassA = T.makeGrass(rig.coarse ? 1800 : 3800, (x, z) => keepClear(x, z) || Math.abs(z) < 2.2 && x > 4 && x < eraEnd);
   scene.add(grassA);
+  scene.add(T.makeGrass(rig.coarse ? 700 : 1500, (x, z) => keepClear(x, z), true));
+  scene.add(T.makeFlowers(rig.coarse ? 110 : 240, keepClear));
   // Zone dressing: campus arch (2), bottles on a conveyor (3), bar-chart pillars (4), old monitor (1).
   const era = (n) => blocks.find((b) => b.en.era === n);
   const e1 = era(1);
@@ -274,12 +281,18 @@ export async function start({ container, onFallback, onExit }) {
   addLabel("Projetos", -3.6, 3.0, -4.2, 2.6);
   makePipe("warp", 3.2, -4.2, 1.8, { dest: "mast", text: "Tubo para Contato", hint: "↓ ou E para entrar" });
   addLabel("Contato", 3.2, 3.0, -4.2, 2.6);
+  // Project pipes sit on a gentle arc, at least 2.6 units apart; each label is pushed out along the
+  // arc normal (behind its pipe) at a staggered height. Labels also cull and de-overlap at runtime.
+  const ARC_R = 7.6;
+  const arcStep = 2 * Math.asin(1.33 / ARC_R); // chord 2.66
   content.projects.forEach((p, i, arr) => {
-    const th = (-60 + (120 / (arr.length - 1)) * i) * (Math.PI / 180);
-    const px = xp + 6 * Math.cos(th) + 1;
-    const pz = 6.4 * Math.sin(th);
+    const th = (i - (arr.length - 1) / 2) * arcStep;
+    const nx = Math.cos(th);
+    const nz = Math.sin(th);
+    const px = xp + 1 + ARC_R * nx;
+    const pz = ARC_R * nz;
     makePipe("project", px, pz, 1.6, { id: p.id, text: `Projeto ${p.title}`, hint: "↓ ou E para entrar" });
-    addLabel(p.title, px - 0.2, 2.75 + (i % 3) * 0.78, pz - 0.6 - (i % 2) * 0.3, 2.7);
+    addLabel(p.title, px + nx * 0.7, 2.7 + (i % 3) * 0.8, pz + nz * 0.7 - 0.2, 2.7);
   });
 
   // Secrets: an invisible block near the crossroads and a small gold pipe to the GitHub profile.
@@ -334,8 +347,75 @@ export async function start({ container, onFallback, onExit }) {
 
   // Merge labels into a single mesh on the label atlas.
   const labelTex = makeLabelAtlas(labels);
-  const labelGeos = labelSpots.map(([i, x, y, z, w]) => labelPlane(i, w).translate(x, y, z));
-  const labelMesh = new Mesh(mergeGeometries(labelGeos), new MeshBasicMaterial({ map: labelTex }));
+  const labelGeos = labelSpots.map(([i, x, y, z, w]) => {
+    const g = labelPlane(i, w).translate(x, y, z);
+    g.setAttribute("aA", new Float32BufferAttribute([1, 1, 1, 1], 1));
+    return g;
+  });
+  const labelMat = new MeshBasicMaterial({ map: labelTex, transparent: true, depthWrite: false });
+  labelMat.onBeforeCompile = (shader) => {
+    shader.vertexShader = "attribute float aA; varying float vA;\n" + shader.vertexShader.replace("#include <begin_vertex>", "#include <begin_vertex>\nvA = aA;");
+    shader.fragmentShader =
+      "varying float vA;\n" + shader.fragmentShader.replace("#include <opaque_fragment>", "if (vA < 0.01) discard;\ndiffuseColor.a *= vA;\n#include <opaque_fragment>");
+  };
+  const labelGeo = mergeGeometries(labelGeos);
+  const labelMesh = new Mesh(labelGeo, labelMat);
+  labelMesh.renderOrder = 2;
+  const labelFade = labelSpots.map(([i, x, y, z, w]) => ({ x, y, z, w, a: 1, want: 1, ndc: [0, 0, 0, 0, 0] }));
+  const lv = new Vector3();
+  // Screen-space rect (NDC) of a world-space plate or the avatar: [x0, y0, x1, y1, camera distance].
+  const rectOf = (cx, cy, cz, hw, hy0, hy1, out) => {
+    let x0 = 9;
+    let y0 = 9;
+    let x1 = -9;
+    let y1 = -9;
+    for (const [dx, y] of [[-hw, hy0], [hw, hy0], [-hw, hy1], [hw, hy1]]) {
+      lv.set(cx + dx, cy + y, cz).project(camera);
+      x0 = Math.min(x0, lv.x);
+      x1 = Math.max(x1, lv.x);
+      y0 = Math.min(y0, lv.y);
+      y1 = Math.max(y1, lv.y);
+    }
+    out[0] = x0;
+    out[1] = y0;
+    out[2] = x1;
+    out[3] = y1;
+    out[4] = camera.position.distanceTo(lv.set(cx, cy, cz));
+    return out;
+  };
+  const overlap = (a, b, m = 0.015) => a[0] < b[2] + m && a[2] > b[0] - m && a[1] < b[3] + m && a[3] > b[1] - m;
+  const avRect = [0, 0, 0, 0, 0];
+  const updateLabels = (dt, rx, ry, rz) => {
+    camera.updateMatrixWorld();
+    rectOf(rx, ry + 0.95, rz, 0.55, -0.95, 0.95, avRect);
+    const order = [];
+    labelFade.forEach((l, j) => {
+      const d = Math.hypot(l.x - rx, l.z - rz, (l.y - ry - 1) * 0.5);
+      rectOf(l.x, l.y, l.z, l.w / 2, -l.w / 8, l.w / 8, l.ndc);
+      l.want = 1 - clamp((d - 7.5) / 1.5, 0, 1); // distance cull (> ~9 units)
+      if (l.want > 0 && overlap(l.ndc, avRect, 0.01) && l.ndc[4] > avRect[4]) l.want = Math.min(l.want, 0.1); // avatar in front
+      order.push([d, j]);
+    });
+    // Nearest first; a label that would overlap one already kept is dropped.
+    order.sort((p, q) => p[0] - q[0]);
+    const kept = [];
+    for (const [, j] of order) {
+      const l = labelFade[j];
+      if (l.want > 0.3 && kept.some((k) => overlap(l.ndc, k.ndc))) l.want = 0;
+      else if (l.want > 0.3) kept.push(l);
+    }
+    const arr = labelGeo.attributes.aA;
+    let dirty = false;
+    labelFade.forEach((l, j) => {
+      const na = l.a + (l.want - l.a) * Math.min(1, dt * 9);
+      if (Math.abs(na - l.a) > 0.002) {
+        l.a = na;
+        for (let v = 0; v < 4; v++) arr.setX(j * 4 + v, na);
+        dirty = true;
+      }
+    });
+    if (dirty) arr.needsUpdate = true;
+  };
   scene.add(statics.mesh(), statics.hullMesh(0.04), labelMesh);
   const hulls = [];
   const blockHull = createHullInstances(new RoundedBoxGeometry(1.6, 1.6, 1.6, 4, 0.16), blockMeshes, 0.06);
@@ -348,9 +428,14 @@ export async function start({ container, onFallback, onExit }) {
   }
   const contactSpots = [
     ...blocks.map((b) => ({ x: b.x, z: b.z + 0.2, rx: 1.35, rz: 1.1 })),
-    ...[...pipeGroups.values()].flat().map((m) => ({ x: m.position.x, z: m.position.z, rx: 1.7 })),
+    ...[...pipeGroups.values()].flat().map((m) => ({ x: m.position.x, z: m.position.z, rx: 1.55 })),
     { x: mx, z: 0, rx: 1.0 },
-    { x: 5.2, z: 2.5, rx: 0.9 },
+    { x: 5.2, z: 2.5, rx: 1.05 },
+    ...(e1 ? [{ x: e1.x - 4.55, z: e1.z + 4.5, rx: 1.5, rz: 1.3 }] : []),
+    ...(e2 ? [{ x: e2.x - 2.5, z: roadZ(e2.x - 2.5) - 2.3, rx: 0.95 }, { x: e2.x - 2.5, z: roadZ(e2.x - 2.5) + 2.3, rx: 0.95 }] : []),
+    ...(e3 ? [{ x: e3.x + 0.5, z: roadZ(e3.x) + 3.6, rx: 4.6, rz: 1.5 }] : []),
+    ...(e4 ? [1.2, 2.0, 2.8, 1.8].map((h, i) => ({ x: e4.x - 1.2 + i * 1.7, z: roadZ(e4.x - 1.2 + i * 1.7) + 4.6, rx: 1.35 })) : []),
+    { x: sx + 1.1, z: 0, rx: 2.0, rz: 3.2 },
   ];
   scene.add(createContacts(contactSpots));
 
@@ -373,6 +458,18 @@ export async function start({ container, onFallback, onExit }) {
   const SPAWN = { x: 0, z: 2.5 };
   const body = createBody(SPAWN.x, 0, SPAWN.z);
   const bounds = { x0: -14, x1: END - 1, z0: -10, z1: 10 };
+  const staticBoxes = boxes.slice();
+  const crates = createCrates(
+    [
+      [xp - 3.2, 0.4, 3.6],
+      [xp - 3.2, 1.2, 3.6],
+      [xp - 2.4, 0.4, -3.4],
+      [xp - 4.8, 0.4, -1.6],
+    ],
+    { colliders: staticBoxes, bounds, particles, sfx }
+  );
+  crates.list.forEach((c) => boxes.push(c.box));
+  scene.add(...crates.meshes);
   const totalCoins = coinPos.length + blocks.length;
   let coinCount = 0;
 
@@ -401,7 +498,17 @@ export async function start({ container, onFallback, onExit }) {
   });
   ui.setCoins(0, totalCoins);
   const cam = createFollowCamera(camera, { reduced });
-  cam.snap(body.x, 0, body.z, 14);
+  // The crane intro stays held until the host reports that the curtain has covered the screen.
+  let begun = false;
+  let begunAt = 0;
+  const begin = () => {
+    if (begun) return;
+    begun = true;
+    begunAt = performance.now();
+    cam.begin();
+  };
+  setTimeout(begin, 8000); // safety net if the host never calls begin()
+  cam.snap(body.x, 0, body.z, 16.5);
 
   const input = createInput(container, stage, {
     onTap: (cx, cy) => handleTap(cx, cy),
@@ -604,6 +711,11 @@ export async function start({ container, onFallback, onExit }) {
     body.pz = body.z;
     cam.snap(body.x, body.y, body.z, dest === "plaza" ? 17 : 16);
     emitDust(body.x, body.y, body.z, 10);
+    // Arrival: FOV punch, red confetti burst and the film-strip ribbon in the reveal wipe.
+    cam.punch(8);
+    sfx.play("land");
+    particles.emit(body.x, body.y + 1.6, body.z, 70, { color: 0xf50000, speed: 5, up: 7, size: 0.2, life: 1.6, gravity: 6 });
+    particles.emit(body.x, body.y + 1.6, body.z, 30, { color: 0xf4ead4, speed: 4, up: 6, size: 0.16, life: 1.6, gravity: 6 });
     await wipe(false);
     void fromPipe;
     if (thenGrab) await grabMast();
@@ -717,7 +829,9 @@ export async function start({ container, onFallback, onExit }) {
     body.vy = Math.max(-32, body.vy - 38 * (body.vy < 0 ? 1.45 : 1) * STEP);
 
     const vyBefore = body.vy;
+    crates.kick(body, STEP);
     stepBody(body, boxes, bounds, STEP);
+    crates.step(STEP);
 
     if (body.head && body.head.data && (body.head.data.kind === "block" || body.head.data.kind === "secret")) {
       const it = body.head.data;
@@ -879,7 +993,7 @@ export async function start({ container, onFallback, onExit }) {
       ui.announce(zones[zi].info, 0);
     }
     const plaza = zones[zi].name === "Projetos";
-    const hint = plaza ? 19 : zones[zi].name === "Contato" ? 17 : 15;
+    const hint = plaza ? 19 : zones[zi].name === "Contato" ? 17 : zi === 0 ? 16.5 : 15; // crossroads: ~10% pull-back
     if (heroPose) {
       camera.position.set(...heroPose.pos);
       camera.lookAt(...heroPose.look);
@@ -888,6 +1002,10 @@ export async function start({ container, onFallback, onExit }) {
         camera.updateProjectionMatrix();
       }
     } else cam.update(dt, { x: rx, y: ry, z: rz, vx: state === "play" ? body.vx : 0, vz: state === "play" ? body.vz : 0, hint, card: state === "card", narrow: narrow() });
+
+    uniforms.uFocus.value = rx;
+    crates.sync(dt);
+    updateLabels(dt, rx, ry, rz);
 
     // Shadow camera follows the avatar.
     sun.position.set(rx + 8, ry + 14, rz + 6);
@@ -942,8 +1060,9 @@ export async function start({ container, onFallback, onExit }) {
   container.focus({ preventScroll: true });
 
   const handle = {
+    begin,
     info: rig.renderer.info,
-    debug: { hero: (pose) => { heroPose = pose; confetti = true; }, measure: () => { const i = rig.renderer.info; i.reset(); rig.renderer.render(scene, camera); const all = { calls: i.render.calls, tris: i.render.triangles }; const sm = rig.renderer.shadowMap; const was = sm.autoUpdate; sm.autoUpdate = false; i.reset(); rig.renderer.render(scene, camera); sm.autoUpdate = was; return { total: all, mainPass: { calls: i.render.calls, tris: i.render.triangles } }; }, quality: () => ({ level, ema }), setLevel, found, secretsFound, popCoin, body, interactables, input: inp, blocks, coins, getState: () => state, warp, coinTotal: totalCoins, sfx, particles },
+    debug: { begunAt: () => begunAt, introDone: () => cam.introDone(), cloudBlobs: () => cloudBlobs(uniforms.uTime.value, uniforms.uFocus.value), hero: (pose) => { heroPose = pose; confetti = true; }, measure: () => { const i = rig.renderer.info; i.reset(); rig.renderer.render(scene, camera); const all = { calls: i.render.calls, tris: i.render.triangles }; const sm = rig.renderer.shadowMap; const was = sm.autoUpdate; sm.autoUpdate = false; i.reset(); rig.renderer.render(scene, camera); sm.autoUpdate = was; return { total: all, mainPass: { calls: i.render.calls, tris: i.render.triangles } }; }, quality: () => ({ level, ema }), setLevel, found, secretsFound, popCoin, body, crates, interactables, input: inp, blocks, coins, getState: () => state, warp, coinTotal: totalCoins, sfx, particles },
     stop() {
       themeObserver.disconnect();
       scheme.removeEventListener("change", applySky);

@@ -14,6 +14,7 @@ export function createFollowCamera(camera, { reduced }) {
   let shiftY = new Damper(0);
   const smooth = reduced ? 0.06 : 0.28;
   let introT = reduced ? 1 : -0.35;
+  let held = !reduced; // intro waits for begin()
   let shake = 0;
   let fovK = 0;
 
@@ -52,8 +53,8 @@ export function createFollowCamera(camera, { reduced }) {
       shiftY.update(f.card && f.narrow ? -2.4 : 0, 0.35, dt);
       if (kick !== 0) kick *= Math.max(0, 1 - dt * 12);
       shake *= Math.max(0, 1 - dt * 9);
-      fovK *= Math.max(0, 1 - dt * 7);
-      if (introT < 1) introT += dt / 3.8;
+      fovK *= Math.max(0, 1 - dt * 5);
+      if (!held && introT < 1) introT += dt / 3.8;
       apply();
     },
     kick(v) {
@@ -66,5 +67,9 @@ export function createFollowCamera(camera, { reduced }) {
       if (!reduced) fovK = Math.max(fovK, v);
     },
     introDone: () => introT >= 1,
+    begin() {
+      held = false;
+      introT = Math.max(introT, -0.12);
+    },
   };
 }

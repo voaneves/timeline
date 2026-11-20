@@ -65,6 +65,11 @@ export function createSfx(initialMuted = true) {
       tone("sine", 420, 90, 0.5, 0.3);
     },
     land: () => tone("sine", 140, 70, 0.08, 0.35),
+    // Paper-and-board crate thump: low knock plus a short rustle.
+    crate: (p) => {
+      tone("sine", 160 * p, 60 * p, 0.12, 0.55);
+      noise(0.09, 1400, 0.3);
+    },
     // Rising pentatonic phrase (A minor pentatonic: A4 C5 D5 E5... then A5).
     flag: () => [440, 523.25, 587.33, 880].forEach((f, i) => tone("triangle", f, f, 0.22, 0.45, i * 0.13)),
   };

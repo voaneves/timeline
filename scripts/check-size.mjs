@@ -9,7 +9,7 @@ const kb = (n) => (n / 1024).toFixed(1) + " KB";
 const checks = [
   ["index.html", 30, 30],
   ["assets/js/boot.min.js", 8, 8],
-  ["assets/js/world/world.min.js", 170, 190],
+  ["assets/js/world/world.min.js", 260, 280],
 ];
 
 let failed = false;

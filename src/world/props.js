@@ -14,6 +14,7 @@ import {
 } from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { mat, hullMat } from "./materials.js";
+import { CanvasTexture, SRGBColorSpace } from "three";
 import { BufferGeometry, CircleGeometry } from "three";
 import { mergeVertices } from "three/addons/utils/BufferGeometryUtils.js";
 import { LatheGeometry, Vector2 } from "three";
@@ -36,9 +37,11 @@ export class Statics {
     for (let i = 0; i < n; i++) {
       // Baked ambient occlusion: darker toward the bottom of every part.
       const ao = ao_ ? 0.66 + 0.34 * Math.min(1, (g.attributes.position.getY(i) - y0) / span) : 1;
-      arr[i * 3] = c.r * ao;
-      arr[i * 3 + 1] = c.g * ao;
-      arr[i * 3 + 2] = c.b * ao;
+      // Ground tiles get the same low-frequency value noise as the terrain (+-6%), so pads blend in.
+      const gn = !ao_ && this.groundNoise ? this.groundNoise(g.attributes.position.getX(i), g.attributes.position.getZ(i)) : 1;
+      arr[i * 3] = c.r * ao * gn;
+      arr[i * 3 + 1] = c.g * ao * gn;
+      arr[i * 3 + 2] = c.b * ao * gn;
     }
     g.setAttribute("color", new BufferAttribute(arr, 3));
     this.parts.push(g);
@@ -67,14 +70,14 @@ export class Statics {
     return m;
   }
   mesh() {
-    const m = new Mesh(mergeGeometries(this.parts.map((g) => (g.index ? g.toNonIndexed() : g))), mat({ vertexColors: true, roughness: 0.85 }));
+    const m = new Mesh(mergeGeometries(this.parts.map((g) => (g.index ? g.toNonIndexed() : g))), mat({ vertexColors: true, roughness: 0.85 }, { cloud: true }));
     m.castShadow = true;
     m.receiveShadow = true;
     return m;
   }
 }
 
-export const vcMat = () => mat({ vertexColors: true, roughness: 0.38, metalness: 0.05 }, { rim: 0.28 });
+export const vcMat = () => mat({ vertexColors: true, roughness: 0.38, metalness: 0.05 }, { rim: 0.28, cloud: true });
 
 // Warp pipe: lathe body with a flared lip, a paper band and a red band under the lip, and a
 // dark inner well; one coloured geometry, origin at ground centre. Ink outline added by the caller.
@@ -128,10 +131,28 @@ export function createHullInstances(geometry, sources, thick = 0.03) {
 }
 
 // Fake contact shadows: dark soft discs on the ground under props (one instanced draw call).
+// Radial AO: a plateau about 35% dark that falls off softly to the edge of a disc ~1.4x the footprint.
+let aoTex = null;
+export function aoTexture() {
+  if (aoTex) return aoTex;
+  const c = document.createElement("canvas");
+  c.width = c.height = 64;
+  const g = c.getContext("2d");
+  const grad = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  grad.addColorStop(0, "rgba(26,18,8,0.36)");
+  grad.addColorStop(0.42, "rgba(26,18,8,0.33)");
+  grad.addColorStop(0.75, "rgba(26,18,8,0.1)");
+  grad.addColorStop(1, "rgba(26,18,8,0)");
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 64, 64);
+  aoTex = new CanvasTexture(c);
+  aoTex.colorSpace = SRGBColorSpace;
+  return aoTex;
+}
 export function createContacts(spots) {
-  const geo = new CircleGeometry(1, 20);
+  const geo = new PlaneGeometry(2, 2);
   geo.rotateX(-Math.PI / 2);
-  const mesh = new InstancedMesh(geo, new MeshBasicMaterial({ color: 0x1a1208, transparent: true, opacity: 0.28, depthWrite: false }), spots.length);
+  const mesh = new InstancedMesh(geo, new MeshBasicMaterial({ map: aoTexture(), transparent: true, depthWrite: false }), spots.length);
   const o = new Object3D();
   spots.forEach((p, i) => {
     o.position.set(p.x, 0.075, p.z);

@@ -12,6 +12,7 @@ import {
   ShaderMaterial,
   SphereGeometry,
 } from "three";
+import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { mat, uniforms } from "./materials.js";
 import { clamp } from "./springs.js";
 
@@ -24,7 +25,7 @@ const smooth = (a, b, x) => {
   const t = clamp((x - a) / (b - a), 0, 1);
   return t * t * (3 - 2 * t);
 };
-const vnoise = (x, z) => {
+export const vnoise = (x, z) => {
   const ix = Math.floor(x);
   const iz = Math.floor(z);
   const fx = x - ix;
@@ -74,6 +75,7 @@ export function createTerrain(END) {
   const sand = new Color(0xe6d39a);
   const paper = new Color(0xefe3c2);
   const rock = new Color(0x8a8d6a);
+  const rimGreen = new Color(0x2f7a3c);
   for (let i = 0; i < pos.count; i++) {
     const x = pos.getX(i);
     const z = pos.getZ(i);
@@ -88,18 +90,24 @@ export function createTerrain(END) {
     c.lerp(paper, flat * 0.85);
     c.lerp(dry, (1 - smooth(10, 44, x)) * 0.35 * flat);
     if (h < 0.05 && island(x, z) > 0.8) c.lerp(sand, smooth(0.8, 0.88, island(x, z)));
-    // Darker edge gradient along the play-area borders.
+    // Darker edge gradient along the play-area borders, then a deeper grass rim where the cream
+    // ground meets the meadow (wildflowers and darker blades are scattered over it).
     c.multiplyScalar(1 - smooth(5, 9.5, az) * 0.12 * flat);
+    const outsideX = Math.max(0, -14 - x, x - (END + 1));
+    const rim = smooth(8.0, 10.5, az) * (1 - smooth(12, 15.5, az)) * (1 - smooth(0, 8, outsideX));
+    c.lerp(rimGreen, rim * 0.55);
+    c.multiplyScalar(1 - rim * 0.1);
     // AO: darker in dips and toward the water, a touch of noise.
     const ao = 0.82 + 0.18 * clamp(h / 3 + 0.5, 0, 1) - smooth(0.9, 1.0, island(x, z)) * 0.3;
-    const nz = 0.93 + vnoise(x * 0.5, z * 0.5) * 0.14;
+    // High-frequency grain plus low-frequency (about 9 unit) value noise: +-6% across the beige.
+    const nz = (0.96 + vnoise(x * 0.5, z * 0.5) * 0.08) * (1 + (vnoise(x * 0.11 + 3.1, z * 0.11 - 1.7) - 0.5) * 0.12 * (0.5 + 0.5 * flat));
     col[i * 3] = c.r * ao * nz;
     col[i * 3 + 1] = c.g * ao * nz;
     col[i * 3 + 2] = c.b * ao * nz;
   }
   geo.setAttribute("color", new BufferAttribute(col, 3));
   geo.computeVertexNormals();
-  const terrain = new Mesh(geo, mat({ vertexColors: true, roughness: 1 }, { rim: 0.12 }));
+  const terrain = new Mesh(geo, mat({ vertexColors: true, roughness: 1 }, { rim: 0.12, cloud: true }));
   terrain.receiveShadow = true;
 
   // Water ring: fresnel + animated ripples + a foam line where the island meets the sea.
@@ -112,7 +120,7 @@ export function createTerrain(END) {
         uC: { value: [cx, rx, Z] },
         uDeep: { value: new Color(0x1f8fb5) },
         uShallow: { value: new Color(0x7fe0d0) },
-        uSky: { value: new Color(0xbfe4f8) },
+        uSky: { value: new Color(0xb4ecf2) },
       },
       vertexShader: `varying vec3 vW; void main(){ vec4 w = modelMatrix * vec4(position,1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`,
       fragmentShader: `
@@ -128,7 +136,7 @@ export function createTerrain(END) {
           float foam = smoothstep(0.022, 0.0, abs(d - edge - 0.045 - sin(uTime * 0.8) * 0.006));
           vec3 V = normalize(cameraPosition - vW);
           float fres = pow(1.0 - clamp(V.y, 0.0, 1.0), 3.0);
-          vec3 col = mix(base, uSky, fres * 0.6) + foam * 0.9;
+          vec3 col = mix(base, uSky, fres * 0.5) + foam * 0.9;
           gl_FragColor = vec4(col, 0.94);
           #include <tonemapping_fragment>
           #include <colorspace_fragment>
@@ -142,15 +150,16 @@ export function createTerrain(END) {
   bladeGeo.translate(0, 0.35, 0);
   const bp = bladeGeo.attributes.position;
   for (let i = 0; i < bp.count; i++) bp.setX(i, bp.getX(i) * Math.pow(1 - bp.getY(i) / 0.86, 1.2));
-  const makeGrass = (count, avoid) => {
-    const mesh = new InstancedMesh(bladeGeo, mat({ roughness: 1, side: 2 }, { sway: true, rim: 0.1 }), count);
+  const makeGrass = (count, avoid, rimBand = false) => {
+    const mesh = new InstancedMesh(bladeGeo, mat({ roughness: 1, side: 2 }, { sway: true, rim: 0.1, cloud: true }), count);
     mesh.instanceMatrix.setUsage(DynamicDrawUsage);
     const o = new Object3D();
     const cc = new Color();
     let n = 0;
     for (let i = 0; n < count && i < count * 4; i++) {
-      const x = X0 + 6 + rand(i, 1) * (W - 12);
-      const z = (rand(i, 2) - 0.5) * 2 * 30;
+      // rimBand: a denser, darker strip of blades along both edges of the cream play area.
+      const x = rimBand ? 4 + rand(i, 1) * (END - 2) : X0 + 6 + rand(i, 1) * (W - 12);
+      const z = rimBand ? (rand(i, 9) < 0.5 ? -1 : 1) * (8.4 + rand(i, 2) * 3.6) : (rand(i, 2) - 0.5) * 2 * 30;
       if (avoid(x, z)) continue;
       const h = heightAt(x, z);
       if (h < -0.05) continue;
@@ -160,8 +169,40 @@ export function createTerrain(END) {
       o.scale.set(s, s * (0.8 + rand(i, 5) * 0.6), s);
       o.updateMatrix();
       mesh.setMatrixAt(n, o.matrix);
-      cc.setHSL(0.27 + rand(i, 6) * 0.08 - (1 - smooth(10, 44, x)) * 0.05, 0.55 + rand(i, 8) * 0.2, 0.22 + rand(i, 7) * 0.18);
+      cc.setHSL(0.27 + rand(i, 6) * 0.08 - (1 - smooth(10, 44, x)) * 0.05, 0.55 + rand(i, 8) * 0.2, (rimBand ? 0.14 : 0.22) + rand(i, 7) * 0.18);
       mesh.setColorAt(n, cc);
+      n++;
+    }
+    mesh.count = n;
+    return mesh;
+  };
+
+  // Wildflowers: tiny stems with red / cream / yellow / pink heads scattered over the grass rim.
+  const makeFlowers = (count, avoid) => {
+    const stem = new CylinderGeometry(0.012, 0.016, 0.3, 4).translate(0, 0.15, 0);
+    const head = new IcosahedronGeometry(0.075, 0).scale(1, 0.7, 1).translate(0, 0.32, 0);
+    const paint = (g, r, gr, b) => {
+      const arr = new Float32Array(g.attributes.position.count * 3);
+      for (let i = 0; i < arr.length; i += 3) (arr[i] = r), (arr[i + 1] = gr), (arr[i + 2] = b);
+      g.setAttribute("color", new BufferAttribute(arr, 3));
+      return g.index ? g.toNonIndexed() : g;
+    };
+    const geo = mergeGeometries([paint(stem, 0.25, 0.55, 0.25), paint(head, 1, 1, 1)]);
+    const mesh = new InstancedMesh(geo, mat({ vertexColors: true, roughness: 1 }, { rim: 0, cloud: true }), count);
+    const o = new Object3D();
+    const cc = new Color();
+    const tones = [0xf50000, 0xf4ead4, 0xf2c230, 0xff8fb0, 0xf4ead4];
+    let n = 0;
+    for (let i = 0; n < count && i < count * 4; i++) {
+      const x = 4 + rand(i, 21) * (END - 2);
+      const z = (rand(i, 22) < 0.5 ? -1 : 1) * (8.6 + rand(i, 23) * 3.2);
+      if (avoid(x, z)) continue;
+      o.position.set(x, heightAt(x, z) - 0.02, z);
+      o.rotation.set((rand(i, 24) - 0.5) * 0.3, rand(i, 25) * 6.28, 0);
+      o.scale.setScalar(0.8 + rand(i, 26) * 0.7);
+      o.updateMatrix();
+      mesh.setMatrixAt(n, o.matrix);
+      mesh.setColorAt(n, cc.set(tones[Math.floor(rand(i, 27) * tones.length)]));
       n++;
     }
     mesh.count = n;
@@ -227,7 +268,7 @@ export function createTerrain(END) {
     }
   };
 
-  return { heightAt, terrain, water, makeGrass, scatter, island, bounds: { X0, X1, Z } };
+  return { heightAt, terrain, water, makeGrass, makeFlowers, scatter, island, bounds: { X0, X1, Z } };
 }
 
 // Round puffy clouds drifting across the sky (instanced spheres).
@@ -235,7 +276,7 @@ export function createCloudsRound(spanX, still) {
   const geo = new SphereGeometry(1, 12, 9);
   const per = 5;
   const count = 16;
-  const mesh = new InstancedMesh(geo, mat({ color: 0xffffff, roughness: 1, emissive: 0x6a7f90, emissiveIntensity: 0.35 }, { rim: 0.0 }), count * per);
+  const mesh = new InstancedMesh(geo, mat({ color: 0xffffff, roughness: 1, emissive: 0xffd9b0, emissiveIntensity: 0.3 }, { rim: 0.0 }), count * per);
   mesh.instanceMatrix.setUsage(DynamicDrawUsage);
   mesh.frustumCulled = false;
   const o = new Object3D();

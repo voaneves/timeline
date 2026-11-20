@@ -29,8 +29,10 @@ const GRADE = {
       }
       vec3 col = c.rgb;
       col = (col - 0.5) * 1.07 + 0.5;
-      col *= vec3(1.03, 1.0, 0.95);
-      col = mix(vec3(dot(col, vec3(0.299, 0.587, 0.114))), col, 1.1);
+      // Split tone: cool shadows, warm highlights, then a saturation lift (no grey cast).
+      float lum = dot(col, vec3(0.299, 0.587, 0.114));
+      col *= mix(vec3(0.96, 0.99, 1.04), vec3(1.06, 1.015, 0.93), smoothstep(0.12, 0.8, lum));
+      col = mix(vec3(dot(col, vec3(0.299, 0.587, 0.114))), col, 1.18);
       vec2 d = vUv - 0.5;
       float v = smoothstep(0.85, 0.28, length(d * vec2(1.0, 1.15)));
       col *= mix(1.0, v, uVig);
@@ -39,11 +41,20 @@ const GRADE = {
         float e1 = clamp(uWipe, 0.0, 1.0) * 1.35 - 0.2 + n;
         float e0 = clamp(uWipe - 1.0, 0.0, 1.0) * 1.35 - 0.2 + n;
         float ink = step(vUv.x, e1) - step(vUv.x, e0);
-        float tear = (step(vUv.x, e1 + 0.03) - step(vUv.x, e1)) * step(uWipe, 1.0) + (step(vUv.x, e0 + 0.03) - step(vUv.x, e0)) * step(1.0, uWipe);
+        float inPhase = step(uWipe, 1.0);
+        float eEdge = mix(e0, e1, inPhase);
+        float tear = (step(vUv.x, eEdge + 0.03) - step(vUv.x, eEdge)) * inPhase + (step(vUv.x, e0 + 0.03) - step(vUv.x, e0)) * (1.0 - inPhase);
+        // Film-strip ribbon on the reveal edge: ink band with cream sprocket holes, then a red ribbon.
+        float fx = (vUv.x - e0 - 0.03) / 0.07;
+        float strip = (1.0 - inPhase) * step(0.0, fx) * step(fx, 1.0);
+        float hole = step(abs(fract(vUv.y * 26.0) - 0.5), 0.22) * step(abs(fx - 0.5), 0.3);
+        float ribbon = (1.0 - inPhase) * step(1.0, fx) * step(fx, 1.28);
         float dotR = length((vUv - vec2(0.5, 0.5)) * vec2(uRes.x / uRes.y, 1.0));
         vec3 inkCol = mix(vec3(0.04), vec3(0.96, 0.0, 0.0), step(dotR, 0.07));
         col = mix(col, inkCol, ink);
         col = mix(col, vec3(0.957, 0.918, 0.831), tear);
+        col = mix(col, mix(vec3(0.04), vec3(0.957, 0.918, 0.831), hole), strip);
+        col = mix(col, vec3(0.96, 0.0, 0.0), ribbon);
       }
       gl_FragColor = vec4(col, c.a);
     }`,
