@@ -2,3 +2,4 @@ tools/capture/out/
 tools/capture/baseline/
 blender/*.glb
 dist/
+dist-debug/

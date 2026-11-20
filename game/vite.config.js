@@ -7,10 +7,6 @@ import { computeBuildId } from './scripts/hash-assets.mjs'
 // `__DEBUG_PANEL__`: Tweakpane is bundled only outside production (dev server, `npm run build:debug`).
 // The production build contains no "tweakpane" string at all (plan T0.9, checked by `npm run check:no-tweakpane`).
 export default ({ mode }) => ({
-    define:
-    {
-        __DEBUG_PANEL__: JSON.stringify(mode !== 'production')
-    },
     root: 'sources/', // Sources files (where index.html is)
     publicDir: false, // No static assets copied as-is
     base: './', // Relative public path
@@ -21,6 +17,7 @@ export default ({ mode }) => ({
     },
     define:
     {
+        __DEBUG_PANEL__: JSON.stringify(mode !== 'production'),
         __BUILD_ID__: JSON.stringify(computeBuildId('static')) // T0.15: embedded in the JS, names the manifest
     },
     build:

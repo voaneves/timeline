@@ -5,23 +5,31 @@ export class Debug
 {
     static isRequested()
     {
-        return !!(location.hash.match(/debug/i) || location.search.match(/[?&]debug/i))
+        return !!(location.hash.match(/debug/i) || location.search.match(/[?&]debug(?:[=&]|$)/i))
+    }
+
+    // Value of `?debug=<value>` or `#debug=<value>` ('' for a bare flag, null when absent)
+    static getParam(name)
+    {
+        const match = (location.search + '&' + location.hash.slice(1)).match(new RegExp('(?:^|[?&#])' + name + '(?:=([^&#]*))?(?:[&#]|$)', 'i'))
+        return match ? (match[1] ?? '') : null
     }
 
     // Tweakpane is only fetched (separate chunk) when debug is requested.
     // Must be awaited before the first `new Debug()`.
     static async load()
     {
-        if(!Debug.isRequested())
-            return
+        // __DEBUG_PANEL__ is false in production: this block and its imports are removed from the bundle
+        if(__DEBUG_PANEL__ && Debug.isRequested())
+        {
+            const [ tweakpane, essentials, camerakit ] = await Promise.all([
+                import('tweakpane'),
+                import('@tweakpane/plugin-essentials'),
+                import('@tweakpane/plugin-camerakit'),
+            ])
 
-        const [ tweakpane, essentials, camerakit ] = await Promise.all([
-            import('tweakpane'),
-            import('@tweakpane/plugin-essentials'),
-            import('@tweakpane/plugin-camerakit'),
-        ])
-
-        Debug.modules = { Pane: tweakpane.Pane, EssentialsPlugin: essentials, CamerakitPlugin: camerakit }
+            Debug.modules = { Pane: tweakpane.Pane, EssentialsPlugin: essentials, CamerakitPlugin: camerakit }
+        }
     }
 
     constructor()

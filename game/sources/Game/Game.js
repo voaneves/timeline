@@ -26,6 +26,7 @@ import { Respawns } from './Respawns.js'
 import { Water } from './Water.js'
 import { Reveal } from './Reveal.js'
 import { Quality } from './Quality.js'
+import { PerfProbe } from './PerfProbe.js'
 
 export class Game
 {
@@ -77,6 +78,9 @@ export class Game
         this.view = new View()
         this.rendering.setPostprocessing()
         this.rendering.start()
+        this.perf = new PerfProbe() // window.__perf
+        if(Debug.isRequested())
+            import('./PerfHud.js').then(({ PerfHud }) => { this.perfHud = new PerfHud(this.perf) })
         this.reveal = new Reveal()
         this.weather = new Weather()
         this.tracks = new Tracks()
@@ -92,6 +96,10 @@ export class Game
         this.physics = new Physics()
         this.wireframe = new PhysicsWireframe()
         this.world = new World()
+
+        // `?debug=physics`: Rapier smoke test (T0.7), separate chunk, results in window.__physicsSmoke
+        if(Debug.getParam('debug') === 'physics')
+            this.physicsSmoke = import('./Physics/PhysicsSmoke.js').then(({ runPhysicsSmoke }) => runPhysicsSmoke(this.RAPIER))
 
         this.ready = true
     }

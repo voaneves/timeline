@@ -1,0 +1,206 @@
+{
+  "webgpu": {
+    "perf": {
+      "backend": "webgpu",
+      "fps": 75.18796884654384,
+      "frameMsP50": 13.300000190734863,
+      "frameMsP95": 13.5,
+      "drawCalls": 20,
+      "triangles": 2076,
+      "programs": 21,
+      "gpuMs": 1.58408,
+      "gpuSource": "webgpu-timestamp-query",
+      "frames": 240
+    },
+    "smoke": {
+      "version": "0.19.3",
+      "pass": true,
+      "tests": {
+        "vehicle": {
+          "pass": true,
+          "wheels": 4,
+          "moved": 38.26111298831112,
+          "endY": 0.2985444664955139,
+          "simSeconds": 10
+        },
+        "character": {
+          "pass": true,
+          "endX": 11.683279037475586,
+          "endY": 0.7246004939079285,
+          "groundedSteps": 574,
+          "simSeconds": 10
+        },
+        "sleepImpulse": {
+          "pass": true,
+          "tSleep": 2.6,
+          "wokeImmediately": true,
+          "xAfter1s": 2.0582315921783447
+        },
+        "sleepContact": {
+          "pass": true,
+          "tSleep": 2.0166666666666666,
+          "wokeAtStep": 34,
+          "aPos": [
+            0.005926754325628281,
+            0.4955001473426819,
+            0.0003993432910647243
+          ]
+        },
+        "sleepSupportRemoved": {
+          "pass": true,
+          "tSleep": 2.0166666666666666,
+          "yBefore": 1.4968969821929932,
+          "yAfter": 0.49872371554374695
+        },
+        "sleepColliderRemoved": {
+          "pass": true,
+          "tSleep": 2.0166666666666666,
+          "yBefore": 1.4968969821929932,
+          "yAfter": 0.49872371554374695
+        },
+        "sleepKinematicMoved": {
+          "pass": true,
+          "tSleep": 2.0166666666666666,
+          "yAfter": 0.49872371554374695
+        },
+        "sleepApex": {
+          "pass": true,
+          "maxY": 1.3070257902145386,
+          "sleptInAir": false,
+          "yEnd": 0.49872371554374695
+        },
+        "sleepKinematicPush": {
+          "pass": true,
+          "tSleep": 2.0166666666666666,
+          "xAfter": 1.5689888000488281,
+          "asleepNow": false
+        }
+      },
+      "startedAt": 928.3999999985099,
+      "ms": 54.30000000447035
+    },
+    "errors": [],
+    "tweakpaneRequests": 3,
+    "hud": "webgpu  75 fps\nframe p50 13.3  p95 13.5 ms\ndraws 20  tris 2076  progs 21\ngpu 1.77 ms"
+  },
+  "webgl": {
+    "perf": {
+      "backend": "webgl2",
+      "fps": 74.62686779611126,
+      "frameMsP50": 13.399999618530273,
+      "frameMsP95": 13.600000381469727,
+      "drawCalls": 20,
+      "triangles": 2076,
+      "programs": 22,
+      "gpuMs": 5.34546,
+      "gpuSource": "EXT_disjoint_timer_query_webgl2",
+      "frames": 240
+    },
+    "smoke": {
+      "version": "0.19.3",
+      "pass": true,
+      "tests": {
+        "vehicle": {
+          "pass": true,
+          "wheels": 4,
+          "moved": 38.26111298831112,
+          "endY": 0.2985444664955139,
+          "simSeconds": 10
+        },
+        "character": {
+          "pass": true,
+          "endX": 11.683279037475586,
+          "endY": 0.7246004939079285,
+          "groundedSteps": 574,
+          "simSeconds": 10
+        },
+        "sleepImpulse": {
+          "pass": true,
+          "tSleep": 2.6,
+          "wokeImmediately": true,
+          "xAfter1s": 2.0582315921783447
+        },
+        "sleepContact": {
+          "pass": true,
+          "tSleep": 2.0166666666666666,
+          "wokeAtStep": 34,
+          "aPos": [
+            0.005926754325628281,
+            0.4955001473426819,
+            0.0003993432910647243
+          ]
+        },
+        "sleepSupportRemoved": {
+          "pass": true,
+          "tSleep": 2.0166666666666666,
+          "yBefore": 1.4968969821929932,
+          "yAfter": 0.49872371554374695
+        },
+        "sleepColliderRemoved": {
+          "pass": true,
+          "tSleep": 2.0166666666666666,
+          "yBefore": 1.4968969821929932,
+          "yAfter": 0.49872371554374695
+        },
+        "sleepKinematicMoved": {
+          "pass": true,
+          "tSleep": 2.0166666666666666,
+          "yAfter": 0.49872371554374695
+        },
+        "sleepApex": {
+          "pass": true,
+          "maxY": 1.3070257902145386,
+          "sleptInAir": false,
+          "yEnd": 0.49872371554374695
+        },
+        "sleepKinematicPush": {
+          "pass": true,
+          "tSleep": 2.0166666666666666,
+          "xAfter": 1.5689888000488281,
+          "asleepNow": false
+        }
+      },
+      "startedAt": 730.7999999970198,
+      "ms": 49.80000000447035
+    },
+    "errors": [],
+    "tweakpaneRequests": 3,
+    "hud": "webgl2  75 fps\nframe p50 13.4  p95 13.6 ms\ndraws 20  tris 2076  progs 22\ngpu 5.35 ms"
+  },
+  "webgpu-noDebug": {
+    "perf": {
+      "backend": "webgpu",
+      "fps": 75.18796884654384,
+      "frameMsP50": 13.300000190734863,
+      "frameMsP95": 13.699999809265137,
+      "drawCalls": 20,
+      "triangles": 2076,
+      "programs": 21,
+      "gpuMs": "unavailable",
+      "gpuSource": "off",
+      "frames": 240
+    },
+    "smoke": null,
+    "errors": [],
+    "tweakpaneRequests": 0,
+    "hud": null
+  },
+  "webgl-noDebug": {
+    "perf": {
+      "backend": "webgl2",
+      "fps": 75.18796884654384,
+      "frameMsP50": 13.300000190734863,
+      "frameMsP95": 13.600000381469727,
+      "drawCalls": 20,
+      "triangles": 2076,
+      "programs": 22,
+      "gpuMs": "unavailable",
+      "gpuSource": "off",
+      "frames": 240
+    },
+    "smoke": null,
+    "errors": [],
+    "tweakpaneRequests": 0,
+    "hud": null
+  }
+}
