@@ -79,7 +79,7 @@ export function createSfx(initialMuted = true) {
     play(name, pitch = 1) {
       if (muted || !ctx || !fx[name]) return;
       try {
-        fx[name](pitch);
+        fx[name](pitch * (0.94 + Math.random() * 0.12));
       } catch (e) {}
     },
     dispose() {

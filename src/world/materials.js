@@ -1,11 +1,18 @@
-import { MeshStandardMaterial } from "three";
+import { BackSide, DataTexture, MeshBasicMaterial, MeshToonMaterial, NearestFilter, RedFormat } from "three";
 
-// Standard PBR materials (reflect the procedural env map) with a soft warm rim light and
-// an optional wind-sway vertex shader for instanced grass.
+// Brand look: a 4-step toon ramp, a soft warm rim and ink (#0a0a0a) inverted-hull outlines.
 export const uniforms = { uTime: { value: 0 } };
 
-export function mat(params = {}, { sway = false, rim = 0.32 } = {}) {
-  const m = new MeshStandardMaterial({ roughness: 0.75, metalness: 0, ...params });
+const ramp = new DataTexture(new Uint8Array([84, 150, 208, 255]), 4, 1, RedFormat);
+ramp.minFilter = ramp.magFilter = NearestFilter;
+ramp.needsUpdate = true;
+
+const KEYS = ["color", "map", "emissive", "emissiveMap", "emissiveIntensity", "vertexColors", "side", "transparent", "opacity"];
+
+export function mat(params = {}, { sway = false, rim = 0.26 } = {}) {
+  const p = {};
+  for (const k of KEYS) if (params[k] !== undefined) p[k] = params[k];
+  const m = new MeshToonMaterial({ gradientMap: ramp, ...p });
   m.onBeforeCompile = (shader) => {
     shader.uniforms.uTime = uniforms.uTime;
     if (sway) {
@@ -29,6 +36,19 @@ export function mat(params = {}, { sway = false, rim = 0.32 } = {}) {
         #include <opaque_fragment>`
       );
     }
+  };
+  return m;
+}
+
+// Ink outline: back faces pushed out along the normal.
+export function hullMat(thick = 0.03) {
+  const m = new MeshBasicMaterial({ color: 0x0a0a0a, side: BackSide });
+  m.onBeforeCompile = (shader) => {
+    shader.vertexShader = shader.vertexShader.replace(
+      "#include <begin_vertex>",
+      `#include <begin_vertex>
+      transformed += normalize(normal) * ${thick.toFixed(4)};`
+    );
   };
   return m;
 }

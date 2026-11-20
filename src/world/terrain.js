@@ -70,8 +70,9 @@ export function createTerrain(END) {
   const c = new Color();
   const grass = new Color(0x58b64f);
   const hill = new Color(0x6fc261);
-  const dry = new Color(0xc2b252);
+  const dry = new Color(0xd9c07a);
   const sand = new Color(0xe6d39a);
+  const paper = new Color(0xefe3c2);
   const rock = new Color(0x8a8d6a);
   for (let i = 0; i < pos.count; i++) {
     const x = pos.getX(i);
@@ -79,11 +80,16 @@ export function createTerrain(END) {
     const h = heightAt(x, z);
     pos.setY(i, h);
     const m = clamp(h / 5, 0, 1);
-    // First zone is dry cerrado, fading to green.
-    c.copy(grass).lerp(dry, 1 - smooth(10, 44, x));
-    c.lerp(hill, m * 0.8);
+    // Paper-cream play area fading into green hills; a faint ochre tint in the first zone.
+    const az = Math.abs(z);
+    const flat = 1 - smooth(8.5, 15, az) * (1 - smooth(0, 10, Math.max(0, -14 - x, x - (END + 1))));
+    c.copy(grass).lerp(hill, m * 0.8);
     if (m > 0.75) c.lerp(rock, (m - 0.75) * 1.3);
+    c.lerp(paper, flat * 0.85);
+    c.lerp(dry, (1 - smooth(10, 44, x)) * 0.35 * flat);
     if (h < 0.05 && island(x, z) > 0.8) c.lerp(sand, smooth(0.8, 0.88, island(x, z)));
+    // Darker edge gradient along the play-area borders.
+    c.multiplyScalar(1 - smooth(5, 9.5, az) * 0.12 * flat);
     // AO: darker in dips and toward the water, a touch of noise.
     const ao = 0.82 + 0.18 * clamp(h / 3 + 0.5, 0, 1) - smooth(0.9, 1.0, island(x, z)) * 0.3;
     const nz = 0.93 + vnoise(x * 0.5, z * 0.5) * 0.14;
@@ -132,10 +138,10 @@ export function createTerrain(END) {
   water.position.set(0, -1.7, 0);
 
   // Grass: thousands of blades, one draw call, swaying in the vertex shader.
-  const bladeGeo = new PlaneGeometry(0.14, 0.7, 1, 3);
+  const bladeGeo = new PlaneGeometry(0.2, 0.7, 1, 3);
   bladeGeo.translate(0, 0.35, 0);
   const bp = bladeGeo.attributes.position;
-  for (let i = 0; i < bp.count; i++) bp.setX(i, bp.getX(i) * (1 - bp.getY(i) / 0.9));
+  for (let i = 0; i < bp.count; i++) bp.setX(i, bp.getX(i) * Math.pow(1 - bp.getY(i) / 0.86, 1.2));
   const makeGrass = (count, avoid) => {
     const mesh = new InstancedMesh(bladeGeo, mat({ roughness: 1, side: 2 }, { sway: true, rim: 0.1 }), count);
     mesh.instanceMatrix.setUsage(DynamicDrawUsage);
@@ -150,11 +156,11 @@ export function createTerrain(END) {
       if (h < -0.05) continue;
       o.position.set(x, h - 0.02, z);
       o.rotation.set(0, rand(i, 3) * 6.28, 0);
-      const s = 0.7 + rand(i, 4) * 1.0;
+      const s = 0.55 + rand(i, 4) * 0.7;
       o.scale.set(s, s * (0.8 + rand(i, 5) * 0.6), s);
       o.updateMatrix();
       mesh.setMatrixAt(n, o.matrix);
-      cc.setHSL(0.27 + rand(i, 6) * 0.06 - (1 - smooth(10, 44, x)) * 0.1, 0.62, 0.27 + rand(i, 7) * 0.14);
+      cc.setHSL(0.27 + rand(i, 6) * 0.08 - (1 - smooth(10, 44, x)) * 0.05, 0.55 + rand(i, 8) * 0.2, 0.22 + rand(i, 7) * 0.18);
       mesh.setColorAt(n, cc);
       n++;
     }
@@ -164,26 +170,59 @@ export function createTerrain(END) {
 
   // Composed trees and rocks go into the shared static geometry.
   const scatter = (statics, avoid) => {
-    for (let i = 0; i < 130; i++) {
+    for (let i = 0; i < 100; i++) {
       const x = X0 + 4 + rand(i, 11) * (W - 8);
       const z = rand(i, 12) < 0.8 ? -(11 + rand(i, 13) * 22) : 24 + rand(i, 13) * 10;
       if (avoid(x, z)) continue;
       const h = heightAt(x, z);
       if (h < 0.1) continue;
       const s = 0.8 + rand(i, 14) * 0.9;
-      if (rand(i, 15) < 0.72) {
-        const g = new CylinderGeometry(0.18 * s, 0.26 * s, 1.5 * s, 7);
-        statics.add(g, 0x7a4a24, x, h + 0.75 * s, z);
-        const tones = [0x2f8f4a, 0x3fae5a, 0x57c46c];
+      const kind = rand(i, 15);
+      const trunk = (r0, r1, hh, color = 0x6b3f1f) => statics.add(new CylinderGeometry(r0 * s, r1 * s, hh * s, 7), color, x, h + (hh / 2) * s, z);
+      const blob = (r, yy, color, sx = 1, sy = 0.9, ox = 0, oz = 0) => {
+        const g = new IcosahedronGeometry(r * s, 1);
+        g.scale(sx, sy, sx);
+        statics.add(g, color, x + ox * s, h + yy * s, z + oz * s);
+      };
+      if (kind < 0.3) {
+        // round canopy, cluster of blobs
+        trunk(0.2, 0.28, 1.6);
+        const c = rand(i, 16) < 0.12 ? 0xd9482b : 0x3fae5a;
+        blob(1.3, 2.4, c);
+        blob(0.9, 3.0, c === 0xd9482b ? 0xf06a3a : 0x57c46c, 1, 0.9, 0.5, 0.3);
+        blob(0.8, 2.3, 0x2f8f4a, 1, 0.9, -0.8, -0.3);
+      } else if (kind < 0.5) {
+        // tall cypress
+        trunk(0.14, 0.2, 0.9);
+        blob(0.75, 2.2, 0x2f8f4a, 0.7, 2.0);
+        blob(0.5, 3.6, 0x3fae5a, 0.7, 1.6);
+      } else if (kind < 0.62) {
+        // umbrella
+        trunk(0.12, 0.2, 2.3);
+        blob(1.9, 2.7, 0x57c46c, 1, 0.32);
+        blob(1.2, 3.0, 0x3fae5a, 1, 0.3);
+      } else if (kind < 0.78) {
+        // layered pine
+        trunk(0.16, 0.22, 1.0);
         for (let k = 0; k < 3; k++) {
-          const f = new IcosahedronGeometry((1.25 - k * 0.28) * s, 1);
-          f.scale(1, 0.85, 1);
-          statics.add(f, tones[k], x, h + (1.9 + k * 0.85) * s, z);
+          const cone = new ConeGeometry((1.2 - k * 0.3) * s, 1.3 * s, 7);
+          statics.add(cone, k % 2 ? 0x2f8f4a : 0x3fae5a, x, h + (1.5 + k * 0.85) * s, z);
         }
       } else {
-        const r = new IcosahedronGeometry(0.7 * s, 0);
-        r.scale(1.2, 0.8, 1);
-        statics.add(r, i % 2 ? 0x9a9d86 : 0x80836e, x, h + 0.25 * s, z);
+        // chunky flat-shaded rocks
+        for (let k = 0; k < 2; k++) {
+          const r = new IcosahedronGeometry((0.9 - k * 0.3) * s, 0);
+          const pp = r.attributes.position;
+          for (let q = 0; q < pp.count; q++) {
+            const px = pp.getX(q);
+            const py = pp.getY(q);
+            const pz = pp.getZ(q);
+            const f = 1 + 0.28 * (hash(px * 7.1 + py * 3.3 + k, pz * 5.7 + i) - 0.5);
+            pp.setXYZ(q, px * f * 1.2, py * f * 0.8, pz * f);
+          }
+          r.computeVertexNormals();
+          statics.add(r, k ? 0xa6a894 : 0x80836e, x + k * 0.9 * s, h + (0.3 + k * 0.1) * s, z + k * 0.4 * s);
+        }
       }
     }
   };

@@ -13,7 +13,9 @@ import {
   SphereGeometry,
 } from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
-import { mat } from "./materials.js";
+import { mat, hullMat } from "./materials.js";
+import { BufferGeometry, CircleGeometry } from "three";
+import { mergeVertices } from "three/addons/utils/BufferGeometryUtils.js";
 import { LatheGeometry, Vector2 } from "three";
 
 // Vertex-coloured merged geometry: all static scenery is one draw call.
@@ -46,6 +48,24 @@ export class Statics {
   box(color, x0, y0, z0, w, h, d) {
     return this.add(new BoxGeometry(w, h, d), color, x0 + w / 2, y0 + h / 2, z0 + d / 2);
   }
+  // Merged ink outline of every part (smoothed normals so corners stay closed).
+  hullMesh(thick = 0.035, skipBelow = 0.2) {
+    const hulls = [];
+    for (const g of this.parts) {
+      g.computeBoundingBox();
+      if (g.boundingBox.max.y - g.boundingBox.min.y < skipBelow && g.boundingBox.max.y < 0.2) continue;
+      const h = new BufferGeometry();
+      h.setAttribute("position", g.attributes.position.clone());
+      if (g.index) h.setIndex(g.index.clone());
+      const welded = mergeVertices(h.index ? h.toNonIndexed() : h, 0.01);
+      welded.deleteAttribute("normal");
+      welded.deleteAttribute("uv");
+      welded.computeVertexNormals();
+      hulls.push(welded);
+    }
+    const m = new Mesh(mergeGeometries(hulls.map((g) => (g.index ? g.toNonIndexed() : g))), hullMat(thick));
+    return m;
+  }
   mesh() {
     const m = new Mesh(mergeGeometries(this.parts.map((g) => (g.index ? g.toNonIndexed() : g))), mat({ vertexColors: true, roughness: 0.85 }));
     m.castShadow = true;
@@ -56,24 +76,21 @@ export class Statics {
 
 export const vcMat = () => mat({ vertexColors: true, roughness: 0.38, metalness: 0.05 }, { rim: 0.28 });
 
-// Warp pipe: lathe body with a flared lip and a dark inner well, one coloured geometry,
-// origin at ground centre.
-export function pipeGeometry(height = 1.6, radius = 0.85, tint = 0x2e9d4a, lipTint = 0x4fd070) {
+// Warp pipe: lathe body with a flared lip, a paper band and a red band under the lip, and a
+// dark inner well; one coloured geometry, origin at ground centre. Ink outline added by the caller.
+export function pipeGeometry(height = 1.6, radius = 0.85, tint = 0x2fb356, lipTint = 0x66e083) {
   const s = new Statics();
-  const body = [];
   const steps = [
     [radius, 0],
-    [radius, height - 0.5],
-    [radius * 0.98, height - 0.44],
-    [radius + 0.2, height - 0.42],
-    [radius + 0.22, height - 0.28],
+    [radius, height - 0.55],
+    [radius * 0.98, height - 0.5],
+    [radius + 0.2, height - 0.46],
+    [radius + 0.22, height - 0.3],
     [radius + 0.2, height - 0.06],
     [radius + 0.12, height],
     [radius - 0.06, height],
   ];
-  for (const [r, y] of steps) body.push(new Vector2(r, y));
-  const lathe = new LatheGeometry(body, 28);
-  // Lip vertices (upper part) get the lighter tint, the shaft the base tint.
+  const lathe = new LatheGeometry(steps.map(([r, y]) => new Vector2(r, y)), 28);
   s.add(lathe, tint, 0, 0, 0, 0, false);
   const g = s.parts[0];
   const col = g.attributes.color;
@@ -82,16 +99,48 @@ export function pipeGeometry(height = 1.6, radius = 0.85, tint = 0x2e9d4a, lipTi
   const base = new Color(tint);
   for (let i = 0; i < pos.count; i++) {
     const y = pos.getY(i);
-    const t = Math.min(1, Math.max(0, (y - (height - 0.5)) / 0.5));
-    const k = 0.55 + 0.45 * Math.min(1, y / height);
-    const r = base.r + (lip.r - base.r) * t;
-    const gg = base.g + (lip.g - base.g) * t;
-    const b = base.b + (lip.b - base.b) * t;
-    col.setXYZ(i, r * k, gg * k, b * k);
+    const t = Math.min(1, Math.max(0, (y - (height - 0.55)) / 0.55));
+    const k = 0.82 + 0.18 * Math.min(1, y / height);
+    col.setXYZ(i, (base.r + (lip.r - base.r) * t) * k, (base.g + (lip.g - base.g) * t) * k, (base.b + (lip.b - base.b) * t) * k);
   }
-  // Inner well: dark disc just under the rim.
-  s.add(new CylinderGeometry(radius - 0.05, radius - 0.05, 0.04, 28), 0x0b2a14, 0, height - 0.12, 0, 0, false);
+  // Paper band and signal-red band just under the lip.
+  s.add(new CylinderGeometry(radius + 0.015, radius + 0.015, 0.1, 28), 0xf4ead4, 0, height - 0.62, 0, 0, false);
+  s.add(new CylinderGeometry(radius + 0.02, radius + 0.02, 0.07, 28), 0xf50000, 0, height - 0.74, 0, 0, false);
+  s.add(new CylinderGeometry(radius - 0.05, radius - 0.05, 0.04, 28), 0x061a0d, 0, height - 0.12, 0, 0, false);
   return mergeGeometries(s.parts);
+}
+
+// Ink hull instances for a set of source meshes (blocks, pipes): one draw call, synced per frame.
+export function createHullInstances(geometry, sources, thick = 0.03) {
+  const mesh = new InstancedMesh(geometry, hullMat(thick), sources.length);
+  mesh.instanceMatrix.setUsage(DynamicDrawUsage);
+  mesh.frustumCulled = false;
+  const sync = () => {
+    sources.forEach((src, i) => {
+      src.updateMatrix();
+      mesh.setMatrixAt(i, src.matrix);
+      mesh.visible = true;
+    });
+    mesh.instanceMatrix.needsUpdate = true;
+  };
+  sync();
+  return { mesh, sync };
+}
+
+// Fake contact shadows: dark soft discs on the ground under props (one instanced draw call).
+export function createContacts(spots) {
+  const geo = new CircleGeometry(1, 20);
+  geo.rotateX(-Math.PI / 2);
+  const mesh = new InstancedMesh(geo, new MeshBasicMaterial({ color: 0x1a1208, transparent: true, opacity: 0.28, depthWrite: false }), spots.length);
+  const o = new Object3D();
+  spots.forEach((p, i) => {
+    o.position.set(p.x, 0.075, p.z);
+    o.scale.set(p.rx, 1, p.rz ?? p.rx);
+    o.updateMatrix();
+    mesh.setMatrixAt(i, o.matrix);
+  });
+  mesh.renderOrder = 1;
+  return mesh;
 }
 
 // Instanced coins (spinning discs). positions: [{x,y,z}], returns {mesh, update(t), hide(i)}.

@@ -8,10 +8,10 @@ import { ShaderPass } from "three/addons/postprocessing/ShaderPass.js";
 // Post chain: MSAA scene render -> bloom (signal-red emissives) -> tone map -> grade pass
 // (vignette, brand colour grade, blur used when a card is open).
 const GRADE = {
-  uniforms: { tDiffuse: { value: null }, uBlur: { value: 0 }, uVig: { value: 0.5 }, uRes: { value: new Vector2(1, 1) } },
+  uniforms: { tDiffuse: { value: null }, uWipe: { value: 0 }, uBlur: { value: 0 }, uVig: { value: 0.5 }, uRes: { value: new Vector2(1, 1) } },
   vertexShader: "varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }",
   fragmentShader: `
-    uniform sampler2D tDiffuse; uniform float uBlur; uniform float uVig; uniform vec2 uRes; varying vec2 vUv;
+    uniform sampler2D tDiffuse; uniform float uWipe; uniform float uBlur; uniform float uVig; uniform vec2 uRes; varying vec2 vUv;
     void main(){
       vec4 c = texture2D(tDiffuse, vUv);
       if (uBlur > 0.002) {
@@ -34,6 +34,17 @@ const GRADE = {
       vec2 d = vUv - 0.5;
       float v = smoothstep(0.85, 0.28, length(d * vec2(1.0, 1.15)));
       col *= mix(1.0, v, uVig);
+      if (uWipe > 0.001 && uWipe < 1.999) {
+        float n = sin(vUv.y * 23.0) * 0.03 + sin(vUv.y * 61.0 + 1.7) * 0.015 + sin(vUv.y * 9.0) * 0.045;
+        float e1 = clamp(uWipe, 0.0, 1.0) * 1.35 - 0.2 + n;
+        float e0 = clamp(uWipe - 1.0, 0.0, 1.0) * 1.35 - 0.2 + n;
+        float ink = step(vUv.x, e1) - step(vUv.x, e0);
+        float tear = (step(vUv.x, e1 + 0.03) - step(vUv.x, e1)) * step(uWipe, 1.0) + (step(vUv.x, e0 + 0.03) - step(vUv.x, e0)) * step(1.0, uWipe);
+        float dotR = length((vUv - vec2(0.5, 0.5)) * vec2(uRes.x / uRes.y, 1.0));
+        vec3 inkCol = mix(vec3(0.04), vec3(0.96, 0.0, 0.0), step(dotR, 0.07));
+        col = mix(col, inkCol, ink);
+        col = mix(col, vec3(0.957, 0.918, 0.831), tear);
+      }
       gl_FragColor = vec4(col, c.a);
     }`,
 };
@@ -58,6 +69,9 @@ export function createPost(renderer, scene, camera, w, h) {
     setSize(nw, nh) {
       composer.setSize(nw, nh);
       grade.uniforms.uRes.value.set(nw * dpr, nh * dpr);
+    },
+    setWipe(v) {
+      grade.uniforms.uWipe.value = v;
     },
     setBlur(v) {
       grade.uniforms.uBlur.value = v;

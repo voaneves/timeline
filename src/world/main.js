@@ -20,12 +20,13 @@ import {
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
 import { mat, uniforms } from "./materials.js";
 import { createTerrain, createCloudsRound, rand } from "./terrain.js";
+import { createLife } from "./life.js";
 import { createPost } from "./post.js";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { createRenderer } from "./renderer.js";
 import { readContent } from "./content.js";
 import { makeBlockAtlas, makeDotAtlas, cellUV, makeLabelAtlas, labelPlane } from "./textures.js";
-import { Statics, vcMat, pipeGeometry, createCoins, createParticles, createFlag } from "./props.js";
+import { Statics, vcMat, pipeGeometry, createCoins, createParticles, createFlag, createHullInstances, createContacts } from "./props.js";
 import { createAvatar } from "./avatar.js";
 import { createInput } from "./input.js";
 import { createFollowCamera } from "./camera.js";
@@ -80,7 +81,7 @@ export async function start({ container, onFallback, onExit }) {
     const [top, bottom] = SKY[isDark() ? "dark" : "light"];
     if (scene.background && scene.background.dispose) scene.background.dispose();
     scene.background = skyTexture(top, bottom);
-    scene.fog = new FogExp2(new Color(bottom).lerp(new Color(0xffffff), 0.1), 0.0065);
+    scene.fog = new FogExp2(new Color(bottom).lerp(new Color(0xffffff), 0.05), 0.0042);
   };
   applySky();
   const themeObserver = new MutationObserver(applySky);
@@ -88,8 +89,8 @@ export async function start({ container, onFallback, onExit }) {
   const scheme = window.matchMedia("(prefers-color-scheme: dark)");
   scheme.addEventListener("change", applySky);
 
-  scene.add(new HemisphereLight(0xcfe8ff, 0x8a6a3a, 0.55));
-  const sun = new DirectionalLight(0xfff0d8, 2.2);
+  scene.add(new HemisphereLight(0xdcecff, 0x7a5a3a, 0.3));
+  const sun = new DirectionalLight(0xffe9c8, 3.0);
   sun.position.set(8, 14, 6);
   const shadows = rig.renderer.shadowMap.enabled;
   if (shadows) {
@@ -172,7 +173,7 @@ export async function start({ container, onFallback, onExit }) {
     return false;
   };
   T.scatter(statics, (x, z) => Math.abs(z) < 10.5 || keepClear(x, z));
-  const grassA = T.makeGrass(5200, (x, z) => keepClear(x, z) || Math.abs(z) < 2.2 && x > 4 && x < eraEnd);
+  const grassA = T.makeGrass(rig.coarse ? 1800 : 3800, (x, z) => keepClear(x, z) || Math.abs(z) < 2.2 && x > 4 && x < eraEnd);
   scene.add(grassA);
   // Zone dressing: campus arch (2), bottles on a conveyor (3), bar-chart pillars (4), old monitor (1).
   const era = (n) => blocks.find((b) => b.en.era === n);
@@ -220,9 +221,10 @@ export async function start({ container, onFallback, onExit }) {
   const years = content.eras.flatMap((e) => e.entries.map((en) => en.year));
   const atlas = makeBlockAtlas(years);
   const blockMat = mat(
-    { map: atlas, emissiveMap: makeDotAtlas(years.length), emissive: 0xffffff, emissiveIntensity: 6, roughness: 0.45 },
+    { map: atlas, emissiveMap: makeDotAtlas(years.length), emissive: 0xffffff, emissiveIntensity: 3.2, roughness: 0.45 },
     { rim: 0.2 }
   );
+  const blockMeshes = [];
   blocks.forEach((b, i) => {
     const mesh = new Mesh(cellUV(new RoundedBoxGeometry(1.6, 1.6, 1.6, 4, 0.16), i), blockMat);
     mesh.position.set(b.x, 3.2, b.z);
@@ -245,10 +247,12 @@ export async function start({ container, onFallback, onExit }) {
     boxes.push(boxAt(b.x, 3.2, b.z, 1.6, 1.6, 1.6, it));
     interactables.push(it);
     scene.add(mesh);
+    blockMeshes.push(mesh);
   });
 
   const pipeMat = vcMat();
-  const makePipe = (kind, x, z, h, extra, tints = [0x2e9d4a, 0x4fd070]) => {
+  const pipeGroups = new Map();
+  const makePipe = (kind, x, z, h, extra, tints = [0x2fb356, 0x66e083]) => {
     const mesh = new Mesh(pipeGeometry(h, 0.85, tints[0], tints[1]), pipeMat);
     mesh.position.set(x, 0, z);
     mesh.castShadow = true;
@@ -258,6 +262,8 @@ export async function start({ container, onFallback, onExit }) {
     boxes.push(boxAt(x, h / 2, z, 1.9, h, 1.9, it));
     interactables.push(it);
     scene.add(mesh);
+    if (!pipeGroups.has(h)) pipeGroups.set(h, []);
+    pipeGroups.get(h).push(mesh);
     return it;
   };
   makePipe("warp", -3.6, -4.2, 1.8, {
@@ -273,7 +279,7 @@ export async function start({ container, onFallback, onExit }) {
     const px = xp + 6 * Math.cos(th) + 1;
     const pz = 6.4 * Math.sin(th);
     makePipe("project", px, pz, 1.6, { id: p.id, text: `Projeto ${p.title}`, hint: "↓ ou E para entrar" });
-    addLabel(p.title, px, 2.9, pz, 3.1);
+    addLabel(p.title, px - 0.2, 2.75 + (i % 3) * 0.78, pz - 0.6 - (i % 2) * 0.3, 2.7);
   });
 
   // Secrets: an invisible block near the crossroads and a small gold pipe to the GitHub profile.
@@ -296,7 +302,7 @@ export async function start({ container, onFallback, onExit }) {
     -8.2,
     1.3,
     { text: "Tubo secreto dourado", hint: "↓ ou E para entrar" },
-    [0xd9a227, 0xffd75a]
+    [0xb8861a, 0xffd75a]
   );
   addLabel("GitHub", egg.x, 2.5, -8.2, 2.4);
   const eggCard = () => {
@@ -330,13 +336,29 @@ export async function start({ container, onFallback, onExit }) {
   const labelTex = makeLabelAtlas(labels);
   const labelGeos = labelSpots.map(([i, x, y, z, w]) => labelPlane(i, w).translate(x, y, z));
   const labelMesh = new Mesh(mergeGeometries(labelGeos), new MeshBasicMaterial({ map: labelTex }));
-  scene.add(statics.mesh(), labelMesh);
+  scene.add(statics.mesh(), statics.hullMesh(0.04), labelMesh);
+  const hulls = [];
+  const blockHull = createHullInstances(new RoundedBoxGeometry(1.6, 1.6, 1.6, 4, 0.16), blockMeshes, 0.06);
+  scene.add(blockHull.mesh);
+  hulls.push(blockHull);
+  for (const [h, meshes] of pipeGroups) {
+    const ph = createHullInstances(pipeGeometry(h), meshes, 0.055);
+    scene.add(ph.mesh);
+    hulls.push(ph);
+  }
+  const contactSpots = [
+    ...blocks.map((b) => ({ x: b.x, z: b.z + 0.2, rx: 1.35, rz: 1.1 })),
+    ...[...pipeGroups.values()].flat().map((m) => ({ x: m.position.x, z: m.position.z, rx: 1.7 })),
+    { x: mx, z: 0, rx: 1.0 },
+    { x: 5.2, z: 2.5, rx: 0.9 },
+  ];
+  scene.add(createContacts(contactSpots));
 
   const coins = createCoins(coinPos, reduced);
   scene.add(coins.mesh);
   const clouds = createCloudsRound(END + 110, reduced);
   scene.add(clouds.mesh);
-  const particles = createParticles(110);
+  const particles = createParticles(rig.coarse ? 150 : 300);
   particles.enabled = !reduced;
   scene.add(particles.mesh);
 
@@ -445,6 +467,7 @@ export async function start({ container, onFallback, onExit }) {
 
   async function bumpSecret(it) {
     state = "busy";
+    freeze = 0.05;
     it.mesh.visible = true;
     it.spring.kick(8);
     cam.kick(0.35);
@@ -467,6 +490,7 @@ export async function start({ container, onFallback, onExit }) {
 
   async function bump(it) {
     state = "busy";
+    freeze = 0.05;
     it.spring.kick(7);
     cam.kick(0.3);
     found.add(it.id);
@@ -543,10 +567,27 @@ export async function start({ container, onFallback, onExit }) {
     state = "play";
   }
 
+  // Ink / paper-tear wipe: post pass when available, DOM circle wipe on the low-end path.
+  let wipeV = 0;
+  const wipe = (inward) => {
+    if (reduced) {
+      ui.fade(inward);
+      return tweens.wait(0.05);
+    }
+    if (level >= 2) {
+      ui.fade(inward);
+      return tweens.wait(0.3);
+    }
+    return tweens.tween(inward ? 0.42 : 0.42, (t) => {
+      wipeV = inward ? t : 1 + t;
+      post.setWipe(inward ? t : 1 + t);
+      if (!inward && t >= 1) post.setWipe(0);
+    });
+  };
+
   async function warp(dest, thenGrab, fromPipe) {
     state = "busy";
-    ui.fade(true);
-    await tweens.wait(reduced ? 0.02 : 0.28);
+    await wipe(true);
     avatar.setVisible(true);
     if (dest === "plaza") {
       body.x = xp - 7;
@@ -562,9 +603,8 @@ export async function start({ container, onFallback, onExit }) {
     body.py = body.y;
     body.pz = body.z;
     cam.snap(body.x, body.y, body.z, dest === "plaza" ? 17 : 16);
-    ui.fade(false);
     emitDust(body.x, body.y, body.z, 10);
-    await tweens.wait(reduced ? 0.02 : 0.25);
+    await wipe(false);
     void fromPipe;
     if (thenGrab) await grabMast();
     else state = "play";
@@ -691,6 +731,7 @@ export async function start({ container, onFallback, onExit }) {
       if (-vyBefore > 5) {
         emitDust(body.x, body.y, body.z, 7);
         cam.kick(clamp(-vyBefore * 0.012, 0, 0.2));
+        cam.punch(clamp(-vyBefore * 0.12, 0, 2.2));
         sfx.play("land");
       }
     }
@@ -698,14 +739,29 @@ export async function start({ container, onFallback, onExit }) {
   }
 
   let pending = null;
+  let freeze = 0;
+  let heroPose = null;
 
   // ---- Frame ---------------------------------------------------------------------
   let time = 0;
   let toastShown = 0;
+  let confetti = false;
   const tickFn = (dt, t) => {
+    if (freeze > 0) {
+      freeze -= dt;
+      dt = 0;
+    }
     time = t;
     uniforms.uTime.value = reduced ? 0 : t;
     tweens.update(dt);
+    life.update(dt, t, body.x, body.z);
+    if (!confetti && cam.introDone()) {
+      confetti = true;
+      sfx.play("flag", 1);
+      particles.emit(body.x, body.y + 2.5, body.z, 60, { color: 0xf50000, speed: 5, up: 7, size: 0.2, life: 1.8, gravity: 6 });
+      particles.emit(body.x, body.y + 2.5, body.z, 50, { color: 0xf4ead4, speed: 4, up: 6, size: 0.18, life: 1.8, gravity: 6 });
+      particles.emit(body.x, body.y + 2.5, body.z, 30, { color: 0xf2c230, speed: 4, up: 6, size: 0.16, life: 1.8, gravity: 6 });
+    }
     acc += dt;
     while (acc >= STEP) {
       fixed();
@@ -796,6 +852,8 @@ export async function start({ container, onFallback, onExit }) {
       }
     }
 
+    for (const h of hulls) h.sync();
+
     // Avatar animation and dust trail.
     const speed = Math.hypot(body.vx, body.vz);
     stepDust -= dt;
@@ -806,6 +864,7 @@ export async function start({ container, onFallback, onExit }) {
     avatar.update(dt, {
       vx: state === "play" ? body.vx : 0,
       vz: state === "play" ? body.vz : 0,
+      vy: body.vy,
       grounded: state !== "play" || body.grounded,
       look: nearIt ? Math.atan2(nearIt.x - rx, nearIt.z - rz) : null,
     });
@@ -821,7 +880,14 @@ export async function start({ container, onFallback, onExit }) {
     }
     const plaza = zones[zi].name === "Projetos";
     const hint = plaza ? 19 : zones[zi].name === "Contato" ? 17 : 15;
-    cam.update(dt, { x: rx, y: ry, z: rz, vx: state === "play" ? body.vx : 0, vz: state === "play" ? body.vz : 0, hint, card: state === "card", narrow: narrow() });
+    if (heroPose) {
+      camera.position.set(...heroPose.pos);
+      camera.lookAt(...heroPose.look);
+      if (heroPose.fov && camera.fov !== heroPose.fov) {
+        camera.fov = heroPose.fov;
+        camera.updateProjectionMatrix();
+      }
+    } else cam.update(dt, { x: rx, y: ry, z: rz, vx: state === "play" ? body.vx : 0, vz: state === "play" ? body.vz : 0, hint, card: state === "card", narrow: narrow() });
 
     // Shadow camera follows the avatar.
     sun.position.set(rx + 8, ry + 14, rz + 6);
@@ -865,6 +931,7 @@ export async function start({ container, onFallback, onExit }) {
       setLevel(level + 1);
     }
   };
+  const life = createLife(scene, { reduced, coarse: rig.coarse });
   const mainTick = tickFn;
   rig.setTick((dt, t) => {
     prevTick(dt, t);
@@ -876,7 +943,7 @@ export async function start({ container, onFallback, onExit }) {
 
   const handle = {
     info: rig.renderer.info,
-    debug: { measure: () => { rig.renderer.info.reset(); rig.renderer.render(scene, camera); const r = rig.renderer.info.render; return { calls: r.calls, tris: r.triangles }; }, quality: () => ({ level, ema }), setLevel, found, secretsFound, popCoin, body, interactables, input: inp, blocks, coins, getState: () => state, warp, coinTotal: totalCoins, sfx, particles },
+    debug: { hero: (pose) => { heroPose = pose; confetti = true; }, measure: () => { const i = rig.renderer.info; i.reset(); rig.renderer.render(scene, camera); const all = { calls: i.render.calls, tris: i.render.triangles }; const sm = rig.renderer.shadowMap; const was = sm.autoUpdate; sm.autoUpdate = false; i.reset(); rig.renderer.render(scene, camera); sm.autoUpdate = was; return { total: all, mainPass: { calls: i.render.calls, tris: i.render.triangles } }; }, quality: () => ({ level, ema }), setLevel, found, secretsFound, popCoin, body, interactables, input: inp, blocks, coins, getState: () => state, warp, coinTotal: totalCoins, sfx, particles },
     stop() {
       themeObserver.disconnect();
       scheme.removeEventListener("change", applySky);

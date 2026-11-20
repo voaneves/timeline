@@ -13,17 +13,23 @@ export function createFollowCamera(camera, { reduced }) {
   let shiftX = new Damper(0); // card open: subject moves to the left third
   let shiftY = new Damper(0);
   const smooth = reduced ? 0.06 : 0.28;
-  let introT = reduced ? 1 : 0;
+  let introT = reduced ? 1 : -0.35;
   let shake = 0;
+  let fovK = 0;
 
   const apply = () => {
     const aspectK = camera.aspect < 1.25 ? 1 + (1.25 - camera.aspect) * 0.85 : 1;
-    const e = 1 - Math.pow(1 - Math.min(1, introT), 3);
-    const d = dist.x * aspectK + (1 - e) * 20;
+    const e = 1 - Math.pow(1 - Math.max(0, Math.min(1, introT)), 3);
+    const d = dist.x * aspectK + (1 - e) * 11;
     const sx = shake > 0.001 ? (Math.random() - 0.5) * shake : 0;
     const sy = shake > 0.001 ? (Math.random() - 0.5) * shake : 0;
-    camera.position.set(tx.x + shiftX.x + (1 - e) * -9 + sx, ty.x + Math.sin(PITCH) * d + 1.2 + kick + shiftY.x + sy, tz.x + Math.cos(PITCH) * d);
-    camera.lookAt(tx.x + shiftX.x, ty.x + 1.9 + shiftY.x, tz.x);
+    camera.position.set(tx.x + shiftX.x + (1 - e) * -14 + sx, ty.x + Math.sin(PITCH) * d + 1.2 + (1 - e) * 13 + kick + shiftY.x + sy, tz.x + Math.cos(PITCH) * d);
+    camera.lookAt(tx.x + shiftX.x, ty.x + 1.9 - (1 - e) * 1.2 + shiftY.x, tz.x);
+    const fov = 36 + fovK;
+    if (camera.fov !== fov) {
+      camera.fov = fov;
+      camera.updateProjectionMatrix();
+    }
   };
 
   return {
@@ -46,7 +52,8 @@ export function createFollowCamera(camera, { reduced }) {
       shiftY.update(f.card && f.narrow ? -2.4 : 0, 0.35, dt);
       if (kick !== 0) kick *= Math.max(0, 1 - dt * 12);
       shake *= Math.max(0, 1 - dt * 9);
-      if (introT < 1) introT += dt / 2.6;
+      fovK *= Math.max(0, 1 - dt * 7);
+      if (introT < 1) introT += dt / 3.8;
       apply();
     },
     kick(v) {
@@ -54,6 +61,9 @@ export function createFollowCamera(camera, { reduced }) {
         kick = -v;
         shake = Math.max(shake, v * 0.5);
       }
+    },
+    punch(v) {
+      if (!reduced) fovK = Math.max(fovK, v);
     },
     introDone: () => introT >= 1,
   };

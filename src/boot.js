@@ -154,7 +154,7 @@
         setTimeout(() => {
           title.hidden = true;
           title.classList.remove("leaving", "loading");
-        }, 650);
+        }, 1250);
       }
       root.classList.add("no-title");
     } catch (e) {

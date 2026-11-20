@@ -2,11 +2,9 @@ import {
   ACESFilmicToneMapping,
   PCFSoftShadowMap,
   PerspectiveCamera,
-  PMREMGenerator,
   Scene,
   WebGLRenderer,
 } from "three";
-import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 
 // Renderer shell: DPR clamp, resize observer, visibility/offscreen pause, context-lost
 // fallback, procedural PMREM environment and AgX tone mapping. Scene content lives in main.js.
@@ -33,13 +31,6 @@ export function createRenderer(container, { onFallback, animate = true } = {}) {
 
   const scene = new Scene();
   const camera = new PerspectiveCamera(36, 1, 0.1, 300);
-
-  const pmrem = new PMREMGenerator(renderer);
-  const env = new RoomEnvironment();
-  scene.environment = pmrem.fromScene(env, 0.04).texture;
-  scene.environmentIntensity = 0.4;
-  env.dispose();
-  pmrem.dispose();
 
   let tick = () => {};
   let draw = () => renderer.render(scene, camera);
@@ -143,7 +134,6 @@ export function createRenderer(container, { onFallback, animate = true } = {}) {
         }
       });
       if (scene.background && scene.background.dispose) scene.background.dispose();
-      if (scene.environment) scene.environment.dispose();
       renderer.dispose();
       renderer.forceContextLoss();
       canvas.remove();
