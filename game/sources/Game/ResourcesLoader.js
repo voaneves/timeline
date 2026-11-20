@@ -3,6 +3,10 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js'
 import * as THREE from 'three/webgpu'
 import { Game } from './Game.js'
+import { fetchManifest, resolveAsset } from './assetManifest.js'
+
+// Injected by vite.config.js (define); same id as asset-manifest.<buildId>.json (T0.15)
+const BUILD_ID = typeof __BUILD_ID__ !== 'undefined' ? __BUILD_ID__ : null
 
 export class ResourcesLoader
 {
@@ -11,6 +15,19 @@ export class ResourcesLoader
         this.game = Game.getInstance()
         this.loaders = new Map()
         this.cache = new Map()
+        this.manifestPromise = null
+    }
+
+    // Assets are only requested through the manifest of THIS build (old JS -> old manifest -> old assets)
+    getManifest()
+    {
+        if(!this.manifestPromise)
+        {
+            if(!BUILD_ID)
+                return Promise.reject(new Error('Resources > no __BUILD_ID__, assets need a vite build + hash-assets'))
+            this.manifestPromise = fetchManifest(BUILD_ID, document.baseURI)
+        }
+        return this.manifestPromise
     }
 
     getLoader(_type)
@@ -37,6 +54,12 @@ export class ResourcesLoader
     }
 
     load(_files, _progressCallback = null)
+    {
+        return this.getManifest().then(manifest => this.loadResolved(manifest, _files, _progressCallback))
+    }
+
+    // _file[1] is the logical name (path under static/), resolved to its hashed URL via the manifest
+    loadResolved(_manifest, _files, _progressCallback)
     {
         return new Promise((resolve, reject) =>
         {
@@ -99,7 +122,7 @@ export class ResourcesLoader
                 {
                     const loader = this.getLoader(_file[2])
                     loader.load(
-                        _file[1],
+                        resolveAsset(_manifest, _file[1], document.baseURI),
                         resource => {
                             save(_file, resource)
                             progress()
