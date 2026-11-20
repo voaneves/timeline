@@ -45,3 +45,7 @@ Third-party tools and licences used by the game toolchain.
 
 ## Rapier pin decision (main session, after T0.7)
 - Final pin: @dimforge/rapier3d **0.19.3** (as upstream). T0.7 showed all 9 physics/sleep tests pass on BOTH 0.19.3 and 0.21.0, so 0.21's extra ~600 kB gz (wasm 593 → 1188 kB gz) buys nothing measurable against the 3.0 MB critical-path budget. Revisit only if a concrete bug appears on 0.19.3. 0.21 also sleeps bodies sooner (stack 0.5 s vs 2.0 s), which would need re-tuning.
+
+## Preview channel (T0.11)
+- Repo: https://github.com/voaneves/timeline-preview (public, single orphan commit force-pushed by `scripts/publish-preview.mjs --push`), Pages from main root: https://voaneves.github.io/timeline-preview/ (noindex,nofollow meta + robots.txt Disallow: /).
+- Pages Content-Encoding (checked 2026-11-20 with Accept-Encoding: gzip, br): .js gzip, .wasm gzip (rapier 0.19.3 wasm 590,591 B on the wire), .glb gzip; small .json served uncompressed. No brotli. No need to switch to rapier compat for size.
