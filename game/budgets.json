@@ -68,6 +68,15 @@
         }
       },
       {
+        "name": "vehicle",
+        "match": "assets/PhysicsVehicle-.*\\.js$",
+        "budget": {
+          "maxKB": 8,
+          "failKB": 20
+        },
+        "$note": "T1.10 lazy chunk, only fetched with ?loco=vehicle; shipped in production"
+      },
+      {
         "name": "licenses",
         "match": "^LICENSES\\.md$",
         "budget": {

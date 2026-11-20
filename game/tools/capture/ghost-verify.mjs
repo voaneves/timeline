@@ -20,6 +20,7 @@ const BASE = opt('url', 'http://127.0.0.1:5199/');
 const GHOST = opt('ghost', 'demo-push');
 const RUNS = +opt('runs', 3);
 const TOL = 0.001; // 1 mm
+const EXTRA = opt('query', ''); // e.g. --query loco=vehicle (appended to the page URL)
 const DEMO = opt('demo', '1') !== '0'; // --demo 0: the default greybox world (T1.x ghosts); the --record check needs the demo cube
 const MODE_NAMES = opt('modes', 'native,fps15,jitter,fast').split(',');
 
@@ -50,7 +51,7 @@ async function open(query, mode, route) {
     })()`);
   }
   if (route) await page.route(route.pattern, (r) => r.fulfill({ contentType: 'application/json', body: JSON.stringify(route.body) }));
-  await page.goto(`${BASE}?webgl&expose${DEMO ? '&demo' : ''}&${query}`);
+  await page.goto(`${BASE}?webgl&expose${DEMO ? '&demo' : ''}&${query}${EXTRA ? '&' + EXTRA : ''}`);
   await page.waitForFunction(() => window.game?.ready === true, null, { timeout: 60000 });
   return { page, context, errors };
 }

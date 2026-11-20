@@ -36,6 +36,11 @@ export class World
         const resources = await this.game.resourcesLoader.load([ [ 'greybox', 'eras/greybox/greybox.glb', 'gltf' ] ])
         this.greybox = resources.greybox.scene
 
+        // `?loco=vehicle`: fetch the lazy chunk BEFORE any physical exists, so no fixed step runs with live bodies during
+        // the await (else the platform's step counter would depend on network timing and the ghost would drift)
+        if(Debug.getParam('loco') === 'vehicle')
+            this.vehicleModule = await import('../Physics/PhysicsVehicle.js')
+
         // Objects.add re-parents each node to the game scene, so iterate over a copy
         for(const node of [ ...this.greybox.children ])
         {
@@ -146,6 +151,12 @@ export class World
     // platform so its fixed-step update (order 2) runs after the platform's (T1.5 reads the platform delta).
     setPlayer()
     {
+        // `?loco=vehicle` (T1.10): the grey box cart instead of the on-foot player (lazy chunk, quarantined)
+        if(Debug.getParam('loco') === 'vehicle')
+        {
+            this.vehicle = new this.vehicleModule.PhysicsVehicle()
+            return
+        }
         this.player = new Player()
     }
 
