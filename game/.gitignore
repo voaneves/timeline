@@ -1,0 +1,3 @@
+tools/capture/out/
+tools/capture/baseline/
+blender/*.glb
