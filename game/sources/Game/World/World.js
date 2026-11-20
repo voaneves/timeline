@@ -1,17 +1,157 @@
-// Minimal world for the empty engine (plan T0.6): a ground slab and one dynamic cube.
-// Upstream's World loaded 28 modules (areas, vehicle, trees, weather...), all removed.
+// Minimal world. Upstream's World loaded 28 modules (areas, vehicle, trees, weather...), all removed.
+// Default: the greybox test level (plan T1.1), loaded from the asset manifest (`eras/greybox/greybox.glb`).
+// `?demo`: the empty-engine demo (T0.6): a ground slab and one dynamic cube pushed by the arrow keys (used by the ghost tests).
 import * as THREE from 'three/webgpu'
+import { Debug } from '../Debug.js'
 import { Game } from '../Game.js'
 
+// Name of a glTF root node -> how the engine reads it (docs/PLAN-3D.md 5.3, Objects.getFromModel):
+//   `...Physical<Fixed|Dynamic|KinematicPositionBased>`  one rigid body; children cuboid*/tube*/hull*/trimesh*/ball* are its colliders
+//   `ref<Name><n>`                                        reference point (position + rotation + userData), no visual
+//   anything else                                         visual only
 export class World
 {
     constructor()
     {
         this.game = Game.getInstance()
+        this.references = new Map()
 
-        this.setGround()
-        this.setCube()
-        this.setDemoControls()
+        if(Debug.getParam('demo') !== null)
+        {
+            this.setGround()
+            this.setCube()
+            this.setDemoControls()
+            this.ready = Promise.resolve()
+        }
+        else
+        {
+            // Awaited by Game.init before `game.ready`
+            this.ready = this.loadGreybox()
+        }
+    }
+
+    async loadGreybox()
+    {
+        const resources = await this.game.resourcesLoader.load([ [ 'greybox', 'eras/greybox/greybox.glb', 'gltf' ] ])
+        this.greybox = resources.greybox.scene
+
+        // Objects.add re-parents each node to the game scene, so iterate over a copy
+        for(const node of [ ...this.greybox.children ])
+        {
+            if(/^ref/i.test(node.name))
+            {
+                this.references.set(node.name, {
+                    position: node.position.clone(),
+                    quaternion: node.quaternion.clone(),
+                    userData: { ...node.userData },
+                })
+            }
+            else if(/physical/i.test(node.name))
+            {
+                this.addPhysicalNode(node)
+            }
+            else
+            {
+                this.game.objects.add({ model: node })
+            }
+        }
+
+        this.setRespawn()
+        this.setMovingPlatform()
+        this.setPlayerMarker()
+    }
+
+    addPhysicalNode(node)
+    {
+        const dynamic = /dynamic/i.test(node.name)
+        const kinematic = /kinematicPositionBased/i.test(node.name)
+
+        // getFromModel reads type (from the node name), friction/restitution/category (from userData) and strips the collider children
+        const physicalDescription = {
+            position: node.position,
+            rotation: node.quaternion,
+        }
+        if(typeof node.userData.mass !== 'undefined')
+            physicalDescription.mass = node.userData.mass
+        if(dynamic)
+            physicalDescription.sleeping = true // wakes on first contact
+        if(kinematic)
+            physicalDescription.canSleep = false // driven by setNextKinematicTranslation
+
+        const object = this.game.objects.addFromModel(node, {}, physicalDescription)
+
+        if(kinematic)
+            this.movingPlatform = { object, userData: { ...node.userData } }
+        return object
+    }
+
+    // The default respawn comes from `refRespawn` (forward is -Z, yaw 0)
+    setRespawn()
+    {
+        const reference = this.references.get('refRespawn')
+        if(!reference)
+            return
+
+        const yaw = new THREE.Euler().setFromQuaternion(reference.quaternion, 'YXZ').y
+        this.game.respawns.setItems([
+            { name: 'greybox', x: reference.position.x, y: reference.position.y, z: reference.position.z, rotation: yaw },
+        ])
+        this.game.respawns.defaultName = 'greybox'
+
+        // The camera was created on the placeholder respawn: re-aim it
+        const focusPoint = this.game.view.focusPoint
+        focusPoint.trackedPosition.set(reference.position.x, 0, reference.position.z)
+        focusPoint.position.copy(focusPoint.trackedPosition)
+        focusPoint.smoothedPosition.copy(focusPoint.trackedPosition)
+    }
+
+    // Kinematic platform shuttling between refPlatformPath1 and refPlatformPath2 (props `speed` m/s, `pause` s at each end).
+    // Driven by the fixed-step counter (not wall clock), before the physics step (order 2 < 3), so ghosts replay it exactly.
+    setMovingPlatform()
+    {
+        const a = this.references.get('refPlatformPath1')
+        const b = this.references.get('refPlatformPath2')
+        if(!this.movingPlatform || !a || !b)
+            return
+
+        const speed = this.movingPlatform.userData.speed ?? 2
+        const pause = this.movingPlatform.userData.pause ?? 0.5
+        const distance = a.position.distanceTo(b.position)
+        const travel = distance / speed
+        const period = 2 * (travel + pause)
+        const position = new THREE.Vector3()
+        let steps = 0
+
+        this.platformPositionAt = (time) =>
+        {
+            const t = time % period
+            let ratio = 0
+            if(t < pause) ratio = 0
+            else if(t < pause + travel) ratio = (t - pause) / travel
+            else if(t < 2 * pause + travel) ratio = 1
+            else ratio = 1 - (t - 2 * pause - travel) / travel
+            return position.lerpVectors(a.position, b.position, ratio)
+        }
+
+        this.game.ticker.events.on('fixedTick', () =>
+        {
+            steps++
+            const target = this.platformPositionAt(steps * this.game.ticker.fixedDelta)
+            this.movingPlatform.object.physical.body.setNextKinematicTranslation({ x: target.x, y: target.y, z: target.z })
+        }, 2)
+    }
+
+    // Visual-only stand-in for the player (capsule radius 0.28 m, total height 1.2 m, plan 3.1) until T1.2
+    setPlayerMarker()
+    {
+        const respawn = this.game.respawns.getDefault()
+        const mesh = new THREE.Mesh(
+            new THREE.CapsuleGeometry(0.28, 0.64, 4, 16),
+            new THREE.MeshStandardMaterial({ name: 'greyMarker', color: '#e0e0e0' })
+        )
+        mesh.name = 'playerMarker'
+        mesh.position.set(respawn.position.x, respawn.position.y + 0.6, respawn.position.z)
+        this.game.objects.add({ model: mesh })
     }
 
     setGround()

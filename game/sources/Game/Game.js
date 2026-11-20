@@ -105,6 +105,7 @@ export class Game
         this.physics = new Physics()
         this.wireframe = new PhysicsWireframe()
         this.world = new World()
+        await this.world.ready // greybox glb (the `?demo` world is synchronous)
 
         // `?debug=physics`: Rapier smoke test (T0.7), separate chunk, results in window.__physicsSmoke
         if(Debug.getParam('debug') === 'physics')

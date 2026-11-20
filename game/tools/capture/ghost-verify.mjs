@@ -48,7 +48,7 @@ async function open(query, mode, route) {
     })()`);
   }
   if (route) await page.route(route.pattern, (r) => r.fulfill({ contentType: 'application/json', body: JSON.stringify(route.body) }));
-  await page.goto(`${BASE}?webgl&expose&${query}`);
+  await page.goto(`${BASE}?webgl&expose&demo&${query}`);
   await page.waitForFunction(() => window.game?.ready === true, null, { timeout: 60000 });
   return { page, context, errors };
 }
