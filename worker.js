@@ -3,7 +3,23 @@
 // and the activate handler removes every cache that is not current.
 // The 3D chunk (assets/js/world/*) is never precached, so it is only fetched
 // after the visitor starts the 3D mode.
-const VERSION = "v8";
+const VERSION = "v9";
+
+// Worker scope path (e.g. "/timeline/"). Every bypass rule is anchored to it, so a look-alike
+// path elsewhere on the origin (e.g. /other/play/) is never skipped by mistake.
+const SCOPE = new URL("./", self.location).pathname;
+const BYPASS_DIRS = ["play", "next", "game", "assets/js/world"].map((dir) => SCOPE + dir);
+const BYPASS_FILE = /\.(?:glb|wasm|ktx2|mp3|ogg)$/i;
+
+// The 3D game (play/, next/, game/), the world chunk, asset-manifest.* and the game binaries
+// are never handled by the worker: no caching, straight to the network.
+function isBypassed(pathname) {
+  if (!pathname.startsWith(SCOPE)) return false;
+  if (BYPASS_DIRS.some((dir) => pathname === dir || pathname.startsWith(dir + "/"))) return true;
+  if (pathname.slice(SCOPE.length).startsWith("asset-manifest.")) return true;
+  return BYPASS_FILE.test(pathname);
+}
+
 const PRECACHE = `precache-${VERSION}`;
 const RUNTIME = `runtime-${VERSION}`;
 
@@ -46,7 +62,15 @@ self.addEventListener("activate", (event) => {
           if (!staleCount) return;
           return self.clients
             .matchAll({ type: "window" })
-            .then((windows) => Promise.all(windows.map((client) => client.navigate(client.url).catch(() => {}))));
+            .then((windows) =>
+              Promise.all(
+                windows.map((client) => {
+                  // Game pages are not served by this worker: no stale shell to refresh there.
+                  if (isBypassed(new URL(client.url).pathname)) return undefined;
+                  return client.navigate(client.url).catch(() => {});
+                })
+              )
+            );
         })
       )
   );
@@ -57,11 +81,8 @@ self.addEventListener("fetch", (event) => {
   if (request.method !== "GET") return;
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
-  // World chunk and anything else under assets/js/world/ goes straight to the network.
-  if (url.pathname.includes("/assets/js/world/")) return;
-  // The 3D game (play/, next/) and all its binaries (glb, png, webp, wasm, mp3, json live under those paths) are never handled by the worker:
-  // no caching, straight to the network.
-  if (/\/(play|next)(\/|$)/.test(url.pathname)) return;
+  // World chunk, the 3D game and its binaries, asset manifests: straight to the network.
+  if (isBypassed(url.pathname)) return;
 
   if (request.mode === "navigate") {
     // Network first, so returning visitors always get the latest page.
