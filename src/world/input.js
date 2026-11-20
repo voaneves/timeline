@@ -1,12 +1,14 @@
 // Input: keyboard (only while the stage has focus), dynamic touch joystick, tap/click.
 // The state object is read by the controller each fixed step.
-export function createInput(frame, stage, { onTap, onKey }) {
+export function createInput(frame, stage, { onTap, onKey, onHold, onDrag, onRelease }) {
   const s = {
     x: 0,
     z: 0,
     jumpHeld: false,
     jumpPressed: false,
     interactPressed: false,
+    interactHeld: false,
+    interactUp: false,
     downPressed: false,
     anyMove: false,
   };
@@ -41,7 +43,10 @@ export function createInput(frame, stage, { onTap, onKey }) {
       if (!s.jumpHeld) s.jumpPressed = true;
       s.jumpHeld = true;
     } else if (e.code === "KeyE" || e.code === "Enter") {
-      if (!e.repeat) s.interactPressed = true;
+      if (!e.repeat) {
+        s.interactPressed = true;
+        s.interactHeld = true;
+      }
     } else if (e.code === "Escape" || e.code === "KeyM" || e.code === "KeyH") {
       onKey(e.code);
     } else handled = false;
@@ -53,10 +58,16 @@ export function createInput(frame, stage, { onTap, onKey }) {
       keys.delete(dir);
       recompute();
     } else if (e.code === "Space") s.jumpHeld = false;
+    else if (e.code === "KeyE" || e.code === "Enter") {
+      s.interactHeld = false;
+      s.interactUp = true;
+    }
   };
   const onBlur = () => {
     keys.clear();
     s.jumpHeld = false;
+    if (s.interactHeld) s.interactUp = true;
+    s.interactHeld = false;
     recompute();
   };
   frame.addEventListener("keydown", onKeyDown);
@@ -76,6 +87,7 @@ export function createInput(frame, stage, { onTap, onKey }) {
   stage.appendChild(joy);
   const knob = joy.firstChild;
   let ptr = null;
+  let holdT = 0;
   const RADIUS = 56;
 
   const onDown = (e) => {
@@ -92,12 +104,27 @@ export function createInput(frame, stage, { onTap, onKey }) {
       rect,
     };
     frame.setPointerCapture(e.pointerId);
+    // Long press (500 ms, no movement): grab, drag and release for the ribbon pull.
+    clearTimeout(holdT);
+    if (onHold) {
+      const mine = ptr;
+      holdT = setTimeout(() => {
+        if (ptr === mine && !mine.moved && onHold(mine.sx, mine.sy)) mine.holding = true;
+      }, 500);
+    }
   };
   const onMove = (e) => {
     if (!ptr || e.pointerId !== ptr.id) return;
     const dx = e.clientX - ptr.sx;
     const dy = e.clientY - ptr.sy;
-    if (Math.hypot(dx, dy) > 10) ptr.moved = true;
+    if (ptr.holding) {
+      if (onDrag) onDrag(dx, dy);
+      return;
+    }
+    if (Math.hypot(dx, dy) > 10) {
+      ptr.moved = true;
+      clearTimeout(holdT);
+    }
     if (ptr.joystick && ptr.moved) {
       joy.hidden = false;
       joy.style.left = ptr.sx - ptr.rect.left + "px";
@@ -114,6 +141,12 @@ export function createInput(frame, stage, { onTap, onKey }) {
   };
   const onUp = (e) => {
     if (!ptr || e.pointerId !== ptr.id) return;
+    clearTimeout(holdT);
+    if (ptr.holding) {
+      ptr = null;
+      if (onRelease) onRelease();
+      return;
+    }
     const wasTap = !ptr.moved && performance.now() - ptr.t < 350;
     if (ptr.joystick && ptr.moved) {
       s.x = 0;
@@ -160,6 +193,7 @@ export function createInput(frame, stage, { onTap, onKey }) {
       frame.removeEventListener("pointermove", onMove);
       frame.removeEventListener("pointerup", onUp);
       frame.removeEventListener("pointercancel", onUp);
+      clearTimeout(holdT);
       ac.abort();
       joy.remove();
     },

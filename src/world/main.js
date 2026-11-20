@@ -25,7 +25,7 @@ import {
 } from "three";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
 import { mat, uniforms, cloudBlobs } from "./materials.js";
-import { createTerrain, createCloudsRound, rand, vnoise } from "./terrain.js";
+import { createTerrain, createCloudsRound, rand, vnoise, ZONE_LOOK } from "./terrain.js";
 import { createCrates } from "./crates.js";
 import { createLife } from "./life.js";
 import { createPost } from "./post.js";
@@ -39,6 +39,7 @@ import { createInput } from "./input.js";
 import { createFollowCamera } from "./camera.js";
 import { createUI } from "./ui.js";
 import { createSfx } from "./sfx.js";
+import { createRibbon } from "./ribbon.js";
 import { createBody, stepBody, boxAt, STEP } from "./physics.js";
 import { Spring, createTweens, clamp, easeOut, easeInOut } from "./springs.js";
 
@@ -50,19 +51,34 @@ const isDark = () => {
   if (forced) return forced === "dark";
   return window.matchMedia("(prefers-color-scheme: dark)").matches;
 };
-const skyTexture = (top, bottom) => {
+// One small canvas texture, repainted when the zone (or theme) changes the gradient.
+const SKY_Z = [
+  ["#82bdfa", "#ffdfb0"], // crossroads
+  ["#a3c6f0", "#ffe3a6"], // zone 1: warm morning
+  ["#6fb6e6", "#d6f0e0"], // zone 2: fresh green day
+  ["#8ea4e2", "#ffb98a"], // zone 3: amber afternoon
+  ["#4aa6d6", "#c6eef0"], // zone 4: cool teal
+  ["#8f9be6", "#ffc9b8"], // zone 5: rose dusk
+  ["#82bdfa", "#ffdfb0"], // plaza and contact
+];
+const makeSky = () => {
   const canvas = document.createElement("canvas");
   canvas.width = 2;
   canvas.height = 256;
   const ctx = canvas.getContext("2d");
-  const gradient = ctx.createLinearGradient(0, 0, 0, 256);
-  gradient.addColorStop(0, top);
-  gradient.addColorStop(1, bottom);
-  ctx.fillStyle = gradient;
-  ctx.fillRect(0, 0, 2, 256);
-  const texture = new CanvasTexture(canvas);
-  texture.colorSpace = SRGBColorSpace;
-  return texture;
+  const tex = new CanvasTexture(canvas);
+  tex.colorSpace = SRGBColorSpace;
+  return {
+    tex,
+    paint(top, bottom) {
+      const gradient = ctx.createLinearGradient(0, 0, 0, 256);
+      gradient.addColorStop(0, top.getStyle());
+      gradient.addColorStop(1, bottom.getStyle());
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, 2, 256);
+      tex.needsUpdate = true;
+    },
+  };
 };
 
 const roadZ = (x) => {
@@ -85,11 +101,35 @@ export async function start({ container, onFallback, onExit }) {
   const sfx = createSfx(true);
 
   // ---- Sky, fog, lights --------------------------------------------------
+  const sky = makeSky();
+  const skyCur = [new Color(), new Color()];
+  const skyTgt = [new Color(), new Color()];
+  let skyZone = 0;
+  const retarget = () => {
+    const pal = isDark() ? SKY.dark : SKY_Z[Math.min(skyZone, SKY_Z.length - 1)];
+    skyTgt[0].set(pal[0]);
+    skyTgt[1].set(pal[1]);
+  };
   const applySky = () => {
-    const [top, bottom] = SKY[isDark() ? "dark" : "light"];
-    if (scene.background && scene.background.dispose) scene.background.dispose();
-    scene.background = skyTexture(top, bottom);
-    scene.fog = new FogExp2(new Color(bottom), 0.004);
+    retarget();
+    skyCur[0].copy(skyTgt[0]);
+    skyCur[1].copy(skyTgt[1]);
+    sky.paint(skyCur[0], skyCur[1]);
+    scene.background = sky.tex;
+    if (scene.fog) scene.fog.color.copy(skyCur[1]);
+    else scene.fog = new FogExp2(skyCur[1].clone(), 0.004);
+  };
+  // Zone sky: the gradient and fog ease toward the current zone's palette.
+  const stepSky = (dt) => {
+    let diff = 0;
+    for (let i = 0; i < 2; i++) {
+      diff += Math.abs(skyCur[i].r - skyTgt[i].r) + Math.abs(skyCur[i].g - skyTgt[i].g) + Math.abs(skyCur[i].b - skyTgt[i].b);
+      skyCur[i].lerp(skyTgt[i], reduced ? 1 : Math.min(1, dt * 0.9));
+    }
+    if (diff > 0.0008) {
+      sky.paint(skyCur[0], skyCur[1]);
+      scene.fog.color.copy(skyCur[1]);
+    }
   };
   applySky();
   const themeObserver = new MutationObserver(applySky);
@@ -98,7 +138,7 @@ export async function start({ container, onFallback, onExit }) {
   scheme.addEventListener("change", applySky);
 
   // Golden hour: low warm sun (25 degrees up, from the right and slightly ahead) and a cool blue fill.
-  scene.add(new HemisphereLight(0x9ec3ff, 0x6b5a48, 0.5));
+  scene.add(new HemisphereLight(0x9ec3ff, 0x6b5a48, 0.3));
   const sun = new DirectionalLight(0xffd9a0, 3.0);
   const SUN_OFF = new Vector3(24.5, 11.8, -4.2);
   const SUN_DIR = SUN_OFF.clone().normalize();
@@ -127,18 +167,20 @@ export async function start({ container, onFallback, onExit }) {
   statics.groundNoise = (x, z) => 1 + (vnoise(x * 0.11 + 3.1, z * 0.11 - 1.7) - 0.5) * 0.12; // +-6% on the beige tiles
   const labels = []; // label atlas texts
   const labelSpots = []; // [index, x, y, z]
-  const addLabel = (text, x, y, z, w = 3) => {
+  const addLabel = (text, x, y, z, w = 3, far = false) => {
     labels.push(text);
-    labelSpots.push([labels.length - 1, x, y, z, w]);
+    labelSpots.push([labels.length - 1, x, y, z, w, far]);
   };
 
   // Eras along +x. Blocks float at y 3.2 over the winding road.
   let cx = 12;
   const zones = [{ x0: -100, name: "Cruzamento", info: "Cruzamento: Carreira, Projetos ou Contato" }];
   const blocks = [];
+  const eraX0s = [];
   const coinPos = [];
   content.eras.forEach((era, ei) => {
     const x0 = cx;
+    eraX0s.push(x0);
     zones.push({
       x0: x0 - 4,
       name: `Zona ${era.n}: ${era.name}`,
@@ -172,7 +214,7 @@ export async function start({ container, onFallback, onExit }) {
     const era = Math.hypot(Math.max(0, 4 - x, x - (xp - 4)), z - roadZ(x)) - 1.9;
     return Math.min(era, Math.hypot(x, z - 1) - 6.4, Math.hypot(x - (xp + 3), z) - 7.5);
   };
-  const T = createTerrain(END, pathDist);
+  const T = createTerrain(END, pathDist, [...eraX0s, plazaStart]);
   scene.add(T.terrain, T.water);
   statics.add(new CylinderGeometry(6.4, 6.4, 0.06, 40), 0xe3d3a4, 0, 0.02, 1, 0, false); // crossroads pad
   statics.add(new CylinderGeometry(7.5, 7.5, 0.06, 40), 0xe3d3a4, xp + 3, 0.02, 0, 0, false); // plaza pad
@@ -193,6 +235,8 @@ export async function start({ container, onFallback, onExit }) {
   scene.add(grassA);
   scene.add(T.makeGrass(rig.coarse ? 700 : 1500, (x, z) => keepClear(x, z), true));
   scene.add(T.makeFlowers(rig.coarse ? 110 : 240, keepClear));
+  const bushes = T.makeBushes(rig.coarse ? 60 : 130, (x, z) => keepClear(x, z) || (Math.abs(z) < 8 && x > -10 && x < END + 4));
+  scene.add(...bushes.meshes);
   // Zone dressing: campus arch (2), bottles on a conveyor (3), bar-chart pillars (4), old monitor (1).
   const era = (n) => blocks.find((b) => b.en.era === n);
   const e1 = era(1);
@@ -202,11 +246,6 @@ export async function start({ container, onFallback, onExit }) {
   }
   const e2 = era(2);
   if (e2) {
-    const ax = e2.x - 2.5;
-    const az = roadZ(ax);
-    statics.box(0xb5562c, ax, 0, az - 2.6, 0.6, 4.6, 0.6);
-    statics.box(0xb5562c, ax, 0, az + 2.0, 0.6, 4.6, 0.6);
-    statics.box(0xb5562c, ax, 4.4, az - 2.8, 0.6, 0.6, 5.6);
     for (let i = 0; i < 4; i++) {
       const p = new CylinderGeometry(0.16, 0.16, 1.4 + i * 0.5, 10);
       statics.add(p, 0x2e9d4a, e2.x + 4 + i * 0.5, (1.4 + i * 0.5) / 2, roadZ(e2.x + 4) - 4.5 - (i % 2) * 0.5);
@@ -229,6 +268,27 @@ export async function start({ container, onFallback, onExit }) {
       boxes.push(boxAt(bx, h / 2, bz, 1.4, h, 1.4));
     });
   }
+
+  // Gateways: an arch over the road at every zone boundary, with the zone name on a hanging banner.
+  const gateSpots = [];
+  const gate = (x, name, accent) => {
+    const z = roadZ(x);
+    for (const s of [-1, 1]) {
+      const pz = z + s * 3.3;
+      statics.box(0xe9ddc0, x - 0.3, 0, pz - 0.3, 0.6, 4.6, 0.6);
+      statics.box(accent, x - 0.46, 3.9, pz - 0.46, 0.92, 0.5, 0.92);
+      boxes.push(boxAt(x, 2.3, pz, 0.7, 4.6, 0.7));
+      gateSpots.push({ x, z: pz, rx: 1.15 });
+    }
+    statics.box(0xf4ead4, x - 0.3, 4.4, z - 3.45, 0.6, 0.5, 6.9);
+    statics.box(accent, x - 0.34, 4.9, z - 3.6, 0.68, 0.16, 7.2);
+    statics.box(0x14110f, x - 1.9, 5.45, z + 3.85, 3.8, 0.1, 0.1);
+    statics.box(0x14110f, x - 1.6, 4.95, z + 3.85, 0.05, 0.5, 0.05);
+    statics.box(0x14110f, x + 1.6, 4.95, z + 3.85, 0.05, 0.5, 0.05);
+    addLabel(name, x, 4.9, z + 3.92, 3.6, true);
+  };
+  eraX0s.forEach((x0, i) => gate(x0 - 1.5, `Zona ${content.eras[i].n}: ${content.eras[i].name}`, ZONE_LOOK[i + 1].pal[0]));
+  gate(plazaStart + 0.5, "Projetos", 0xf50000);
 
   // Crossroads signpost + warp pipes.
   statics.box(0x7a4a24, 5.2, 0, 2.4, 0.3, 2.2, 0.3);
@@ -259,7 +319,7 @@ export async function start({ container, onFallback, onExit }) {
       spring: new Spring(260, 9),
       hit: false,
       text: `Bloco ${b.en.label}: ${b.en.title}`,
-      hint: "E para abrir",
+      hint: "segure E para puxar a linha do tempo",
     };
     mesh.userData.it = it;
     boxes.push(boxAt(b.x, 3.2, b.z, 1.6, 1.6, 1.6, it));
@@ -401,7 +461,7 @@ export async function start({ container, onFallback, onExit }) {
   const labelGeo = mergeGeometries(labelGeos);
   const labelMesh = new Mesh(labelGeo, labelMat);
   labelMesh.renderOrder = 2;
-  const labelFade = labelSpots.map(([i, x, y, z, w]) => ({ x, y, z, w, a: 1, want: 1, ndc: [0, 0, 0, 0, 0] }));
+  const labelFade = labelSpots.map(([i, x, y, z, w, far]) => ({ x, y, z, w, far, a: 1, want: 1, ndc: [0, 0, 0, 0, 0] }));
   const lv = new Vector3();
   // Screen-space rect (NDC) of a world-space plate or the avatar: [x0, y0, x1, y1, camera distance].
   const rectOf = (cx, cy, cz, hw, hy0, hy1, out) => {
@@ -432,7 +492,7 @@ export async function start({ container, onFallback, onExit }) {
     labelFade.forEach((l, j) => {
       const d = Math.hypot(l.x - rx, l.z - rz, (l.y - ry - 1) * 0.5);
       rectOf(l.x, l.y, l.z, l.w / 2, -l.w / 8, l.w / 8, l.ndc);
-      l.want = 1 - clamp((d - 7.5) / 1.5, 0, 1); // distance cull (> ~9 units)
+      l.want = 1 - clamp((d - (l.far ? 15 : 7.5)) / 1.5, 0, 1); // distance cull (> ~9 units, gateway signs ~16)
       if (l.want > 0 && overlap(l.ndc, avRect, 0.01) && l.ndc[4] > avRect[4]) l.want = Math.min(l.want, 0.1); // avatar in front
       order.push([d, j]);
     });
@@ -472,7 +532,8 @@ export async function start({ container, onFallback, onExit }) {
     { x: mx, z: 0, rx: 1.0 },
     { x: 5.2, z: 2.5, rx: 1.05 },
     ...(e1 ? [{ x: e1.x - 4.55, z: e1.z + 4.5, rx: 1.5, rz: 1.3 }] : []),
-    ...(e2 ? [{ x: e2.x - 2.5, z: roadZ(e2.x - 2.5) - 2.3, rx: 0.95 }, { x: e2.x - 2.5, z: roadZ(e2.x - 2.5) + 2.3, rx: 0.95 }] : []),
+    ...gateSpots,
+    ...bushes.spots,
     ...(e3 ? [{ x: e3.x + 0.5, z: roadZ(e3.x) + 3.6, rx: 4.6, rz: 1.5 }] : []),
     ...(e4 ? [1.2, 2.0, 2.8, 1.8].map((h, i) => ({ x: e4.x - 1.2 + i * 1.7, z: roadZ(e4.x - 1.2 + i * 1.7) + 4.6, rx: 1.35 })) : []),
     { x: sx + 1.1, z: 0, rx: 2.0, rz: 3.2 },
@@ -593,9 +654,17 @@ export async function start({ container, onFallback, onExit }) {
 
   const input = createInput(container, stage, {
     onTap: (cx, cy) => handleTap(cx, cy),
+    onHold: () => (state === "play" && nearIt && nearIt.kind === "block" ? startPull(nearIt, "ptr") : false),
+    onDrag: (dx, dy) => {
+      if (pull) pull.drag = Math.hypot(dx, dy) / 70;
+    },
+    onRelease: () => {
+      if (pull) pull.rel = true;
+    },
     onKey: (code) => {
       if (code === "Escape") {
-        if (ui.isCardOpen()) ui.closeCard();
+        if (pull) releasePull(true);
+        else if (ui.isCardOpen()) ui.closeCard();
         else if (ui.isHelpOpen()) ui.setHelp(false);
         else if (onExit) onExit();
       } else if (code === "KeyM") toggleMute();
@@ -732,7 +801,7 @@ export async function start({ container, onFallback, onExit }) {
     while (state !== "play") await tweens.wait(0.25);
     state = "card";
     secretsFound.add("crate" + k);
-    sfx.play("flag");
+    sfx.play("secret");
     for (let i = 0; i < 3; i++) setTimeout(() => sfx.play("coin", 1 + i * 0.15), i * 110);
     coinCount += 3;
     ui.setCoins(coinCount);
@@ -817,7 +886,7 @@ export async function start({ container, onFallback, onExit }) {
     cam.punch(8);
     cam.roll(0);
     if (!reduced) tweens.tween(0.6, (t) => post.setInk(t)).then(() => post.setInk(0));
-    sfx.play("land");
+    sfx.play("warp");
     particles.emit(body.x, body.y + 1.6, body.z, 70, { color: 0xf50000, speed: 5, up: 7, size: 0.2, life: 1.6, gravity: 6 });
     particles.emit(body.x, body.y + 1.6, body.z, 30, { color: 0xf4ead4, speed: 4, up: 6, size: 0.16, life: 1.6, gravity: 6 });
     await wipe(false);
@@ -849,6 +918,113 @@ export async function start({ container, onFallback, onExit }) {
     await waitClose();
     flag.position.y = top;
     state = "play";
+  }
+
+  // ---- Signature mechanic: pull the timeline ----------------------------------------------------
+  // Near a block, hold E (or long-press) to grab: a red ink ribbon stretches along the road, the year
+  // draws itself on it and the courier rides the end. Releasing snaps it back on a spring and opens the
+  // block's card. Keyboard alternative: press E once to grab, press E again to release.
+  const ribbon = createRibbon();
+  scene.add(ribbon.mesh);
+  const PULL_MAX = 6.5;
+  let pull = null;
+  function startPull(it, mode) {
+    if (state !== "play" || pull) return false;
+    state = "pull";
+    tap = null;
+    const b = blocks.find((q) => q.en.id === it.id);
+    const ang = Math.atan2(roadZ(it.x + 3) - roadZ(it.x), 3);
+    pull = { it, mode, t: 0, L: 0, v: 0, vL: 0, maxL: 0, target: 0, drag: 0, toggle: false, phase: reduced ? "hold" : "stretch", dx: Math.cos(ang), dz: Math.sin(ang), x0: body.x, z0: body.z, rel: false, cancel: false, full: 0, sn: 0 };
+    ribbon.open(b ? b.en.year : "", it.x, it.z, ang);
+    body.vx = body.vz = 0;
+    inp.interactUp = false;
+    sfx.play("coin", 0.7);
+    cam.punch(2);
+    ui.announce(`Puxando a linha do tempo: ${it.text}. Solte para abrir o cartão.`, 0);
+    if (reduced) {
+      pull.L = pull.maxL = 4.2;
+      applyPull(pull);
+    }
+    return true;
+  }
+  function releasePull(cancel) {
+    if (!pull || pull.phase === "snap") return;
+    pull.cancel = !!cancel;
+    pull.phase = "snap";
+    pull.v = -pull.L * 7;
+    sfx.play("bump", 0.9);
+    if (!reduced) {
+      cam.kick(0.25);
+      cam.punch(3);
+    }
+  }
+  function applyPull(p) {
+    const k = clamp(p.maxL / 1.4, 0, 1);
+    body.x = p.x0 + (p.it.x + p.dx * p.L - p.x0) * k;
+    body.z = p.z0 + (p.it.z + p.dz * p.L - p.z0) * k;
+    body.px = body.x;
+    body.pz = body.z;
+    const tension = reduced ? 0 : clamp(Math.abs(p.target - p.L) * 0.7 + (p.phase === "snap" ? Math.abs(p.v) * 0.04 : 0), 0, 1);
+    ribbon.set(Math.max(0.05, p.L), tension, Math.max(0, p.L));
+  }
+  function finishPull() {
+    const p = pull;
+    pull = null;
+    ribbon.close();
+    body.x = body.px = p.it.x;
+    body.z = body.pz = p.it.z;
+    body.vx = body.vz = 0;
+    p.it.pulled = true;
+    particles.emit(p.it.x, 0.3, p.it.z, 24, { color: 0xf50000, speed: 4, up: 4, size: 0.18, life: 0.9, gravity: 10 });
+    state = "play";
+    if (!p.cancel) {
+      avatar.jump();
+      bump(p.it);
+    }
+  }
+  function updatePull(dt) {
+    const p = pull;
+    p.t += dt;
+    const prev = p.L;
+    if (p.phase === "stretch") {
+      if (p.mode === "key") {
+        if (!inp.interactHeld && !p.toggle) {
+          if (p.t < 0.3) p.toggle = true;
+          else p.rel = true;
+        } else if (p.toggle && inp.interactPressed && p.t > 0.2) p.rel = true;
+        if (p.toggle && p.L >= PULL_MAX - 0.05) {
+          p.full += dt;
+          if (p.full > 1.1) p.rel = true; // a single tap never leaves the pull hanging
+        }
+      }
+      if (p.t > 12) p.rel = true;
+      if (p.rel) releasePull(false);
+      else {
+        p.target = Math.min(PULL_MAX, 0.8 + p.t * (p.mode === "ptr" ? 2.4 : 4.5) + p.drag);
+        p.L += (p.target - p.L) * Math.min(1, dt * 9);
+        p.maxL = Math.max(p.maxL, p.L);
+      }
+    } else if (p.phase === "hold") {
+      if (p.t > 0.8) releasePull(false);
+    }
+    if (p.phase === "snap") {
+      if (reduced) p.L = 0;
+      else {
+        p.sn += dt;
+        const n = Math.ceil(dt / 0.004) || 1;
+        for (let i = 0; i < n; i++) {
+          p.v += (-520 * p.L - 15 * p.v) * (dt / n);
+          p.L += p.v * (dt / n);
+        }
+      }
+      p.target = 0;
+      if (reduced || (p.sn > 0.15 && Math.abs(p.L) < 0.06 && Math.abs(p.v) < 0.8) || p.sn > 0.7) {
+        finishPull();
+        return;
+      }
+    }
+    p.vL = dt > 0 ? (p.L - prev) / dt : 0;
+    applyPull(p);
   }
 
   // Tap / click: raycast against interactables, otherwise walk to the ground point.
@@ -961,6 +1137,7 @@ export async function start({ container, onFallback, onExit }) {
   let sparkleT = 0;
   const sunV = new Vector3();
   let freeze = 0;
+  let gt = 0;
   let heroPose = null;
 
   // ---- Frame ---------------------------------------------------------------------
@@ -973,9 +1150,10 @@ export async function start({ container, onFallback, onExit }) {
       dt = 0;
     }
     time = t;
-    uniforms.uTime.value = reduced ? 0 : t;
+    gt += dt; // game clock: stops during hit-stop
+    uniforms.uTime.value = reduced ? 0 : gt;
     tweens.update(dt);
-    life.update(dt, t, body.x, body.z);
+    life.update(dt, gt, body.x, body.z);
     if (!confetti && cam.introDone()) {
       confetti = true;
       sfx.play("flag", 1);
@@ -1016,12 +1194,8 @@ export async function start({ container, onFallback, onExit }) {
     }
     if (state === "play" && nearIt) {
       if (inp.interactPressed || (inp.downPressed && nearIt.kind !== "block")) {
-        if (nearIt.kind === "block") {
-          body.vy = 15.2;
-          buffer = 0;
-          avatar.jump();
-          bump(nearIt);
-        } else enterPipe(nearIt);
+        if (nearIt.kind === "block") startPull(nearIt, "key");
+        else enterPipe(nearIt);
       }
       if (time - toastShown > 0.2) {
         ui.showToast(`${nearIt.text} (${nearIt.hint})`);
@@ -1036,7 +1210,9 @@ export async function start({ container, onFallback, onExit }) {
       ui.showToast("");
       toastShown = 0;
     }
+    if (pull) updatePull(dt);
     inp.interactPressed = false;
+    inp.interactUp = false;
     inp.downPressed = false;
 
     // Mast grab.
@@ -1047,7 +1223,7 @@ export async function start({ container, onFallback, onExit }) {
     }
 
     // Coins.
-    coins.update(reduced ? 0 : t);
+    coins.update(reduced ? 0 : gt);
     for (let i = 0; i < coins.positions.length; i++) {
       if (!coins.alive[i]) continue;
       const c = coins.positions[i];
@@ -1059,7 +1235,7 @@ export async function start({ container, onFallback, onExit }) {
         particles.emit(c.x, c.y, c.z, 8, { color: 0xf2c230, speed: 2.2, up: 4, size: 0.14, life: 0.6, gravity: 10 });
       }
     }
-    clouds.update(t);
+    clouds.update(gt);
 
     // Block springs.
     for (const it of interactables) {
@@ -1083,8 +1259,8 @@ export async function start({ container, onFallback, onExit }) {
       stepDust = 0.16;
     }
     avatar.update(dt, {
-      vx: state === "play" ? body.vx : 0,
-      vz: state === "play" ? body.vz : 0,
+      vx: state === "play" ? body.vx : pull ? pull.dx * clamp(pull.vL, -7, 7) : 0,
+      vz: state === "play" ? body.vz : pull ? pull.dz * clamp(pull.vL, -7, 7) : 0,
       vy: body.vy,
       grounded: state !== "play" || body.grounded,
       look: nearIt ? Math.atan2(nearIt.x - rx, nearIt.z - rz) : null,
@@ -1099,8 +1275,14 @@ export async function start({ container, onFallback, onExit }) {
       ui.setZone(zones[zi].name);
       ui.announce(zones[zi].info, 0);
     }
+    const tz = T.zoneAt(rx);
+    if (tz !== skyZone) {
+      skyZone = tz;
+      retarget();
+    }
+    stepSky(dt);
     const plaza = zones[zi].name === "Projetos";
-    const hint = plaza ? 19 : zones[zi].name === "Contato" ? 17 : zi === 0 ? 16.5 : 15; // crossroads: ~10% pull-back
+    const hint = (plaza ? 19 : zones[zi].name === "Contato" ? 17 : zi === 0 ? 16.5 : 15) + (pull ? 2.5 : 0); // crossroads: ~10% pull-back
     if (heroPose) {
       camera.position.set(...heroPose.pos);
       camera.lookAt(...heroPose.look);
@@ -1151,11 +1333,11 @@ export async function start({ container, onFallback, onExit }) {
 
     if (!helped && time > 0.5) {
       helped = true;
-      ui.showToast("Use ←→ ↑↓ / WASD e Espaço para pular. Com pressa? Botão Contato.", 7000);
+      ui.showToast("Setas/WASD e Espaço. Perto de um bloco, segure E (ou toque e segure) para puxar a linha do tempo.", 7000);
     }
   };
   // Post chain, card blur and adaptive quality (0 full, 1 no bloom, 2 no post/shadows, dpr 1).
-  const post = createPost(rig.renderer, scene, camera, container.clientWidth || 800, container.clientHeight || 600);
+  const post = createPost(rig.renderer, scene, camera, container.clientWidth || 800, container.clientHeight || 600, rig.coarse);
   rig.onResize((w, h) => post.setSize(w, h));
   const noAdapt = location.search.includes("noadapt");
   let level = 0;
@@ -1200,7 +1382,7 @@ export async function start({ container, onFallback, onExit }) {
     begin,
     info: rig.renderer.info,
     xp,
-    debug: { setWipe: (v) => post.setWipe(v), setInk: (v) => post.setInk(v), roll: (v) => cam.roll(v), begunAt: () => begunAt, introDone: () => cam.introDone(), cloudBlobs: () => cloudBlobs(uniforms.uTime.value, uniforms.uFocus.value), hero: (pose) => { heroPose = pose; confetti = true; }, measure: () => { const i = rig.renderer.info; i.reset(); rig.renderer.render(scene, camera); const all = { calls: i.render.calls, tris: i.render.triangles }; const sm = rig.renderer.shadowMap; const was = sm.autoUpdate; sm.autoUpdate = false; i.reset(); rig.renderer.render(scene, camera); sm.autoUpdate = was; return { total: all, mainPass: { calls: i.render.calls, tris: i.render.triangles } }; }, quality: () => ({ level, ema }), setLevel, found, secretsFound, popCoin, body, crates, interactables, input: inp, blocks, coins, getState: () => state, warp, coinTotal: totalCoins, sfx, particles },
+    debug: { hitstop: (s) => { freeze = s; }, rollDeg: () => (Math.asin(new Vector3(1, 0, 0).applyQuaternion(camera.quaternion).y) * 180) / Math.PI, uTime: () => uniforms.uTime.value, pullState: () => (pull ? { L: pull.L, phase: pull.phase, mode: pull.mode } : null), startPull, zoneAt: T.zoneAt, sky: () => skyCur.map((c) => c.getHexString()), setWipe: (v) => post.setWipe(v), setInk: (v) => post.setInk(v), roll: (v) => cam.roll(v), begunAt: () => begunAt, introDone: () => cam.introDone(), cloudBlobs: () => cloudBlobs(uniforms.uTime.value, uniforms.uFocus.value), hero: (pose) => { heroPose = pose; confetti = true; }, measure: () => { const i = rig.renderer.info; i.reset(); rig.renderer.render(scene, camera); const all = { calls: i.render.calls, tris: i.render.triangles }; const sm = rig.renderer.shadowMap; const was = sm.autoUpdate; sm.autoUpdate = false; i.reset(); rig.renderer.render(scene, camera); sm.autoUpdate = was; return { total: all, mainPass: { calls: i.render.calls, tris: i.render.triangles } }; }, quality: () => ({ level, ema }), setLevel, found, secretsFound, popCoin, body, crates, interactables, input: inp, blocks, coins, getState: () => state, warp, coinTotal: totalCoins, sfx, particles },
     stop() {
       themeObserver.disconnect();
       scheme.removeEventListener("change", applySky);

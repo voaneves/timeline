@@ -76,10 +76,11 @@ export function cellUV(geometry, i) {
   return geometry;
 }
 
-// Label atlas: 512x512, 2 columns x 8 rows of 256x64 plates (ink on cream, brand contrast).
+// Label atlas: 512x1024, 2 columns x 16 rows of 256x64 plates (ink on cream, brand contrast).
 export function makeLabelAtlas(labels) {
   const c = document.createElement("canvas");
-  c.width = c.height = 512;
+  c.width = 512;
+  c.height = 1024;
   const g = c.getContext("2d");
   labels.forEach((text, i) => {
     const x = (i % 2) * 256;
@@ -106,10 +107,10 @@ export function labelPlane(i, w = 3.2) {
   const g = new PlaneGeometry(w, w / 4);
   const u0 = (i % 2) / 2;
   const row = Math.floor(i / 2);
-  const vTop = 1 - row / 8;
+  const vTop = 1 - row / 16;
   const uv = g.attributes.uv;
   for (let k = 0; k < uv.count; k++) {
-    uv.setXY(k, u0 + uv.getX(k) / 2, vTop - (1 - uv.getY(k)) / 8);
+    uv.setXY(k, u0 + uv.getX(k) / 2, vTop - (1 - uv.getY(k)) / 16);
   }
   return g;
 }

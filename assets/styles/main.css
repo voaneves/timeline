@@ -521,6 +521,35 @@ html.playing body {
   font-weight: 600;
   font-size: 0.9375rem;
 }
+.ts-flag {
+  position: absolute;
+  top: -1.9rem;
+  right: 1.6rem;
+  width: 3.4rem;
+  height: 2.2rem;
+  border-left: 3px solid var(--edge);
+  pointer-events: none;
+}
+.ts-flag i {
+  position: absolute;
+  top: 0.05rem;
+  left: 0;
+  width: 3.2rem;
+  height: 1.3rem;
+  background: var(--signal);
+  clip-path: polygon(0 0, 100% 50%, 0 100%);
+  transform-origin: 0 50%;
+  animation: ts-flutter 1.9s ease-in-out infinite alternate;
+  will-change: transform;
+}
+@keyframes ts-flutter {
+  from {
+    transform: rotate(-5deg) skewY(-7deg) scaleX(1);
+  }
+  to {
+    transform: rotate(4deg) skewY(6deg) scaleX(0.9);
+  }
+}
 @keyframes ts-pulse {
   50% {
     transform: scale(1.05);
@@ -852,6 +881,16 @@ html.playing body {
     margin-top: 0.3rem;
   }
 }
+@media (min-width: 56.25rem) and (min-aspect-ratio: 4/3) {
+  .title-screen {
+    justify-content: flex-start;
+    padding-left: clamp(1.5rem, 6vw, 6rem);
+  }
+  .ts-card {
+    width: min(31vw, 32rem);
+    max-width: none;
+  }
+}
 @media (prefers-reduced-motion: reduce) {
   .fade,
   .title-screen,
@@ -860,6 +899,7 @@ html.playing body {
   }
   .ts-photo,
   .ts-start,
+  .ts-flag i,
   .ts-bar i {
     animation: none;
   }

@@ -8,10 +8,10 @@ import { ShaderPass } from "three/addons/postprocessing/ShaderPass.js";
 // Post chain: MSAA scene render -> bloom (signal-red emissives) -> tone map -> grade pass
 // (vignette, brand colour grade, blur used when a card is open).
 const GRADE = {
-  uniforms: { tDiffuse: { value: null }, uWipe: { value: 0 }, uBlur: { value: 0 }, uVig: { value: 0.5 }, uRes: { value: new Vector2(1, 1) }, uTint: { value: new Vector3(1, 1, 1) }, uSun: { value: new Vector2(0.8, 1.2) }, uRays: { value: 0 }, uInk: { value: 0 } },
+  uniforms: { tDiffuse: { value: null }, uWipe: { value: 0 }, uBlur: { value: 0 }, uVig: { value: 0.5 }, uRes: { value: new Vector2(1, 1) }, uTint: { value: new Vector3(1, 1, 1) }, uSun: { value: new Vector2(0.8, 1.2) }, uTaps: { value: 12 }, uRays: { value: 0 }, uInk: { value: 0 } },
   vertexShader: "varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }",
   fragmentShader: `
-    uniform sampler2D tDiffuse; uniform float uWipe; uniform float uBlur; uniform float uVig; uniform vec2 uRes; uniform vec3 uTint; uniform vec2 uSun; uniform float uRays; uniform float uInk; varying vec2 vUv;
+    uniform sampler2D tDiffuse; uniform float uWipe; uniform float uBlur; uniform float uVig; uniform vec2 uRes; uniform vec3 uTint; uniform vec2 uSun; uniform float uTaps; uniform float uRays; uniform float uInk; varying vec2 vUv;
     void main(){
       vec4 c = texture2D(tDiffuse, vUv);
       if (uBlur > 0.002) {
@@ -30,19 +30,20 @@ const GRADE = {
       vec3 col = c.rgb;
       // Subtle god rays: radial blur of the bright sky toward the sun's screen position (high tier only).
       if (uRays > 0.001) {
-        vec2 dir = (uSun - vUv) / 12.0;
+        vec2 dir = (uSun - vUv) / uTaps;
         vec2 suv = vUv;
         float acc = 0.0;
         float w = 1.0;
         for (int i = 0; i < 12; i++) {
+          if (float(i) >= uTaps) break;
           suv += dir;
           vec3 sc = texture2D(tDiffuse, suv).rgb;
           float lm = dot(sc, vec3(0.299, 0.587, 0.114));
           acc += smoothstep(0.62, 0.95, lm) * w;
-          w *= 0.9;
+          w *= pow(0.9, 12.0 / uTaps);
         }
         float own = dot(c.rgb, vec3(0.299, 0.587, 0.114));
-        col += vec3(1.0, 0.82, 0.52) * acc * 0.02 * uRays * (1.0 - smoothstep(0.5, 0.85, own)); // shafts over the ground, not the sky itself
+        col += vec3(1.0, 0.82, 0.52) * acc * 0.02 * (12.0 / uTaps) * uRays * (1.0 - smoothstep(0.5, 0.85, own)); // shafts over the ground, not the sky itself
       }
       col = (col - 0.5) * 1.07 + 0.5;
       col *= uTint;
@@ -87,19 +88,25 @@ const GRADE = {
     }`,
 };
 
-export function createPost(renderer, scene, camera, w, h) {
+export function createPost(renderer, scene, camera, w, h, coarse = false) {
   const dpr = renderer.getPixelRatio();
   const target = new WebGLRenderTarget(w * dpr, h * dpr, { type: HalfFloatType, samples: 4 });
   const composer = new EffectComposer(renderer, target);
   composer.setPixelRatio(dpr);
   composer.setSize(w, h);
   composer.addPass(new RenderPass(scene, camera));
-  const bloom = new UnrealBloomPass(new Vector2(w, h), 0.6, 0.5, 0.86);
+  // Coarse pointers (phones, tablets): bloom runs at half resolution and the god rays take half the taps.
+  const bloom = new UnrealBloomPass(new Vector2(coarse ? w / 2 : w, coarse ? h / 2 : h), 0.6, 0.5, 0.86);
+  if (coarse) {
+    const base = bloom.setSize.bind(bloom);
+    bloom.setSize = (bw, bh) => base(Math.max(1, bw >> 1), Math.max(1, bh >> 1));
+  }
   composer.addPass(bloom);
   composer.addPass(new OutputPass());
   const grade = new ShaderPass(GRADE);
   composer.addPass(grade);
   grade.uniforms.uRes.value.set(w * dpr, h * dpr);
+  if (coarse) grade.uniforms.uTaps.value = 6;
   return {
     composer,
     bloom,

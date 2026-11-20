@@ -40,7 +40,31 @@ export const vnoise = (x, z) => {
 };
 export const rand = (i, salt = 0) => hash(i * 1.37 + salt, i * 0.71 - salt);
 
-export function createTerrain(END, pathDist = null) {
+// Per-zone identity: ground tint, canopy palette and the tree mix (weights: round, cypress, umbrella, pine, rock).
+export const ZONE_LOOK = [
+  { tint: 0xe6d9a8, pal: [0x3fae5a, 0x57c46c, 0x2f8f4a], w: [0.3, 0.2, 0.12, 0.18, 0.2] },
+  { tint: 0xe0b860, pal: [0x8fbf3f, 0xb5d65a, 0x6f9f35], w: [0.6, 0.08, 0.1, 0.04, 0.18] },
+  { tint: 0x7fb58a, pal: [0x2c7a4a, 0x3f9a62, 0x1f5f3a], w: [0.03, 0.18, 0, 0.7, 0.09] },
+  { tint: 0xd69a6a, pal: [0xd9892b, 0xf0a63a, 0xb5562c], w: [0.2, 0, 0.62, 0, 0.18] },
+  { tint: 0x86c8c0, pal: [0x2f9d92, 0x4fbfb3, 0x1f7a73], w: [0.08, 0.62, 0, 0.12, 0.18] },
+  { tint: 0xe3a090, pal: [0xd9482b, 0xf06a3a, 0xa8341f], w: [0.3, 0.3, 0.25, 0.05, 0.1] },
+  { tint: 0xe6d9a8, pal: [0x3fae5a, 0x57c46c, 0x2f8f4a], w: [0.3, 0.2, 0.12, 0.18, 0.2] },
+];
+
+export function createTerrain(END, pathDist = null, zoneStarts = []) {
+  // zoneStarts: x where zones 1..n begin (era 1..4, then the plaza).
+  const zoneAt = (x) => {
+    let z = 0;
+    for (let i = 0; i < zoneStarts.length; i++) if (x >= zoneStarts[i] - 1.5) z = i + 1;
+    return z;
+  };
+  const zoneTintC = ZONE_LOOK.map((l) => new Color(l.tint));
+  const tmpT = new Color();
+  const zoneTint = (x) => {
+    tmpT.copy(zoneTintC[0]);
+    for (let i = 0; i < zoneStarts.length; i++) tmpT.lerp(zoneTintC[Math.min(i + 1, ZONE_LOOK.length - 1)], smooth(zoneStarts[i] - 3.5, zoneStarts[i] + 0.5, x));
+    return tmpT;
+  };
   const X0 = -34;
   const X1 = END + 30;
   const Z = 46;
@@ -106,6 +130,8 @@ export function createTerrain(END, pathDist = null) {
     const rim = smooth(8.0, 10.5, az) * (1 - smooth(12, 15.5, az)) * (1 - smooth(0, 8, outsideX));
     c.lerp(rimGreen, rim * 0.55);
     c.multiplyScalar(1 - rim * 0.1);
+    // Zone identity: each era tints the ground differently (ochre, cool green, clay, teal).
+    c.lerp(zoneTint(x), 0.32 * (1 - m * 0.55) * (1 - smooth(0.9, 1.0, island(x, z))));
     // AO: darker in dips and toward the water, a touch of noise.
     const ao = 0.82 + 0.18 * clamp(h / 3 + 0.5, 0, 1) - smooth(0.9, 1.0, island(x, z)) * 0.3;
     // High-frequency grain plus low-frequency (about 9 unit) value noise: +-6% across the beige.
@@ -130,22 +156,30 @@ export function createTerrain(END, pathDist = null) {
         uDeep: { value: new Color(0x1f8fb5) },
         uShallow: { value: new Color(0x7fe0d0) },
         uSky: { value: new Color(0xb4ecf2) },
+        uSunDir: { value: [0.88, 0.42, -0.15] },
       },
       vertexShader: `varying vec3 vW; void main(){ vec4 w = modelMatrix * vec4(position,1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`,
       fragmentShader: `
-        uniform float uTime; uniform vec3 uC; uniform vec3 uDeep; uniform vec3 uShallow; uniform vec3 uSky;
+        uniform float uTime; uniform vec3 uC; uniform vec3 uDeep; uniform vec3 uShallow; uniform vec3 uSky; uniform vec3 uSunDir;
         varying vec3 vW;
         void main(){
           float d = length(vec2((vW.x - uC.x) / uC.y, vW.z / uC.z));
           float shore = clamp((d - 0.86) / 0.5, 0.0, 1.0);
           float wave = sin(vW.x * 0.9 + uTime * 1.3) * sin(vW.z * 0.8 - uTime * 1.1) * 0.5 + 0.5;
           vec3 base = mix(uShallow, uDeep, smoothstep(0.0, 0.55, shore));
+          base = mix(base, uDeep * 0.62, smoothstep(0.5, 1.0, shore)); // depth gradient: shallow turquoise to deep teal
           base += wave * 0.05;
           float edge = 0.86 + 0.02 * sin(vW.x * 0.35 + uTime * 0.9) + 0.012 * sin(vW.z * 0.6 + uTime * 1.7);
           float foam = smoothstep(0.022, 0.0, abs(d - edge - 0.045 - sin(uTime * 0.8) * 0.006));
           vec3 V = normalize(cameraPosition - vW);
           float fres = pow(1.0 - clamp(V.y, 0.0, 1.0), 3.0);
-          vec3 col = mix(base, uSky, fres * 0.5) + foam * 0.9;
+          // Scrolling foam lines: bands that travel toward the shore and break up with noise.
+          float ph = d * 190.0 - uTime * 1.1 + sin(vW.x * 0.21 + uTime * 0.3) * 1.6 + sin(vW.z * 0.33) * 1.1;
+          float lines = smoothstep(0.86, 0.97, sin(ph)) * (1.0 - smoothstep(0.0, 0.55, shore)) * smoothstep(0.0, 0.08, d - 0.86);
+          // Sun glint: a tight specular on a wobbling normal.
+          vec3 nrm = normalize(vec3(sin(vW.x * 1.7 + uTime * 1.4) * 0.12 + sin(vW.z * 2.3 - uTime) * 0.08, 1.0, cos(vW.z * 1.9 + uTime * 1.2) * 0.12));
+          float glint = pow(max(dot(reflect(-normalize(uSunDir), nrm), V), 0.0), 90.0);
+          vec3 col = mix(base, uSky, fres * 0.5) + foam * 0.9 + lines * 0.55 + vec3(1.0, 0.9, 0.65) * glint * 1.4;
           gl_FragColor = vec4(col, 0.94);
           #include <tonemapping_fragment>
           #include <colorspace_fragment>
@@ -165,25 +199,92 @@ export function createTerrain(END, pathDist = null) {
     const o = new Object3D();
     const cc = new Color();
     let n = 0;
-    for (let i = 0; n < count && i < count * 4; i++) {
+    // Blades come in clumps of 5-9 around a centre, each clump with its own tint.
+    for (let i = 0; n < count && i < count * 2; i++) {
       // rimBand: a denser, darker strip of blades along both edges of the cream play area.
       const x = rimBand ? 4 + rand(i, 1) * (END - 2) : X0 + 6 + rand(i, 1) * (W - 12);
       const z = rimBand ? (rand(i, 9) < 0.5 ? -1 : 1) * (8.4 + rand(i, 2) * 3.6) : (rand(i, 2) - 0.5) * 2 * 30;
       if (avoid(x, z)) continue;
       const h = heightAt(x, z);
       if (h < -0.05) continue;
-      o.position.set(x, h - 0.02, z);
-      o.rotation.set(0, rand(i, 3) * 6.28, 0);
-      const s = 0.55 + rand(i, 4) * 0.7;
-      o.scale.set(s, s * (0.8 + rand(i, 5) * 0.6), s);
-      o.updateMatrix();
-      mesh.setMatrixAt(n, o.matrix);
-      cc.setHSL(0.2 + rand(i, 6) * 0.05 - (1 - smooth(10, 44, x)) * 0.03, 0.5 + rand(i, 8) * 0.2, (rimBand ? 0.22 : 0.34) + rand(i, 7) * 0.2);
-      mesh.setColorAt(n, cc);
-      n++;
+      const nb = 5 + Math.floor(rand(i, 30) * 5);
+      const hue = 0.2 + rand(i, 6) * 0.06 - (1 - smooth(10, 44, x)) * 0.03;
+      const sat = 0.5 + rand(i, 8) * 0.2;
+      const lit = (rimBand ? 0.22 : 0.34) + rand(i, 7) * 0.18;
+      const cs = 0.55 + rand(i, 4) * 0.55;
+      for (let b = 0; b < nb && n < count; b++) {
+        const a = rand(i * 13 + b, 31) * 6.28;
+        const r = 0.08 + rand(i * 13 + b, 32) * 0.34;
+        o.position.set(x + Math.cos(a) * r, h - 0.02, z + Math.sin(a) * r);
+        o.rotation.set((rand(i * 13 + b, 33) - 0.5) * 0.25, rand(i * 13 + b, 3) * 6.28, 0);
+        const s = cs * (0.8 + rand(i * 13 + b, 34) * 0.45);
+        o.scale.set(s, s * (0.8 + rand(i * 13 + b, 5) * 0.6), s);
+        o.updateMatrix();
+        mesh.setMatrixAt(n, o.matrix);
+        cc.setHSL(hue + (rand(i * 13 + b, 35) - 0.5) * 0.015, sat, lit + (rand(i * 13 + b, 36) - 0.5) * 0.06);
+        mesh.setColorAt(n, cc);
+        n++;
+      }
     }
     mesh.count = n;
     return mesh;
+  };
+
+  // Foliage clumps: three bush silhouettes (round, long, tufted), AO-baked, tinted per zone palette.
+  const makeBushes = (count, avoid) => {
+    const paint = (g, base, top) => {
+      const pp = g.attributes.position;
+      let y0 = 1e9;
+      let y1 = -1e9;
+      for (let k = 0; k < pp.count; k++) (y0 = Math.min(y0, pp.getY(k))), (y1 = Math.max(y1, pp.getY(k)));
+      const arr = new Float32Array(pp.count * 3);
+      for (let k = 0; k < pp.count; k++) {
+        const t = (pp.getY(k) - y0) / Math.max(0.001, y1 - y0);
+        const ao = 0.6 + 0.4 * Math.pow(t, 0.8);
+        arr[k * 3] = (base + (top - base) * t) * ao;
+        arr[k * 3 + 1] = (base * 1.1 + (top - base) * t) * ao;
+        arr[k * 3 + 2] = (base * 0.9 + (top - base) * t * 0.9) * ao;
+      }
+      g.setAttribute("color", new BufferAttribute(arr, 3));
+      return g.index ? g.toNonIndexed() : g;
+    };
+    const blob = (r, x, y, z, sx = 1, sy = 0.8) => new IcosahedronGeometry(r, 1).scale(sx, sy, sx).translate(x, y, z);
+    const variants = [
+      mergeGeometries([paint(blob(0.5, 0, 0.35, 0), 0.7, 1), paint(blob(0.36, 0.38, 0.28, 0.12), 0.7, 1), paint(blob(0.32, -0.34, 0.26, -0.1), 0.7, 1)]),
+      mergeGeometries([paint(blob(0.34, -0.5, 0.26, 0, 1.2, 0.8), 0.65, 0.95), paint(blob(0.4, 0, 0.32, 0.05, 1.3, 0.8), 0.65, 0.95), paint(blob(0.3, 0.52, 0.24, -0.05, 1.2, 0.8), 0.65, 0.95)]),
+      mergeGeometries([0, 1, 2, 3, 4].map((k) => paint(new ConeGeometry(0.13, 0.85 + (k % 2) * 0.25, 5).rotateZ((k - 2) * 0.22).translate((k - 2) * 0.13, 0.42, 0), 0.6, 1))),
+    ];
+    const meshes = variants.map((g) => {
+      const m = new InstancedMesh(g, mat({ vertexColors: true, roughness: 1 }, { rim: 0.12, cloud: true }), Math.ceil(count / 3) + 8);
+      m.userData.n = 0;
+      m.castShadow = true;
+      return m;
+    });
+    const o = new Object3D();
+    const cc = new Color();
+    const spots = [];
+    for (let i = 0; i < count * 8 && spots.length < count; i++) {
+      const x = X0 + 6 + rand(i, 41) * (W - 12);
+      const z = rand(i, 42) < 0.7 ? (rand(i, 43) < 0.5 ? -1 : 1) * (8.0 + rand(i, 44) * 9) : (rand(i, 45) - 0.5) * 50;
+      if (avoid(x, z)) continue;
+      const h = heightAt(x, z);
+      if (h < 0.02) continue;
+      const v = Math.floor(rand(i, 46) * 3);
+      const m = meshes[v];
+      if (m.userData.n >= m.instanceMatrix.count) continue;
+      const pal = ZONE_LOOK[zoneAt(x)].pal;
+      o.position.set(x, h - 0.03, z);
+      o.rotation.set(0, rand(i, 47) * 6.28, 0);
+      o.scale.setScalar(0.8 + rand(i, 48) * 0.9);
+      o.updateMatrix();
+      m.setMatrixAt(m.userData.n, o.matrix);
+      cc.set(pal[Math.floor(rand(i, 49) * 3)]).offsetHSL((rand(i, 50) - 0.5) * 0.03, 0, (rand(i, 51) - 0.5) * 0.12);
+      m.setColorAt(m.userData.n, cc);
+      m.userData.n++;
+      spots.push({ x, z, y: h, rx: 0.9 * o.scale.x });
+    }
+    meshes.forEach((m) => (m.count = m.userData.n));
+    return { meshes, spots };
   };
 
   // Wildflowers: tiny stems with red / cream / yellow / pink heads scattered over the grass rim.
@@ -228,7 +329,17 @@ export function createTerrain(END, pathDist = null) {
       const h = heightAt(x, z);
       if (h < 0.1) continue;
       const s = 0.8 + rand(i, 14) * 0.9;
-      const kind = rand(i, 15);
+      // Zone mix: pick the silhouette from the zone's weights, and tint the canopy with its palette.
+      const look = ZONE_LOOK[zoneAt(x)];
+      let rr = rand(i, 15);
+      let kindIdx = 0;
+      for (let q = 0; q < 5; q++) {
+        kindIdx = q;
+        if (rr < look.w[q]) break;
+        rr -= look.w[q];
+      }
+      const kind = [0.1, 0.4, 0.55, 0.7, 0.9][kindIdx]; // keeps the branch thresholds below
+      const [pa, pb, pc] = look.pal;
       spots.push({ x, z, y: h, rx: (kind >= 0.78 ? 0.95 : kind < 0.3 ? 1.3 : kind < 0.62 ? 1.2 : 1.0) * s * 2 });
       const trunk = (r0, r1, hh, color = 0x6b3f1f) => statics.add(new CylinderGeometry(r0 * s, r1 * s, hh * s, 7), color, x, h + (hh / 2) * s, z);
       const blob = (r, yy, color, sx = 1, sy = 0.9, ox = 0, oz = 0) => {
@@ -239,26 +350,26 @@ export function createTerrain(END, pathDist = null) {
       if (kind < 0.3) {
         // round canopy, cluster of blobs
         trunk(0.2, 0.28, 1.6);
-        const c = rand(i, 16) < 0.12 ? 0xd9482b : 0x3fae5a;
-        blob(1.3, 2.4, c);
-        blob(0.9, 3.0, c === 0xd9482b ? 0xf06a3a : 0x57c46c, 1, 0.9, 0.5, 0.3);
-        blob(0.8, 2.3, 0x2f8f4a, 1, 0.9, -0.8, -0.3);
+        const red = rand(i, 16) < 0.12 && zoneAt(x) !== 3;
+        blob(1.3, 2.4, red ? 0xd9482b : pa);
+        blob(0.9, 3.0, red ? 0xf06a3a : pb, 1, 0.9, 0.5, 0.3);
+        blob(0.8, 2.3, pc, 1, 0.9, -0.8, -0.3);
       } else if (kind < 0.5) {
         // tall cypress
         trunk(0.14, 0.2, 0.9);
-        blob(0.75, 2.2, 0x2f8f4a, 0.7, 2.0);
-        blob(0.5, 3.6, 0x3fae5a, 0.7, 1.6);
+        blob(0.75, 2.2, pc, 0.7, 2.0);
+        blob(0.5, 3.6, pa, 0.7, 1.6);
       } else if (kind < 0.62) {
         // umbrella
         trunk(0.12, 0.2, 2.3);
-        blob(1.9, 2.7, 0x57c46c, 1, 0.32);
-        blob(1.2, 3.0, 0x3fae5a, 1, 0.3);
+        blob(1.9, 2.7, pb, 1, 0.32);
+        blob(1.2, 3.0, pa, 1, 0.3);
       } else if (kind < 0.78) {
         // layered pine
         trunk(0.16, 0.22, 1.0);
         for (let k = 0; k < 3; k++) {
           const cone = new ConeGeometry((1.2 - k * 0.3) * s, 1.3 * s, 7);
-          statics.add(cone, k % 2 ? 0x2f8f4a : 0x3fae5a, x, h + (1.5 + k * 0.85) * s, z);
+          statics.add(cone, k % 2 ? pc : pa, x, h + (1.5 + k * 0.85) * s, z);
         }
       } else {
         // chunky flat-shaded rocks
@@ -280,7 +391,7 @@ export function createTerrain(END, pathDist = null) {
     return spots;
   };
 
-  return { heightAt, terrain, water, makeGrass, makeFlowers, scatter, island, bounds: { X0, X1, Z } };
+  return { heightAt, terrain, water, makeGrass, makeBushes, makeFlowers, scatter, zoneAt, island, bounds: { X0, X1, Z } };
 }
 
 // Round puffy clouds drifting across the sky (instanced spheres).

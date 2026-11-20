@@ -36,7 +36,7 @@ export class Statics {
     const span = Math.max(0.001, g.boundingBox.max.y - y0);
     for (let i = 0; i < n; i++) {
       // Baked ambient occlusion: darker toward the bottom of every part.
-      const ao = ao_ ? 0.66 + 0.34 * Math.min(1, (g.attributes.position.getY(i) - y0) / span) : 1;
+      const ao = ao_ ? 0.62 + 0.38 * Math.pow(Math.min(1, (g.attributes.position.getY(i) - y0) / span), 0.8) : 1;
       // Ground tiles get the same low-frequency value noise as the terrain (+-6%), so pads blend in.
       const gn = !ao_ && this.groundNoise ? this.groundNoise(g.attributes.position.getX(i), g.attributes.position.getZ(i)) : 1;
       arr[i * 3] = c.r * ao * gn;
@@ -103,7 +103,7 @@ export function pipeGeometry(height = 1.6, radius = 0.85, tint = 0x1f9d55, lipTi
   for (let i = 0; i < pos.count; i++) {
     const y = pos.getY(i);
     const t = Math.min(1, Math.max(0, (y - (height - 0.55)) / 0.55));
-    const k = 0.82 + 0.18 * Math.min(1, y / height);
+    const k = 0.64 + 0.36 * Math.pow(Math.min(1, y / height), 0.7);
     col.setXYZ(i, (base.r + (lip.r - base.r) * t) * k, (base.g + (lip.g - base.g) * t) * k, (base.b + (lip.b - base.b) * t) * k);
   }
   // Paper band and signal-red band just under the lip.
