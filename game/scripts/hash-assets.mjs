@@ -1,6 +1,6 @@
 // Content-hashed asset naming + manifest (plan T0.15, risk R13).
 // static/** -> <out>/assets/<name>.<hash8>.<ext>, plus <out>/asset-manifest.<buildId>.json.
-// Additive: never deletes, so older builds (older JS + older manifest) keep resolving their assets.
+// Additive within one output folder (never deletes). Note: vite empties dist/ and previews are orphan single commits, so deployed OLD builds are not kept; clients recover via the loader retry + page reload.
 // CLI: node scripts/hash-assets.mjs [--static static] [--out dist] [--no-verify]
 import { createHash } from 'node:crypto'
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
