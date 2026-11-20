@@ -1,0 +1,207 @@
+{
+  "$schema": "https://www.designtokens.org/schemas/2025.10/format.json",
+  "$description": "Timeline page tokens: semantic 2D page, HUD/overlay, and the 3D world's text-bearing surfaces. Mirrored in assets/styles/main.css and gated by dtcg-contrast.",
+  "color": {
+    "$type": "color",
+    "page": {
+      "$value": "#f4ead4",
+      "$description": "Page background (cream / ink).",
+      "$extensions": {
+        "vn": {
+          "dark": "#0a0a0a"
+        }
+      }
+    },
+    "surface": {
+      "$value": "#efe4c5",
+      "$description": "Cards, entries, overlay panels.",
+      "$extensions": {
+        "vn": {
+          "dark": "#1c1a17"
+        }
+      }
+    },
+    "text": {
+      "default": {
+        "$value": "#0a0a0a",
+        "$extensions": {
+          "vn": {
+            "dark": "#f4ead4"
+          }
+        }
+      },
+      "muted": {
+        "$value": "#5c5446",
+        "$extensions": {
+          "vn": {
+            "dark": "#a69c86"
+          }
+        }
+      },
+      "link": {
+        "$value": "#b80000",
+        "$extensions": {
+          "vn": {
+            "dark": "#ff5a5a"
+          }
+        }
+      }
+    },
+    "edge": {
+      "$value": "#0a0a0a",
+      "$description": "Borders and rails (non-text UI).",
+      "$extensions": {
+        "vn": {
+          "dark": "#8a816f"
+        }
+      }
+    },
+    "focus": {
+      "ring": {
+        "$value": "#b80000",
+        "$description": "Focus ring on page surfaces (2px, 4px offset).",
+        "$extensions": {
+          "vn": {
+            "dark": "#ff3838"
+          }
+        }
+      },
+      "on-canvas": {
+        "$value": "#b80000",
+        "$description": "Focus ring over the 3D sky.",
+        "$extensions": {
+          "vn": {
+            "dark": "#ff3838"
+          }
+        }
+      }
+    },
+    "signal": {
+      "fill": {
+        "$value": "#f50000",
+        "$description": "Signal CTA fill.",
+        "$extensions": {
+          "vn": {
+            "dark": "#ff3838"
+          }
+        }
+      },
+      "text": {
+        "$value": "#0a0a0a",
+        "$description": "Text on signal is always ink."
+      }
+    },
+    "button": {
+      "primary": {
+        "fill": {
+          "$value": "#0a0a0a",
+          "$extensions": {
+            "vn": {
+              "dark": "#e8dec5"
+            }
+          }
+        },
+        "text": {
+          "$value": "#f4ead4",
+          "$extensions": {
+            "vn": {
+              "dark": "#0a0a0a"
+            }
+          }
+        },
+        "signal": {
+          "$value": "#ff3838",
+          "$extensions": {
+            "vn": {
+              "dark": "#b80000"
+            }
+          }
+        }
+      }
+    },
+    "hud": {
+      "surface": {
+        "$value": "#f4ead4",
+        "$description": "HUD / sticky header glass, opaque fallback.",
+        "$extensions": {
+          "vn": {
+            "dark": "#0a0a0a"
+          }
+        }
+      },
+      "text": {
+        "$value": "#0a0a0a",
+        "$extensions": {
+          "vn": {
+            "dark": "#f4ead4"
+          }
+        }
+      },
+      "muted": {
+        "$value": "#5c5446",
+        "$extensions": {
+          "vn": {
+            "dark": "#a69c86"
+          }
+        }
+      }
+    },
+    "toast": {
+      "surface": {
+        "$value": "#0a0a0a",
+        "$description": "Proximity toast.",
+        "$extensions": {
+          "vn": {
+            "dark": "#1c1a17"
+          }
+        }
+      },
+      "text": {
+        "$value": "#f4ead4",
+        "$extensions": {
+          "vn": {
+            "dark": "#f4ead4"
+          }
+        }
+      }
+    },
+    "world": {
+      "sky": {
+        "$value": "#9fd4f5",
+        "$description": "Sky colour behind the HUD and focus ring.",
+        "$extensions": {
+          "vn": {
+            "dark": "#0a0a0a"
+          }
+        }
+      },
+      "block-face": {
+        "$value": "#f4ead4",
+        "$description": "Signal block face (decorative surface for year labels).",
+        "$extensions": {
+          "vn": {
+            "dark": "#f4ead4"
+          }
+        }
+      },
+      "year-label": {
+        "$value": "#0a0a0a",
+        "$description": "Year label drawn on the block face.",
+        "$extensions": {
+          "vn": {
+            "dark": "#0a0a0a"
+          }
+        }
+      },
+      "signal-dot": {
+        "$value": "#f50000",
+        "$description": "Embossed dot on the block face.",
+        "$extensions": {
+          "vn": {
+            "dark": "#f50000"
+          }
+        }
+      }
+    }
+  }
+}

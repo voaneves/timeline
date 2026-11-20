@@ -1,0 +1,143 @@
+{
+  "$schema": "https://raw.githubusercontent.com/voaneves/dtcg-contrast/main/dtcg-contrast.schema.json",
+  "tokens": [
+    "./tokens/timeline.tokens.json"
+  ],
+  "themes": [
+    {
+      "name": "light"
+    },
+    {
+      "name": "dark",
+      "extensionPath": "vn.dark"
+    }
+  ],
+  "pairs": [
+    {
+      "fg": "color.text.default",
+      "bg": "color.page",
+      "level": "AA",
+      "name": "body text on page"
+    },
+    {
+      "fg": "color.text.default",
+      "bg": "color.surface",
+      "level": "AA",
+      "name": "body text on card surface"
+    },
+    {
+      "fg": "color.text.muted",
+      "bg": "color.page",
+      "level": "AA",
+      "name": "muted text on page"
+    },
+    {
+      "fg": "color.text.muted",
+      "bg": "color.surface",
+      "level": "AA",
+      "name": "muted text on card surface"
+    },
+    {
+      "fg": "color.text.link",
+      "bg": "color.page",
+      "level": "AA",
+      "name": "link on page"
+    },
+    {
+      "fg": "color.text.link",
+      "bg": "color.surface",
+      "level": "AA",
+      "name": "link on card surface"
+    },
+    {
+      "fg": "color.signal.text",
+      "bg": "color.signal.fill",
+      "level": "AA",
+      "name": "signal button text on fill"
+    },
+    {
+      "fg": "color.button.primary.text",
+      "bg": "color.button.primary.fill",
+      "level": "AA",
+      "name": "primary button text on fill"
+    },
+    {
+      "fg": "color.button.primary.signal",
+      "bg": "color.button.primary.fill",
+      "level": "UI",
+      "name": "primary button signal dot on fill"
+    },
+    {
+      "fg": "color.signal.fill",
+      "bg": "color.page",
+      "level": "UI",
+      "name": "signal button fill on page"
+    },
+    {
+      "fg": "color.signal.fill",
+      "bg": "color.surface",
+      "level": "UI",
+      "name": "timeline dot on card surface"
+    },
+    {
+      "fg": "color.edge",
+      "bg": "color.page",
+      "level": "UI",
+      "name": "borders on page"
+    },
+    {
+      "fg": "color.edge",
+      "bg": "color.surface",
+      "level": "UI",
+      "name": "borders on card surface"
+    },
+    {
+      "fg": "color.focus.ring",
+      "bg": "color.page",
+      "level": "UI",
+      "name": "focus ring on page"
+    },
+    {
+      "fg": "color.focus.ring",
+      "bg": "color.surface",
+      "level": "UI",
+      "name": "focus ring on card surface"
+    },
+    {
+      "fg": "color.focus.on-canvas",
+      "bg": "color.world.sky",
+      "level": "UI",
+      "name": "focus ring on 3D sky"
+    },
+    {
+      "fg": "color.hud.text",
+      "bg": "color.hud.surface",
+      "level": "AA",
+      "name": "HUD text on its surface"
+    },
+    {
+      "fg": "color.hud.muted",
+      "bg": "color.hud.surface",
+      "level": "AA",
+      "name": "HUD muted text on its surface"
+    },
+    {
+      "fg": "color.toast.text",
+      "bg": "color.toast.surface",
+      "level": "AA",
+      "name": "toast text on its surface"
+    },
+    {
+      "fg": "color.world.year-label",
+      "bg": "color.world.block-face",
+      "level": "AA",
+      "name": "year label on block face"
+    },
+    {
+      "fg": "color.world.signal-dot",
+      "bg": "color.world.block-face",
+      "level": "UI",
+      "name": "signal dot on block face"
+    }
+  ]
+}
