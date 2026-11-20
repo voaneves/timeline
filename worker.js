@@ -1,70 +1,86 @@
-// Names of the two caches used in this version of the service worker.
-// Change to v2, etc. when you update any of the local resources, which will
-// in turn trigger the install event again.
-const PRECACHE = "precache-v1";
-const RUNTIME = "runtime";
+// Service worker for the timeline page.
+// Bump VERSION on every release that changes the shell: it renames the caches
+// and the activate handler removes every cache that is not current.
+// The 3D chunk (assets/js/world/*) is never precached, so it is only fetched
+// after the visitor starts the 3D mode.
+const VERSION = "v3";
+const PRECACHE = `precache-${VERSION}`;
+const RUNTIME = `runtime-${VERSION}`;
 
-// A list of local resources we always want to be cached.
+// Paths are relative to the worker, so they resolve under /timeline/ as well.
 const PRECACHE_URLS = [
-  "/", // Alias for index.html
+  "./",
+  "./index.html",
+  "./assets/styles/main.css",
+  "./assets/js/boot.min.js",
+  "./assets/fonts/schibsted-grotesk.woff2",
+  "./assets/fonts/jetbrains-mono.woff2",
+  "./assets/brand/mark-duo.svg",
+  "./manifest.json",
 ];
 
-// The install handler takes care of precaching the resources we always need.
 self.addEventListener("install", (event) => {
   event.waitUntil(
     caches
       .open(PRECACHE)
-      .then(function (cache) {
-        console.log("Opened cache");
-        return cache.addAll(PRECACHE_URLS);
-      })
-      .then(self.skipWaiting())
+      .then((cache) => cache.addAll(PRECACHE_URLS))
+      .then(() => self.skipWaiting())
   );
 });
 
-// The activate handler takes care of cleaning up old caches.
 self.addEventListener("activate", (event) => {
-  const currentCaches = [PRECACHE, RUNTIME];
+  const current = [PRECACHE, RUNTIME];
   event.waitUntil(
     caches
       .keys()
-      .then((cacheNames) => {
-        return cacheNames.filter(
-          (cacheName) => !currentCaches.includes(cacheName)
-        );
-      })
-      .then((cachesToDelete) => {
-        return Promise.all(
-          cachesToDelete.map((cacheToDelete) => {
-            return caches.delete(cacheToDelete);
-          })
-        );
-      })
+      .then((names) =>
+        Promise.all(
+          names.filter((name) => !current.includes(name)).map((name) => caches.delete(name))
+        )
+      )
       .then(() => self.clients.claim())
   );
 });
 
-// The fetch handler serves responses for same-origin resources from a cache.
-// If no response is found, it populates the runtime cache with the response
-// from the network before returning it to the page.
 self.addEventListener("fetch", (event) => {
-  // Skip cross-origin requests, like those for Google Analytics.
-  if (event.request.url.startsWith(self.location.origin)) {
-    event.respondWith(
-      caches.match(event.request).then((cachedResponse) => {
-        if (cachedResponse) {
-          return cachedResponse;
-        }
+  const request = event.request;
+  if (request.method !== "GET") return;
+  const url = new URL(request.url);
+  if (url.origin !== self.location.origin) return;
+  // World chunk and anything else under assets/js/world/ goes straight to the network.
+  if (url.pathname.includes("/assets/js/world/")) return;
 
-        return caches.open(RUNTIME).then((cache) => {
-          return fetch(event.request).then((response) => {
-            // Put a copy of the response in the runtime cache.
-            return cache.put(event.request, response.clone()).then(() => {
-              return response;
-            });
-          });
-        });
-      })
+  if (request.mode === "navigate") {
+    // Network first, so returning visitors always get the latest page.
+    event.respondWith(
+      fetch(request)
+        .then((response) => {
+          if (response.ok) {
+            const copy = response.clone();
+            caches.open(RUNTIME).then((cache) => cache.put(request, copy));
+          }
+          return response;
+        })
+        .catch(() =>
+          caches.match(request).then((hit) => hit || caches.match("./index.html"))
+        )
     );
+    return;
   }
+
+  // Same-origin assets: stale-while-revalidate.
+  event.respondWith(
+    caches.match(request).then((cached) => {
+      const network = fetch(request)
+        .then((response) => {
+          if (response.ok) {
+            const copy = response.clone();
+            caches.open(RUNTIME).then((cache) => cache.put(request, copy));
+          }
+          return response;
+        })
+        .catch(() => cached);
+      return cached || network;
+    })
+  );
 });

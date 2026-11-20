@@ -1,0 +1,20 @@
+{
+  "name": "timeline",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Victor Neves timeline: semantic 2D page with an optional 3D diorama.",
+  "type": "module",
+  "license": "MIT",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "check-size": "node scripts/check-size.mjs",
+    "contrast": "dtcg-contrast --config=dtcg-contrast.config.json",
+    "check": "npm run build && npm run check-size"
+  },
+  "dependencies": {
+    "three": "0.187.0"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2"
+  }
+}

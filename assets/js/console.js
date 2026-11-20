@@ -25,20 +25,20 @@ const linkStyle = `
 `;
 
 const urls = {
-  portfolio: "https://voaneves.com",
+  contact: "https://voaneves.com/#contato",
   linkedin: "https://linkedin.com/in/voaneves",
   github: "https://github.com/voaneves",
-  readme: "https://github.com/voaneves/voaneves.github.io",
+  source: "https://github.com/voaneves/timeline",
 };
 
 const messages = [
   { text: "Hey there! I'm Victor.", style: textStyle1 },
   { text: "It's a pleasure to have you here!", style: textStyle2 },
   { text: "Have a look at my work ▼", style: textStyle2 },
-  { text: `Portfolio ${urls.portfolio}`, style: `${linkStyle} ${textStyle2}` },
+  { text: `Contato    ${urls.contact}`, style: `${linkStyle} ${textStyle2}` },
   { text: `Linkedin  ${urls.linkedin}`, style: `${linkStyle} ${textStyle2}` },
   { text: `Github    ${urls.github}`, style: `${linkStyle} ${textStyle2}` },
-  { text: `The README   ${urls.readme}`, style: `${linkStyle} ${textStyle2}` },
+  { text: `O código    ${urls.source}`, style: `${linkStyle} ${textStyle2}` },
   { text: "Hope to see you again 🙂", style: textStyle2 },
 ];
 
