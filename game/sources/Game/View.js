@@ -7,10 +7,25 @@ import gsap from 'gsap'
 import { Pointer } from './Inputs/Pointer.js'
 import { Inputs } from './Inputs/Inputs.js'
 import { alea } from 'seedrandom'
+import { cameraConfig } from '../data/camera.js'
 
 CameraControls.install( { THREE: THREE } )
 
 const rng = new alea('speedLines')
+
+const DEG = Math.PI / 180
+const LN2_4 = 4 * Math.LN2
+
+// Critically damped spring toward `goal` (exact integration, frame-rate independent). `state` = { x, v }.
+function springStep(state, goal, halfLife, dt)
+{
+    const y = LN2_4 / halfLife / 2
+    const x = state.x - goal
+    const j1 = state.v + x * y
+    const e = Math.exp(- y * dt)
+    state.x = goal + e * (x + j1 * dt)
+    state.v = e * (state.v - j1 * y * dt)
+}
 
 export class View
 {
@@ -50,6 +65,7 @@ export class View
             })
         }
 
+        this.setFraming()
         this.setFocusPoint()
         this.setZoom()
         this.setSpherical()
@@ -60,6 +76,13 @@ export class View
         this.setCinematic()
         this.setSpeedLines()
         this.setMapControls()
+
+        // Control yaw: computed on the fixed step only (before the Player at 2), so the camera-relative input is
+        // deterministic. Only the rendering reads the per-frame smoothed state.
+        this.game.ticker.events.on('fixedTick', () =>
+        {
+            this.fixedUpdate()
+        }, 1)
 
         this.game.ticker.events.on('tick', () =>
         {
@@ -109,6 +132,158 @@ export class View
         this.freeMode.enabled = this.mode === View.MODE_FREE
         this.freeMode.setTarget(this.focusPoint.position.x, this.focusPoint.position.y, this.focusPoint.position.z)
         this.freeMode.setPosition(this.camera.position.x, this.camera.position.y, this.camera.position.z)
+    }
+
+    // Landscape framing (T1.6): vFov follows the target horizontal FOV; distance and pitch are the landscape values
+    setFraming()
+    {
+        const cfg = cameraConfig
+        this.framing = {}
+        this.framing.distance = cfg.distance
+        this.framing.phi = (90 - cfg.pitch) * DEG
+        this.framing.computeVFov = (aspect) => clamp(2 * Math.atan(Math.tan(cfg.hFov * DEG / 2) / aspect) / DEG, cfg.vFovMin, cfg.vFovMax)
+        this.framing.vFov = this.framing.computeVFov(this.game.viewport.ratio)
+
+        this.controlYaw = Math.PI * 0.25 // what the Player reads (through spherical.theta); changes on the fixed step only
+        this.controlYawPrevious = this.controlYaw
+
+        // Smoothed follow state (render only)
+        this.follow = {
+            initialized: false,
+            hasSubject: false,
+            x: { x: 0, v: 0 },
+            y: { x: 0, v: 0 },
+            z: { x: 0, v: 0 },
+            lockedY: 0,
+            fallFollowing: false,
+            lastX: 0,
+            lastZ: 0,
+            ahead: new THREE.Vector2(),
+            velocity: new THREE.Vector2(),
+        }
+    }
+
+    // The followed thing: the on-foot player or the vehicle (both expose `model` and `object.physical.body`)
+    getSubject()
+    {
+        return this.game.world?.player ?? this.game.world?.vehicle ?? null
+    }
+
+    // Authored yaw blend between refCamera1 and refCamera2 (empties with the custom prop `lookAt`), by progress along
+    // the segment lookAt1 -> lookAt2 on the ground plane. Returns null while the references are not loaded.
+    getAuthoredYaw(x, z)
+    {
+        if(!this.authored)
+        {
+            const references = this.game.world?.references
+            const a = references?.get('refCamera1')
+            const b = references?.get('refCamera2')
+            if(!a || !b || !a.userData.lookAt || !b.userData.lookAt)
+                return null
+
+            const make = (reference) =>
+            {
+                const lookAt = reference.userData.lookAt
+                // Offset from the target to the camera is (sin theta, cos theta) on x, z (spherical coordinates)
+                return { yaw: Math.atan2(reference.position.x - lookAt[0], reference.position.z - lookAt[2]), x: lookAt[0], z: lookAt[2] }
+            }
+            this.authored = { a: make(a), b: make(b) }
+        }
+
+        const { a, b } = this.authored
+        const dx = b.x - a.x
+        const dz = b.z - a.z
+        const t = clamp(((x - a.x) * dx + (z - a.z) * dz) / (dx * dx + dz * dz || 1), 0, 1)
+        return lerp(a.yaw, b.yaw, t * t * (3 - 2 * t))
+    }
+
+    // Fixed step: control yaw from the SIMULATED position (rigid body), never from the interpolated visual or the frame delta
+    fixedUpdate()
+    {
+        let x = 0
+        let z = 0
+        const body = this.getSubject()?.object?.physical?.body
+        if(body)
+        {
+            const translation = body.translation()
+            x = translation.x
+            z = translation.z
+        }
+        else
+        {
+            x = this.focusPoint.trackedPosition.x
+            z = this.focusPoint.trackedPosition.z
+        }
+
+        const yaw = this.getAuthoredYaw(x, z)
+        if(yaw === null)
+            return
+
+        this.controlYawPrevious = this.controlYaw
+        this.controlYaw = yaw
+        this.spherical.theta = yaw
+    }
+
+    // Per frame: focus point (critical springs, y locked in the air, look-ahead). Writes focusPoint.smoothedPosition/position.
+    updateFollow(delta)
+    {
+        const cfg = cameraConfig
+        const follow = this.follow
+        const subject = this.getSubject()
+        const source = subject?.model?.position ?? this.focusPoint.trackedPosition
+        const grounded = subject?.controller?.grounded ?? true
+
+        // Y lock: only follows while grounded, or once it fell more than `fallFollow` below the last platform
+        if(!follow.initialized || (subject && !follow.hasSubject) || grounded)
+        {
+            follow.lockedY = source.y
+            follow.fallFollowing = false
+        }
+        else if(source.y < follow.lockedY - cfg.fallFollow)
+        {
+            follow.fallFollowing = true
+        }
+        const targetY = follow.fallFollowing ? source.y : follow.lockedY
+
+        // Velocity (frame based, render only) -> look-ahead
+        const k = 1 - Math.pow(0.5, delta / cfg.lookAheadHalfLife)
+        if(delta > 0 && follow.initialized)
+        {
+            follow.velocity.x += ((source.x - follow.lastX) / delta - follow.velocity.x) * k
+            follow.velocity.y += ((source.z - follow.lastZ) / delta - follow.velocity.y) * k
+        }
+        follow.lastX = source.x
+        follow.lastZ = source.z
+
+        const speed = follow.velocity.length()
+        const scale = speed > 1e-4 ? cfg.lookAhead * Math.min(speed / cfg.lookAheadSpeed, 1) / speed : 0
+        follow.ahead.x += (follow.velocity.x * scale - follow.ahead.x) * k
+        follow.ahead.y += (follow.velocity.y * scale - follow.ahead.y) * k
+
+        const subjectAppeared = subject && !follow.hasSubject // the camera was placed on the respawn marker before the subject existed
+        follow.hasSubject = !!subject
+        const snap = !follow.initialized || subjectAppeared || Math.hypot(source.x - follow.x.x, source.z - follow.z.x) > cfg.snapDistance
+        if(snap)
+        {
+            follow.initialized = true
+            follow.x.x = source.x
+            follow.x.v = 0
+            follow.y.x = targetY
+            follow.y.v = 0
+            follow.z.x = source.z
+            follow.z.v = 0
+            follow.ahead.set(0, 0)
+            follow.velocity.set(0, 0)
+        }
+        else
+        {
+            springStep(follow.x, source.x, cfg.halfLifeXZ, delta)
+            springStep(follow.z, source.z, cfg.halfLifeXZ, delta)
+            springStep(follow.y, targetY, cfg.halfLifeY, delta)
+        }
+
+        this.focusPoint.smoothedPosition.set(follow.x.x + follow.ahead.x, follow.y.x + cfg.focusOffsetY, follow.z.x + follow.ahead.y)
+        this.focusPoint.position.copy(this.focusPoint.smoothedPosition)
     }
 
     setFocusPoint()
@@ -285,7 +460,7 @@ export class View
         this.zoom.baseRatio = 0.6
         this.zoom.ratio = this.zoom.baseRatio
         this.zoom.smoothedRatio = this.zoom.baseRatio
-        this.zoom.speedAmplitude = - 0.4
+        this.zoom.speedAmplitude = 0 // T1.6: no speed zoom
         this.zoom.speedEdge = { min: 5, max: 40 }
         this.zoom.sensitivity = 0.05
         this.zoom.toggle = 0
@@ -330,13 +505,14 @@ export class View
     setSpherical()
     {
         this.spherical = {}
-        this.spherical.phi = Math.PI * (this.game.quality.level === 0 ? 0.31 : 0.27)
-        this.spherical.theta = Math.PI * 0.25
+        this.spherical.phi = this.framing.phi
+        this.spherical.theta = this.controlYaw // what the Player reads; only changed on the fixed step
 
+        // T1.6: fixed distance (min = max: no wheel zoom, no ratio compensation until T1.7)
         this.spherical.radius = {}
-        this.spherical.radius.edges = { min: 15, max: 30 }
-        this.spherical.radius.current = lerp(this.spherical.radius.edges.min, this.spherical.radius.edges.max, 1 - this.zoom.smoothedRatio)
-        this.spherical.radius.nonIdealRatioOffset = 9
+        this.spherical.radius.edges = { min: this.framing.distance, max: this.framing.distance }
+        this.spherical.radius.current = this.framing.distance
+        this.spherical.radius.nonIdealRatioOffset = 0
 
         this.spherical.offset = new THREE.Vector3()
         this.spherical.offset.setFromSphericalCoords(this.spherical.radius.current, this.spherical.phi, this.spherical.theta)
@@ -389,7 +565,7 @@ export class View
 
     setCameras()
     {
-        this.camera = new THREE.PerspectiveCamera(25, this.game.viewport.ratio, 0.1, 200)
+        this.camera = new THREE.PerspectiveCamera(this.framing.vFov, this.game.viewport.ratio, 0.1, 200)
         this.camera.position.setFromSphericalCoords(this.spherical.radius.current, this.spherical.phi, this.spherical.theta)
 
         this.defaultCamera = this.camera.clone()
@@ -566,14 +742,15 @@ export class View
     {
         this.ratioOverflow = Math.max(1, this.idealRatio / this.game.viewport.ratio) - 1
 
-        this.camera.aspect = this.game.viewport.width / this.game.viewport.height
-        this.camera.updateProjectionMatrix()
+        const aspect = this.game.viewport.width / this.game.viewport.height
+        this.framing.vFov = this.framing.computeVFov(aspect)
 
-        this.defaultCamera.aspect = this.game.viewport.width / this.game.viewport.height
-        this.defaultCamera.updateProjectionMatrix()
-
-        this.freeCamera.aspect = this.game.viewport.width / this.game.viewport.height
-        this.freeCamera.updateProjectionMatrix()
+        for(const camera of [ this.camera, this.defaultCamera, this.freeCamera ])
+        {
+            camera.aspect = aspect
+            camera.fov = this.framing.vFov
+            camera.updateProjectionMatrix()
+        }
     }
 
     throttleResize()
@@ -619,93 +796,13 @@ export class View
 
     update()
     {
-        // Gamepad Joystick map controls
-        if(this.mode === View.MODE_DEFAULT && this.game.inputs.gamepad.joysticks.right.active && !this.cinematic.active)
-        {
-            this.focusPoint.isTracking = false
+        // Focus point: critical springs, y locked in the air, look-ahead (T1.6)
+        this.updateFollow(Math.min(this.game.ticker.delta, cameraConfig.maxDelta))
 
-            const mapMovement = new THREE.Vector2(this.game.inputs.gamepad.joysticks.right.x, this.game.inputs.gamepad.joysticks.right.y)
-            mapMovement.rotateAround(new THREE.Vector2(), -this.spherical.theta)
-            mapMovement.multiplyScalar(20 * this.game.ticker.delta)
-
-            this.focusPoint.position.x += mapMovement.x
-            this.focusPoint.position.z += mapMovement.y
-        }
-        
-        // Focus point
-        if(this.focusPoint.isTracking)
-        {
-            this.focusPoint.position.x = this.focusPoint.trackedPosition.x
-            this.focusPoint.position.z = this.focusPoint.trackedPosition.z
-        }
-
-        if(this.focusPoint.magnet.active)
-        {
-            const magnetDelta = { x: this.focusPoint.trackedPosition.x - this.focusPoint.position.x, z: this.focusPoint.trackedPosition.z - this.focusPoint.position.z }
-            const distanceToMagnet = Math.hypot(magnetDelta.x, magnetDelta.z)
-            const magnetStrength = distanceToMagnet * this.focusPoint.magnet.multiplier
-            this.focusPoint.position.x += magnetStrength * magnetDelta.x * this.game.ticker.delta
-            this.focusPoint.position.z += magnetStrength * magnetDelta.z * this.game.ticker.delta
-            // console.log(magnetStrength)
-            
-
-            // console.log('---')
-            // console.log(distanceToMagnet)
-            // console.log(magnetStrength)
-
-        }
-
-        const easing = remap(this.focusPoint.easing, 0, 1, 1, this.game.ticker.delta * 10)
-        
-        const newSmoothFocusPoint = this.focusPoint.smoothedPosition.clone().lerp(this.focusPoint.position, easing)
-
-        // if(this.game.inputs.mode === Inputs.MODE_TOUCH && this.focusPoint.isTracking)
-        // {
-        //     if(this.focusPoint.isEased)
-        //     {
-        //         this.focusPoint.isEased = false
-        //         gsap.to(this.focusPoint, { overwrite: true, easing: 0, duration: 1.5, ease: 'power4.out' })
-        //     }
-        // }
-        // else
-        // {
-        //     if(!this.focusPoint.isEased)
-        //     {
-        //         this.focusPoint.isEased = true
-        //         gsap.to(this.focusPoint, { overwrite: true, easing: 1, duration: 1.5, ease: 'power4.out' })
-        //     }
-        // }
-
-        const smoothFocusPointDelta = newSmoothFocusPoint.clone().sub(this.focusPoint.smoothedPosition)
-        const focusPointSpeed = Math.hypot(smoothFocusPointDelta.x, smoothFocusPointDelta.z) / this.game.ticker.delta
-        this.focusPoint.smoothedPosition.copy(newSmoothFocusPoint)
-
-        if(this.focusPoint.helper.visible)
-            this.focusPoint.helper.position.copy(newSmoothFocusPoint)
-        
-        // Default mode
-        if(this.mode === View.MODE_DEFAULT)
-        {
-            // Zoom
-            if(this.zoom.toggle !== 0)
-            {
-                this.zoom.baseRatio += this.zoom.toggle * 0.01
-                this.zoom.baseRatio = clamp(this.zoom.baseRatio, 0, 1)
-            }
-
-            const zoomSpeedRatio = smoothstep(focusPointSpeed, this.zoom.speedEdge.min, this.zoom.speedEdge.max)
-            this.zoom.ratio = this.zoom.baseRatio
-
-            if(this.focusPoint.isTracking && this.game.quality.level === 0)
-                this.zoom.ratio += this.zoom.speedAmplitude * zoomSpeedRatio
-
-            this.zoom.smoothedRatio = lerp(this.zoom.smoothedRatio, this.zoom.ratio, this.game.ticker.delta * 10)
-        }
-
-        // Radius
-        const radiusMax = this.spherical.radius.edges.max + this.ratioOverflow * this.spherical.radius.nonIdealRatioOffset
-        this.spherical.radius.current = lerp(this.spherical.radius.edges.min, radiusMax, 1 - this.zoom.smoothedRatio)
-        this.spherical.offset.setFromSphericalCoords(this.spherical.radius.current, this.spherical.phi, this.spherical.theta)
+        // Radius and visual yaw: the control yaw only changes on the fixed step; the render interpolates between steps
+        this.spherical.radius.current = this.framing.distance
+        const yaw = lerp(this.controlYawPrevious, this.controlYaw, this.game.ticker.alpha)
+        this.spherical.offset.setFromSphericalCoords(this.spherical.radius.current, this.spherical.phi, yaw)
 
         // Position
         this.position.copy(this.focusPoint.smoothedPosition).add(this.spherical.offset)
