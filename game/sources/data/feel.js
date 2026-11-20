@@ -15,6 +15,9 @@ export const feel = {
         decelTime: 0.10, // runSpeed -> 0 on the ground (linear)
         groundFriction: 60, // m/s^2 removed from the velocity component perpendicular to the wanted direction
         stopSpeed: 0.001, // below this the velocity snaps to zero
+        slopeCompensation: 1, // 0..1: scales the wanted horizontal move by 1/cos(slope) (KCC projects it onto the slope): 1 = keeps cos(slope) of the flat speed (~87% at 30 deg)
+        slopeMaxAngle: 40, // deg, measured uphill angles above this are ignored (autostep spikes)
+        slopeMaxFactor: 1.3, // clamp of the 1/cos factor
     },
     air: {
         accel: 26, // m/s^2 toward the wanted velocity
@@ -31,9 +34,24 @@ export const feel = {
         minSpeed: 4.5, // ...above this speed...
         duration: 0.12, // ...brakes for this long ignoring the input (event 'skid' for dust + sound)
     },
-    gravity: {
-        fall: 58.8, // m/s^2 (1.7 x the 34.6 of the rise, plan 3.2)
+    // Jump (plan 3.2): gravity while rising g = 2 h / t^2 (34.6 m/s^2), takeoff speed v0 = 2 h / t (11.8 m/s)
+    jump: {
+        height: 2.0, // m, apex of a held jump
+        apexTime: 0.34, // s to the apex
+        fallMultiplier: 1.7, // gravity while falling = 1.7 x the rise gravity (58.8 m/s^2)
         terminal: 20, // m/s
+        cutSpeed: 4.5, // releasing while rising caps vy to this (applied once the minimum height is reached)
+        minHeight: 0.55, // m, a tap still rises this much (the cut waits for it)
+        coyoteTime: 0.10, // s after leaving the ground a jump is still allowed
+        bufferTime: 0.12, // s a press before landing is remembered
+    },
+    // Ribbon glide ("flutter"): 2nd press in the air. NOT a spin double jump.
+    glide: {
+        impulseHeight: 0.6, // m: vy = max(vy, sqrt(2 g_rise h))
+        gravityScale: 0.35, // x gravity while gliding
+        maxTime: 0.6, // s of reduced gravity
+        requireHold: true, // the reduced gravity lasts while the jump button is held
+        minHeight: 0.8, // m above the ground needed to start a glide (below it the press is a buffered jump)
     },
     body: {
         radius: 0.28, // capsule: total height = 2 * halfHeight + 2 * radius = 1.2 m (greybox stand-in)

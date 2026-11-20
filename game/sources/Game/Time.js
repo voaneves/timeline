@@ -9,7 +9,7 @@ export class Time
     {
         this.game = Game.getInstance()
 
-        this.defaultScale = 2
+        this.defaultScale = 1 // real time (upstream used 2 for its vehicle; the player simulates in real time)
         this._scale = this.defaultScale
         this.game.ticker.scale = this.scale
         gsap.globalTimeline.timeScale(this.scale)

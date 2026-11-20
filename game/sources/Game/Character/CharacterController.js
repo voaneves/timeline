@@ -2,7 +2,7 @@
 //
 // The body is a kinematic capsule (radius 0.28 m, total height 1.2 m: the greybox stand-in). The platformer is OUR layer:
 // wanted velocity -> `computeColliderMovement` -> `computedMovement` -> `setNextKinematicTranslation`. The world gravity
-// is not used (gravity lives here), so jump / coyote / glide (T1.3) extend `step()`.
+// is not used: gravity, jump (coyote, buffer, variable height) and the ribbon glide (T1.3) live in `step()`.
 //
 // Determinism: `step()` is called from 'fixedTick' only, with dt = Ticker.FIXED_DELTA (REAL seconds, independent of
 // Time.scale and of the frame delta). No Date.now / performance.now / Math.random in here. Tunables: data/feel.js.
@@ -60,6 +60,17 @@ export class CharacterController
         this.slopeAngle = 0 // rad of the ground under the feet (0 when airborne)
         this.steps = 0
 
+        // Jump state
+        this.coyoteTimer = 0 // s left to still jump after leaving the ground
+        this.bufferTimer = 0 // s left of a remembered jump press
+        this.jumping = false // rising from a jump that has not been cut yet
+        this.jumpStartY = 0
+        this.gliding = false
+        this.glideTimer = 0
+        this.glideUsed = false
+        this.bumps = 0 // head hits (ceiling) since the start
+        this.lastLandSpeed = 0 // m/s downward speed of the last landing
+
         const translation = this.body.translation()
         this.spawn = { x: translation.x, y: translation.y, z: translation.z, yaw }
         this.next = { x: translation.x, y: translation.y, z: translation.z }
@@ -93,10 +104,13 @@ export class CharacterController
         this.skidTimer = 0
         this.lean = 0
         this.grounded = false
+        this.coyoteTimer = this.bufferTimer = this.glideTimer = 0
+        this.jumping = this.gliding = this.glideUsed = false
         this.body.setTranslation({ x, y, z }, true)
         this.body.setRotation(this.yawQuaternion(), true)
         this.body.setNextKinematicTranslation({ x, y, z })
         this.body.setNextKinematicRotation(this.yawQuaternion())
+        this.game.physics.world.propagateModifiedBodyPositionsToColliders() // the KCC queries the collider, which would lag a step
         this.next.x = x
         this.next.y = y
         this.next.z = z
@@ -121,7 +135,28 @@ export class CharacterController
         return top * (1 - Math.pow(1 - advanced, exponent))
     }
 
-    // One fixed step. input: { x, z } unit vector in world space (or zero), `speed` wanted speed in m/s (0 = no input).
+    get riseGravity()
+    {
+        return 2 * feel.jump.height / (feel.jump.apexTime * feel.jump.apexTime)
+    }
+
+    get jumpSpeed()
+    {
+        return 2 * feel.jump.height / feel.jump.apexTime
+    }
+
+    // Distance from the feet to the ground below (Infinity beyond `max`)
+    heightAboveGround(max)
+    {
+        const origin = this.body.translation()
+        const half = feel.body.halfHeight + feel.body.radius
+        const ray = new this.game.RAPIER.Ray(origin, { x: 0, y: - 1, z: 0 })
+        const hit = this.game.physics.world.castRay(ray, max + half, true, undefined, undefined, undefined, this.body)
+        return hit ? hit.timeOfImpact - half : Infinity
+    }
+
+    // One fixed step. input: { x, z } unit vector in world space (or zero), `speed` wanted speed in m/s (0 = no input),
+    // `jumpPressed` (edge, latched by the Player) and `jumpHeld`.
     step(input, dt)
     {
         const move = feel.move
@@ -129,6 +164,36 @@ export class CharacterController
         const velocity = this.velocity
         const hasInput = input.speed > 0 && (input.x !== 0 || input.z !== 0)
         const decelRate = move.runSpeed / move.decelTime
+
+        // --- Jump / glide decisions (before the horizontal model: a takeoff step already uses the air control)
+        const jump = feel.jump
+        const startedGrounded = this.grounded
+        this.coyoteTimer = this.grounded ? jump.coyoteTime : Math.max(0, this.coyoteTimer - dt)
+        this.bufferTimer = input.jumpPressed ? jump.bufferTime : Math.max(0, this.bufferTimer - dt)
+
+        if(this.bufferTimer > 0 && (this.grounded || this.coyoteTimer > 0))
+        {
+            this.bufferTimer = 0
+            this.coyoteTimer = 0
+            this.grounded = false
+            this.jumping = true
+            this.gliding = false
+            this.glideUsed = false
+            this.jumpStartY = this.body.translation().y
+            velocity.y = this.jumpSpeed
+            this.events.trigger('jump', [ { speed: this.jumpSpeed } ])
+        }
+        else if(input.jumpPressed && !this.grounded && !this.glideUsed && this.heightAboveGround(feel.glide.minHeight) >= feel.glide.minHeight)
+        {
+            // 2nd press in the air: the ribbon opens like a kite (small lift, then reduced gravity while held)
+            this.bufferTimer = 0
+            this.glideUsed = true
+            this.gliding = true
+            this.glideTimer = 0
+            this.jumping = false
+            velocity.y = Math.max(velocity.y, Math.sqrt(2 * this.riseGravity * feel.glide.impulseHeight))
+            this.events.trigger('glide', [ {} ])
+        }
 
         // --- Skid: reversing hard at speed brakes for a moment and ignores the input
         let speed = Math.hypot(velocity.x, velocity.z)
@@ -207,19 +272,69 @@ export class CharacterController
         if(Math.hypot(velocity.x, velocity.z) < move.stopSpeed)
             velocity.x = velocity.z = 0
 
-        // --- Vertical velocity (own gravity; the jump of T1.3 plugs in here)
+        // --- Vertical velocity: own gravity (rise g, fall 1.7 g), variable height, glide. Velocity-Verlet: the position
+        // follows the exact parabola at every step boundary.
+        let verticalStep = 0
         if(this.grounded)
             velocity.y = 0
         else
-            velocity.y = Math.max(velocity.y - feel.gravity.fall * dt, - feel.gravity.terminal)
+        {
+            // Release while rising: cap the speed, but only once the minimum height has been gained
+            if(this.jumping && velocity.y > 0 && !input.jumpHeld)
+            {
+                const gRise = this.riseGravity
+                const deferHeight = Math.max(0, jump.minHeight - jump.cutSpeed * jump.cutSpeed / (2 * gRise))
+                if(velocity.y > jump.cutSpeed && this.body.translation().y - this.jumpStartY >= deferHeight)
+                {
+                    velocity.y = jump.cutSpeed
+                    this.jumping = false
+                }
+            }
+
+            let scale = 1
+            if(this.gliding)
+            {
+                // The lift is the impulse (+0.6 m); the reduced gravity only slows the DESCENT (the ribbon floats)
+                if(this.glideTimer < feel.glide.maxTime && (input.jumpHeld || !feel.glide.requireHold))
+                {
+                    if(velocity.y <= 0)
+                    {
+                        scale = feel.glide.gravityScale
+                        this.glideTimer += dt
+                    }
+                }
+                else
+                    this.gliding = false
+            }
+
+            const gravity = this.riseGravity * (velocity.y > 0 ? 1 : jump.fallMultiplier) * scale
+            const before = velocity.y
+            velocity.y = Math.max(before - gravity * dt, - jump.terminal)
+            verticalStep = (before + velocity.y) / 2 * dt
+        }
 
         this.speed = Math.hypot(velocity.x, velocity.z)
 
         // --- Move through the KCC
-        const desired = { x: velocity.x * dt, y: velocity.y * dt, z: velocity.z * dt }
+        // Uphill the KCC projects the wanted move onto the slope (it keeps cos(slope) of it along the slope, cos^2 horizontally):
+        // scale it by 1/cos so the horizontal speed keeps ~cos(slope) of the flat speed (87% at 30 deg).
+        let slopeFactor = 1
+        if(startedGrounded && this.grounded && this.slopeAngle > 0.01 && this.slopeAngle <= move.slopeMaxAngle * DEG)
+            slopeFactor = 1 + (Math.min(1 / Math.cos(this.slopeAngle), move.slopeMaxFactor) - 1) * move.slopeCompensation
+
+        const desired = { x: velocity.x * dt * slopeFactor, y: verticalStep, z: velocity.z * dt * slopeFactor }
+
+        // Snap-to-ground would glue the character to the floor on takeoff
+        if(velocity.y > 0)
+            this.controller.disableSnapToGround()
+        else
+            this.controller.enableSnapToGround(feel.kcc.snapToGround)
+
         this.controller.computeColliderMovement(this.collider, desired)
         const movement = this.controller.computedMovement()
-        this.grounded = this.controller.computedGrounded()
+        const wasAirborne = !this.grounded
+        const fallSpeed = - velocity.y
+        this.grounded = this.controller.computedGrounded() && velocity.y <= 0
 
         const current = this.body.translation()
         this.next.x = current.x + movement.x
@@ -231,14 +346,33 @@ export class CharacterController
         const desiredLength = Math.hypot(desired.x, desired.z)
         const movedLength = Math.hypot(movement.x, movement.z)
         this.movedSpeed = movedLength / dt
-        if(desiredLength > 0 && movement.y <= 1e-4 && movedLength < desiredLength * 0.9)
+        if(desiredLength > 0 && (!startedGrounded || movement.y <= 1e-4) && movedLength < desiredLength * 0.9)
         {
             velocity.x = movement.x / dt
             velocity.z = movement.z / dt
         }
         this.slopeAngle = 0
-        if(this.grounded && movedLength > 1e-6)
+        if(startedGrounded && this.grounded && movedLength > 1e-6)
             this.slopeAngle = Math.atan2(movement.y, movedLength)
+
+        // Head hit (ceiling): rising stops
+        if(desired.y > 0 && movement.y < desired.y - 1e-4)
+        {
+            velocity.y = 0
+            this.jumping = false
+            this.bumps++
+            this.events.trigger('bump', [ { y: current.y + movement.y } ])
+        }
+
+        // Landing
+        if(this.grounded && wasAirborne)
+        {
+            this.lastLandSpeed = fallSpeed
+            this.jumping = false
+            this.gliding = false
+            this.glideUsed = false
+            this.events.trigger('land', [ { speed: fallSpeed } ])
+        }
 
         // --- Body yaw (slerp toward the heading) and visual lean
         let heading = null

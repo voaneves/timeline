@@ -14,14 +14,14 @@ export class Ticker
         this.elapsed = 0
         this.delta = 1 / 60
         this.maxDelta = 1 / 30
-        this.scale = 2
+        this.scale = 1 // real time by default (upstream tuned x2 for its vehicle); Time owns the value (bullet time scales from 1)
         this.deltaScaled = this.delta * this.scale
         this.elapsedScaled = 0
         this.waits = []
         this.lastDeltas = []
 
         // Fixed step (plan T0.16): physics and gameplay run on 'fixedTick' at a constant 1/120 s of real time
-        // (1/60 s of scaled/world time at scale 2), independent of the display frame rate. 'tick' stays per frame
+        // (scaled/world time = real time at the default scale 1), independent of the display frame rate. 'tick' stays per frame
         // (rendering, camera, visuals). `fixedSteps` counts completed fixed steps since boot.
         this.fixedDelta = Ticker.FIXED_DELTA
         this.fixedSteps = 0

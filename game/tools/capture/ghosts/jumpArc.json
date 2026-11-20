@@ -1,0 +1,10 @@
+{
+ "v": 1,
+ "dt": 0.008333333333333333,
+ "seed": "timeline-ghost-v1",
+ "steps": 240,
+ "events": [
+  { "t": 0.5, "action": "jump", "value": 1, "trigger": "start" },
+  { "t": 1.5, "action": "jump", "value": 0, "trigger": "end" }
+ ]
+}
