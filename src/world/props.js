@@ -77,11 +77,11 @@ export class Statics {
   }
 }
 
-export const vcMat = () => mat({ vertexColors: true, roughness: 0.38, metalness: 0.05 }, { rim: 0.28, cloud: true });
+export const vcMat = () => mat({ vertexColors: true, roughness: 0.38, metalness: 0.05 }, { rim: 0.5, cloud: true });
 
 // Warp pipe: lathe body with a flared lip, a paper band and a red band under the lip, and a
 // dark inner well; one coloured geometry, origin at ground centre. Ink outline added by the caller.
-export function pipeGeometry(height = 1.6, radius = 0.85, tint = 0x2fb356, lipTint = 0x66e083) {
+export function pipeGeometry(height = 1.6, radius = 0.85, tint = 0x1f9d55, lipTint = 0x54e08e) {
   const s = new Statics();
   const steps = [
     [radius, 0],
@@ -155,7 +155,7 @@ export function createContacts(spots) {
   const mesh = new InstancedMesh(geo, new MeshBasicMaterial({ map: aoTexture(), transparent: true, depthWrite: false }), spots.length);
   const o = new Object3D();
   spots.forEach((p, i) => {
-    o.position.set(p.x, 0.075, p.z);
+    o.position.set(p.x, (p.y || 0) + 0.075 + (p.y ? 0.12 : 0), p.z);
     o.scale.set(p.rx, 1, p.rz ?? p.rx);
     o.updateMatrix();
     mesh.setMatrixAt(i, o.matrix);

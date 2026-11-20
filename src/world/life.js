@@ -67,11 +67,19 @@ export function createLife(scene, { reduced, coarse }) {
   if (NB) scene.add(birds);
   if (NS) scene.add(shadows);
 
+  // Jump scatter: fireflies near the courier burst outward and settle back (decays over ~2 s).
+  let burst = null;
   const wrap = (v, center, half) => ((((v - center + half) % (half * 2)) + half * 2) % (half * 2)) - half + center;
 
   return {
+    scatter(x, z) {
+      burst = { x, z, t: -1 };
+    },
     update(dt, t, px, pz) {
       if (reduced) return;
+      if (burst && burst.t < 0) burst.t = t;
+      const age = burst ? t - burst.t : 99;
+      if (age > 2.5) burst = null;
       for (let i = 0; i < NL; i++) {
         const l = L[i];
         const x = wrap(l.x + Math.sin(t * 0.6 + l.p) * 1.5 + t * 0.5, px, 15);
@@ -86,9 +94,19 @@ export function createLife(scene, { reduced, coarse }) {
       leaves.instanceMatrix.needsUpdate = true;
       for (let i = 0; i < NF; i++) {
         const f = F[i];
-        const x = wrap(f.x + Math.sin(t * 0.8 + f.p) * 1.2, px, 13);
-        const z = wrap(f.z + Math.cos(t * 0.7 + f.p) * 1.2, pz, 8);
-        o.position.set(x, f.y + Math.sin(t * 1.3 + f.p) * 0.35, z);
+        let x = wrap(f.x + Math.sin(t * 0.8 + f.p) * 1.2, px, 13);
+        let z = wrap(f.z + Math.cos(t * 0.7 + f.p) * 1.2, pz, 8);
+        let y = f.y + Math.sin(t * 1.3 + f.p) * 0.35;
+        if (burst) {
+          const dx = x - burst.x;
+          const dz = z - burst.z;
+          const d = Math.max(0.3, Math.hypot(dx, dz));
+          const k = Math.max(0, 1 - d / 6) * Math.exp(-age * 1.5) * 3.2;
+          x += (dx / d) * k;
+          z += (dz / d) * k;
+          y += k * 0.7;
+        }
+        o.position.set(x, y, z);
         o.rotation.set(0, 0, 0);
         o.scale.setScalar(0.5 + 0.5 * Math.max(0, Math.sin(t * 2.4 + f.p)));
         o.updateMatrix();

@@ -40,7 +40,7 @@ export const vnoise = (x, z) => {
 };
 export const rand = (i, salt = 0) => hash(i * 1.37 + salt, i * 0.71 - salt);
 
-export function createTerrain(END) {
+export function createTerrain(END, pathDist = null) {
   const X0 = -34;
   const X1 = END + 30;
   const Z = 46;
@@ -69,8 +69,10 @@ export function createTerrain(END) {
   const pos = geo.attributes.position;
   const col = new Float32Array(pos.count * 3);
   const c = new Color();
-  const grass = new Color(0x58b64f);
-  const hill = new Color(0x6fc261);
+  const grass = new Color(0x9bc84a); // yellow-green meadow, apart from the emerald pipes and trees
+  const hill = new Color(0x86bd4c);
+  const dirt = new Color(0xc19a5e);
+  const coolGreen = new Color(0x6fb87a);
   const dry = new Color(0xd9c07a);
   const sand = new Color(0xe6d39a);
   const paper = new Color(0xefe3c2);
@@ -87,7 +89,14 @@ export function createTerrain(END) {
     const flat = 1 - smooth(8.5, 15, az) * (1 - smooth(0, 10, Math.max(0, -14 - x, x - (END + 1))));
     c.copy(grass).lerp(hill, m * 0.8);
     if (m > 0.75) c.lerp(rock, (m - 0.75) * 1.3);
-    c.lerp(paper, flat * 0.85);
+    // Worn dirt halo around the paths and pads: soft gradient from beige into grass (3.6 units).
+    if (pathDist) {
+      const pt = 1 - smooth(0, 3.6, pathDist(x, z));
+      c.lerp(dirt, pt * 0.88 * (1 - m));
+      c.lerp(paper, flat * 0.12);
+    } else c.lerp(paper, flat * 0.85);
+    // Era identity: the ground drifts from warm ochre (early zones) to a cooler green (recent ones).
+    c.lerp(coolGreen, smooth(30, END, x) * 0.22 * (1 - m * 0.5));
     c.lerp(dry, (1 - smooth(10, 44, x)) * 0.35 * flat);
     if (h < 0.05 && island(x, z) > 0.8) c.lerp(sand, smooth(0.8, 0.88, island(x, z)));
     // Darker edge gradient along the play-area borders, then a deeper grass rim where the cream
@@ -169,7 +178,7 @@ export function createTerrain(END) {
       o.scale.set(s, s * (0.8 + rand(i, 5) * 0.6), s);
       o.updateMatrix();
       mesh.setMatrixAt(n, o.matrix);
-      cc.setHSL(0.27 + rand(i, 6) * 0.08 - (1 - smooth(10, 44, x)) * 0.05, 0.55 + rand(i, 8) * 0.2, (rimBand ? 0.14 : 0.22) + rand(i, 7) * 0.18);
+      cc.setHSL(0.2 + rand(i, 6) * 0.05 - (1 - smooth(10, 44, x)) * 0.03, 0.5 + rand(i, 8) * 0.2, (rimBand ? 0.22 : 0.34) + rand(i, 7) * 0.2);
       mesh.setColorAt(n, cc);
       n++;
     }
@@ -211,6 +220,7 @@ export function createTerrain(END) {
 
   // Composed trees and rocks go into the shared static geometry.
   const scatter = (statics, avoid) => {
+    const spots = []; // AO discs (2x footprint), returned to the caller
     for (let i = 0; i < 100; i++) {
       const x = X0 + 4 + rand(i, 11) * (W - 8);
       const z = rand(i, 12) < 0.8 ? -(11 + rand(i, 13) * 22) : 24 + rand(i, 13) * 10;
@@ -219,6 +229,7 @@ export function createTerrain(END) {
       if (h < 0.1) continue;
       const s = 0.8 + rand(i, 14) * 0.9;
       const kind = rand(i, 15);
+      spots.push({ x, z, y: h, rx: (kind >= 0.78 ? 0.95 : kind < 0.3 ? 1.3 : kind < 0.62 ? 1.2 : 1.0) * s * 2 });
       const trunk = (r0, r1, hh, color = 0x6b3f1f) => statics.add(new CylinderGeometry(r0 * s, r1 * s, hh * s, 7), color, x, h + (hh / 2) * s, z);
       const blob = (r, yy, color, sx = 1, sy = 0.9, ox = 0, oz = 0) => {
         const g = new IcosahedronGeometry(r * s, 1);
@@ -266,6 +277,7 @@ export function createTerrain(END) {
         }
       }
     }
+    return spots;
   };
 
   return { heightAt, terrain, water, makeGrass, makeFlowers, scatter, island, bounds: { X0, X1, Z } };

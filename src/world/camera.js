@@ -17,6 +17,8 @@ export function createFollowCamera(camera, { reduced }) {
   let held = !reduced; // intro waits for begin()
   let shake = 0;
   let fovK = 0;
+  const rollD = new Damper(0);
+  let rollT = 0;
 
   const apply = () => {
     const aspectK = camera.aspect < 1.25 ? 1 + (1.25 - camera.aspect) * 0.85 : 1;
@@ -26,6 +28,7 @@ export function createFollowCamera(camera, { reduced }) {
     const sy = shake > 0.001 ? (Math.random() - 0.5) * shake : 0;
     camera.position.set(tx.x + shiftX.x + (1 - e) * -14 + sx, ty.x + Math.sin(PITCH) * d + 1.2 + (1 - e) * 13 + kick + shiftY.x + sy, tz.x + Math.cos(PITCH) * d);
     camera.lookAt(tx.x + shiftX.x, ty.x + 1.9 - (1 - e) * 1.2 + shiftY.x, tz.x);
+    if (rollD.x !== 0) camera.rotateZ(rollD.x);
     const fov = 36 + fovK;
     if (camera.fov !== fov) {
       camera.fov = fov;
@@ -54,6 +57,7 @@ export function createFollowCamera(camera, { reduced }) {
       if (kick !== 0) kick *= Math.max(0, 1 - dt * 12);
       shake *= Math.max(0, 1 - dt * 9);
       fovK *= Math.max(0, 1 - dt * 5);
+      rollD.update(reduced ? 0 : rollT, 0.16, dt);
       if (!held && introT < 1) introT += dt / 3.8;
       apply();
     },
@@ -67,6 +71,9 @@ export function createFollowCamera(camera, { reduced }) {
       if (!reduced) fovK = Math.max(fovK, v);
     },
     introDone: () => introT >= 1,
+    roll(rad) {
+      rollT = rad;
+    },
     begin() {
       held = false;
       introT = Math.max(introT, -0.12);

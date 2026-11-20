@@ -24,7 +24,7 @@ function crateGeometry() {
   return mergeGeometries(s.parts);
 }
 
-export function createCrates(spots, { colliders, bounds, particles, sfx }) {
+export function createCrates(spots, { colliders, bounds, particles, sfx, onSecret }) {
   const geo = crateGeometry();
   const body = new InstancedMesh(geo, mat({ vertexColors: true, roughness: 0.8 }, { rim: 0.2 }), spots.length);
   body.instanceMatrix.setUsage(DynamicDrawUsage);
@@ -40,7 +40,9 @@ export function createCrates(spots, { colliders, bounds, particles, sfx }) {
   contact.frustumCulled = false;
   contact.renderOrder = 1;
 
-  const list = spots.map(([x, y, z]) => ({
+  const list = spots.map(([x, y, z, secret]) => ({
+    secret,
+    secretDone: false,
     x,
     y,
     z,
@@ -197,6 +199,10 @@ export function createCrates(spots, { colliders, bounds, particles, sfx }) {
       c.box.y1 = -99;
       hit(c, 7);
       any = true;
+      if (c.secret !== undefined && !c.secretDone) {
+        c.secretDone = true;
+        if (onSecret) onSecret(c);
+      }
     }
     return any;
   };

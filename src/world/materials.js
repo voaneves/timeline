@@ -1,10 +1,10 @@
-import { BackSide, DataTexture, MeshBasicMaterial, MeshToonMaterial, NearestFilter, RedFormat, Vector2 } from "three";
+import { BackSide, DataTexture, MeshBasicMaterial, MeshToonMaterial, NearestFilter, RedFormat, Vector2, Vector3 } from "three";
 
 // Brand look: a 4-step toon ramp, a soft warm rim and ink (#0a0a0a) inverted-hull outlines.
 // Per-blob seeds, computed on the CPU (double precision) so the shader and cloudBlobs() agree.
 const fract = (v) => v - Math.floor(v);
 const seeds = Array.from({ length: 6 }, (_, i) => new Vector2(fract(Math.sin(i * 12.9898 + 4.1) * 43758.5453), fract(Math.sin(i * 78.233 + 1.7) * 12345.679)));
-export const uniforms = { uTime: { value: 0 }, uFocus: { value: 0 }, uCloudSeed: { value: seeds } };
+export const uniforms = { uTime: { value: 0 }, uFocus: { value: 0 }, uCloudSeed: { value: seeds }, uPlayer: { value: new Vector3(0, -99, 0) } };
 // Blob centres and radii at time t around focus x (also used by the debug hook to aim a screenshot).
 export const cloudBlobs = (t, focus) =>
   seeds.map((h, i) => {
@@ -28,7 +28,9 @@ float cloudShade(vec2 p) {
     vec2 d = (p - vec2(cx, cz)) / vec2(1.45, 1.0);
     k = max(k, 1.0 - smoothstep(r - 2.0, r + 2.0, length(d)));
   }
-  return 1.0 - 0.21 * k;
+  // ~3% low-amplitude surface grain (a fake bump) on top of the cloud shade.
+  float grain = sin(p.x * 3.1 + sin(p.y * 1.7)) * sin(p.y * 2.9 - p.x * 0.8) + sin(p.x * 7.3 + p.y * 5.1) * 0.5;
+  return (1.0 - 0.21 * k) * (1.0 + grain * 0.02);
 }`;
 
 const ramp = new DataTexture(new Uint8Array([84, 150, 208, 255]), 4, 1, RedFormat);
@@ -44,8 +46,9 @@ export function mat(params = {}, { sway = false, rim = 0.26, cloud = false } = {
   m.onBeforeCompile = (shader) => {
     shader.uniforms.uTime = uniforms.uTime;
     if (sway) {
+      shader.uniforms.uPlayer = uniforms.uPlayer;
       shader.vertexShader =
-        "uniform float uTime;\n" +
+        "uniform float uTime; uniform vec3 uPlayer; varying float vTip;\n" +
         shader.vertexShader.replace(
           "#include <begin_vertex>",
           `#include <begin_vertex>
@@ -53,8 +56,22 @@ export function mat(params = {}, { sway = false, rim = 0.26, cloud = false } = {
           float bend = position.y * position.y * 0.9;
           float gust = sin(uTime * 0.7 + wp.x * 0.11) * 0.5 + 0.5;
           transformed.x += (sin(uTime * 2.3 + wp.x * 0.9 + wp.z * 0.7) * 0.6 + gust) * bend * 0.5;
-          transformed.z += cos(uTime * 1.9 + wp.x * 0.6) * bend * 0.3;`
+          transformed.z += cos(uTime * 1.9 + wp.x * 0.6) * bend * 0.3;
+          vTip = position.y;
+          // Blades bend away from the avatar (radius ~1.2) and flatten a little.
+          vec2 away = wp.xz - uPlayer.xz;
+          float pd = length(away);
+          float push = smoothstep(1.25, 0.15, pd) * smoothstep(-0.2, 1.2, 1.4 - abs(uPlayer.y - wp.y));
+          mat3 im3 = mat3(instanceMatrix);
+          vec3 pw = vec3(away.x, 0.0, away.y) / max(pd, 0.05) * push * 0.75 * (position.y / 0.7);
+          transformed += transpose(im3) * pw / max(dot(im3[0], im3[0]), 0.01);
+          transformed.y -= push * position.y * 0.3;`
         );
+    }
+    if (sway) {
+      shader.fragmentShader =
+        "varying float vTip;\n" +
+        shader.fragmentShader.replace("#include <opaque_fragment>", "outgoingLight += vec3(0.62, 0.55, 0.16) * smoothstep(0.3, 0.7, vTip) * 0.5;\n#include <opaque_fragment>");
     }
     if (cloud) {
       shader.uniforms.uFocus = uniforms.uFocus;

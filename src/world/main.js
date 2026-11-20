@@ -5,9 +5,12 @@ import {
   Color,
   CylinderGeometry,
   DirectionalLight,
+  DynamicDrawUsage,
   FogExp2,
   HemisphereLight,
+  ExtrudeGeometry,
   Float32BufferAttribute,
+  Shape,
   InstancedMesh,
   Mesh,
   MeshBasicMaterial,
@@ -17,6 +20,7 @@ import {
   SphereGeometry,
   SRGBColorSpace,
   Vector2,
+  RingGeometry,
   Vector3,
 } from "three";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
@@ -40,7 +44,7 @@ import { Spring, createTweens, clamp, easeOut, easeInOut } from "./springs.js";
 
 // Sky colours mirror the world.sky tokens (tokens/timeline.tokens.json).
 // Light: a warm gradient (clear blue overhead into a cream horizon); fog is the horizon colour.
-const SKY = { light: ["#8fc7ff", "#ffe9c2"], dark: ["#0a0a0a", "#1a1a1a"] };
+const SKY = { light: ["#82bdfa", "#ffdfb0"], dark: ["#0a0a0a", "#1a1a1a"] };
 const isDark = () => {
   const forced = document.documentElement.getAttribute("data-theme");
   if (forced) return forced === "dark";
@@ -93,9 +97,12 @@ export async function start({ container, onFallback, onExit }) {
   const scheme = window.matchMedia("(prefers-color-scheme: dark)");
   scheme.addEventListener("change", applySky);
 
-  scene.add(new HemisphereLight(0xdcecff, 0x7a5a3a, 0.3));
-  const sun = new DirectionalLight(0xffe9c8, 3.0);
-  sun.position.set(8, 14, 6);
+  // Golden hour: low warm sun (25 degrees up, from the right and slightly ahead) and a cool blue fill.
+  scene.add(new HemisphereLight(0x9ec3ff, 0x6b5a48, 0.5));
+  const sun = new DirectionalLight(0xffd9a0, 3.0);
+  const SUN_OFF = new Vector3(24.5, 11.8, -4.2);
+  const SUN_DIR = SUN_OFF.clone().normalize();
+  sun.position.copy(SUN_OFF);
   const shadows = rig.renderer.shadowMap.enabled;
   if (shadows) {
     sun.castShadow = true;
@@ -104,12 +111,12 @@ export async function start({ container, onFallback, onExit }) {
     sun.shadow.normalBias = 0.04;
     sun.shadow.radius = 3;
     const s = sun.shadow.camera;
-    s.left = -13;
-    s.right = 13;
-    s.top = 13;
-    s.bottom = -13;
+    s.left = -17;
+    s.right = 17;
+    s.top = 15;
+    s.bottom = -15;
     s.near = 1;
-    s.far = 44;
+    s.far = 70;
   }
   scene.add(sun, sun.target);
 
@@ -161,7 +168,11 @@ export async function start({ container, onFallback, onExit }) {
 
   // Terrain (flat play area, hills, beach), water ring, grass and trees. The play area is
   // flat at y = 0 so the kinematic physics stays simple; the hills are scenery only.
-  const T = createTerrain(END);
+  const pathDist = (x, z) => {
+    const era = Math.hypot(Math.max(0, 4 - x, x - (xp - 4)), z - roadZ(x)) - 1.9;
+    return Math.min(era, Math.hypot(x, z - 1) - 6.4, Math.hypot(x - (xp + 3), z) - 7.5);
+  };
+  const T = createTerrain(END, pathDist);
   scene.add(T.terrain, T.water);
   statics.add(new CylinderGeometry(6.4, 6.4, 0.06, 40), 0xe3d3a4, 0, 0.02, 1, 0, false); // crossroads pad
   statics.add(new CylinderGeometry(7.5, 7.5, 0.06, 40), 0xe3d3a4, xp + 3, 0.02, 0, 0, false); // plaza pad
@@ -177,7 +188,7 @@ export async function start({ container, onFallback, onExit }) {
     if (Math.hypot(x, z - 1) < 7.5) return true;
     return false;
   };
-  T.scatter(statics, (x, z) => Math.abs(z) < 10.5 || keepClear(x, z));
+  const treeSpots = T.scatter(statics, (x, z) => Math.abs(z) < 10.5 || keepClear(x, z));
   const grassA = T.makeGrass(rig.coarse ? 1800 : 3800, (x, z) => keepClear(x, z) || Math.abs(z) < 2.2 && x > 4 && x < eraEnd);
   scene.add(grassA);
   scene.add(T.makeGrass(rig.coarse ? 700 : 1500, (x, z) => keepClear(x, z), true));
@@ -259,7 +270,7 @@ export async function start({ container, onFallback, onExit }) {
 
   const pipeMat = vcMat();
   const pipeGroups = new Map();
-  const makePipe = (kind, x, z, h, extra, tints = [0x2fb356, 0x66e083]) => {
+  const makePipe = (kind, x, z, h, extra, tints = [0x1f9d55, 0x54e08e]) => {
     const mesh = new Mesh(pipeGeometry(h, 0.85, tints[0], tints[1]), pipeMat);
     mesh.position.set(x, 0, z);
     mesh.castShadow = true;
@@ -325,6 +336,35 @@ export async function start({ container, onFallback, onExit }) {
       '<p><a class="btn btn-primary" href="https://github.com/voaneves"><span class="dot" aria-hidden="true"></span>Abrir github.com/voaneves</a></p>';
     return a;
   };
+
+  // Plaza sculpting: a darker inner paving, a muted red ring and a curb of stones with gaps at the pipes.
+  {
+    const pcx = xp + 3;
+    statics.add(new CylinderGeometry(5.5, 5.5, 0.05, 48), 0xd6c48f, pcx, 0.05, 0, 0, false);
+    statics.add(new RingGeometry(2.6, 2.95, 48).rotateX(-Math.PI / 2), 0xd9482b, pcx, 0.082, 0, 0, false);
+    statics.add(new RingGeometry(5.0, 5.25, 64).rotateX(-Math.PI / 2), 0xb9ab88, pcx, 0.082, 0, 0, false);
+    const pipesXZ = interactables.filter((i) => i.kind === "project").map((i) => [i.x, i.z]);
+    const N = 44;
+    for (let k = 0; k < N; k++) {
+      const a = (k / N) * Math.PI * 2;
+      const x = pcx + 7.7 * Math.cos(a);
+      const z = 7.7 * Math.sin(a);
+      if (pipesXZ.some(([px, pz]) => Math.hypot(px - x, pz - z) < 1.9)) continue;
+      const g = new BoxGeometry(0.95, 0.2 + rand(k, 5) * 0.1, 0.55);
+      statics.add(g, [0xcdbf9b, 0xb9ab88, 0xd9cda8][k % 3], x, 0.1, z, -(a + Math.PI / 2));
+    }
+  }
+
+  const flagSpots = [
+    [-6.6, 4.8, 0xf50000],
+    [10.6, 4.6, 0xf4ead4],
+    [xp - 7.8, -6.4, 0xf4ead4],
+    [xp - 7.8, 6.4, 0xf50000],
+  ];
+  flagSpots.forEach(([x, z]) => {
+    statics.add(new CylinderGeometry(0.05, 0.07, 3.2, 6), 0xf4ead4, x, 1.6, z);
+    statics.add(new SphereGeometry(0.1, 8, 6), 0x0a0a0a, x, 3.3, z);
+  });
 
   // Staircase and the mast platform.
   for (let k = 0; k < 3; k++) {
@@ -436,6 +476,7 @@ export async function start({ container, onFallback, onExit }) {
     ...(e3 ? [{ x: e3.x + 0.5, z: roadZ(e3.x) + 3.6, rx: 4.6, rz: 1.5 }] : []),
     ...(e4 ? [1.2, 2.0, 2.8, 1.8].map((h, i) => ({ x: e4.x - 1.2 + i * 1.7, z: roadZ(e4.x - 1.2 + i * 1.7) + 4.6, rx: 1.35 })) : []),
     { x: sx + 1.1, z: 0, rx: 2.0, rz: 3.2 },
+    ...treeSpots,
   ];
   scene.add(createContacts(contactSpots));
 
@@ -458,6 +499,45 @@ export async function start({ container, onFallback, onExit }) {
   const SPAWN = { x: 0, z: 2.5 };
   const body = createBody(SPAWN.x, 0, SPAWN.z);
   const bounds = { x0: -14, x1: END - 1, z0: -10, z1: 10 };
+  // Paper pennants on poles: idle flutter, and a spring kick when the courier passes.
+  const pennantShape = new Shape();
+  pennantShape.moveTo(0, 0.28);
+  pennantShape.lineTo(1.1, 0.08);
+  pennantShape.lineTo(0, -0.28);
+  pennantShape.lineTo(0, 0.28);
+  const pennants = new InstancedMesh(new ExtrudeGeometry(pennantShape, { depth: 0.03, bevelEnabled: false }), mat({ roughness: 0.9, side: 2 }, { rim: 0.1 }), flagSpots.length);
+  pennants.instanceMatrix.setUsage(DynamicDrawUsage);
+  pennants.castShadow = true;
+  pennants.frustumCulled = false;
+  const flagState = flagSpots.map(([x, z, color], i) => {
+    pennants.setColorAt(i, new Color(color));
+    return { x, z, sp: new Spring(120, 5), near: false };
+  });
+  const flagO = new Object3D();
+  scene.add(pennants);
+
+  // Three hidden crates (secrets): kick one to open a "Você sabia?" card made from the page's own timeline.
+  const pick = (f) => blocks[Math.min(blocks.length - 1, Math.floor(blocks.length * f))];
+  const secretDefs = [
+    { b: pick(0.18), x: (e1 ? e1.x : 14) + 3.4, dz: -7.2 },
+    { b: pick(0.5), x: (e3 ? e3.x : 40) - 5.5, dz: -7.4 },
+    { b: pick(0.82), x: (e4 ? e4.x : 60) + 3, dz: -7.0 },
+  ].map((d) => ({ ...d, z: roadZ(d.x) + d.dz }));
+  const secretCard = (b) => {
+    const eraInfo = content.eras[b.en.era - 1] || content.eras[0];
+    const a = document.createElement("article");
+    const mk = (tag, text, cls) => {
+      const el = document.createElement(tag);
+      if (cls) el.className = cls;
+      el.textContent = text;
+      a.appendChild(el);
+    };
+    mk("p", "Segredo encontrado", "kicker");
+    mk("h3", "Você sabia?");
+    mk("p", `${b.en.label}: ${b.en.title}.`);
+    mk("p", `Zona ${eraInfo.n}: ${eraInfo.name} (${eraInfo.years}). Bata no bloco desse período para ler mais.`);
+    return a;
+  };
   const staticBoxes = boxes.slice();
   const crates = createCrates(
     [
@@ -465,8 +545,9 @@ export async function start({ container, onFallback, onExit }) {
       [xp - 3.2, 1.2, 3.6],
       [xp - 2.4, 0.4, -3.4],
       [xp - 4.8, 0.4, -1.6],
+      ...secretDefs.map((d, i) => [d.x, 0.4, d.z, i]),
     ],
-    { colliders: staticBoxes, bounds, particles, sfx }
+    { colliders: staticBoxes, bounds, particles, sfx, onSecret: (c) => crateSecret(c.secret) }
   );
   crates.list.forEach((c) => boxes.push(c.box));
   scene.add(...crates.meshes);
@@ -637,6 +718,7 @@ export async function start({ container, onFallback, onExit }) {
   async function sink(it, down) {
     const y0 = body.y;
     it.spring.kick(down ? -5 : 4);
+    cam.roll(down ? 0.105 : 0); // ~6 degrees of camera roll while sucked in
     sfx.play("pipe");
     await tweens.tween(down ? 0.5 : 0.45, (t) => {
       const k = down ? easeInOut(t) : 1 - easeOut(1 - t);
@@ -645,11 +727,30 @@ export async function start({ container, onFallback, onExit }) {
     });
   }
 
+  async function crateSecret(k) {
+    await tweens.wait(reduced ? 0.1 : 0.9); // let the kick play out first
+    while (state !== "play") await tweens.wait(0.25);
+    state = "card";
+    secretsFound.add("crate" + k);
+    sfx.play("flag");
+    for (let i = 0; i < 3; i++) setTimeout(() => sfx.play("coin", 1 + i * 0.15), i * 110);
+    coinCount += 3;
+    ui.setCoins(coinCount);
+    ui.announce(`Segredo encontrado: caixa escondida ${secretsFound.size}`, 0);
+    ui.openCard(secretCard(secretDefs[k].b), { link: null });
+    await waitClose();
+    state = "play";
+  }
+
   async function enterPipe(it) {
     state = "busy";
     tap = null;
     body.vx = body.vz = body.vy = 0;
     await hopTo(it.x, it.top, it.z, reduced ? 0.05 : 0.32);
+    if (it.kind === "warp" && !reduced) {
+      freeze = 0.08; // an 80 ms freeze-frame right before the suck-in
+      await tweens.wait(0.001);
+    }
     await sink(it, true);
     avatar.setVisible(false);
     if (it.kind === "warp") {
@@ -657,6 +758,7 @@ export async function start({ container, onFallback, onExit }) {
       return;
     }
     state = "card";
+    cam.roll(0);
     if (it.kind === "egg") {
       if (!secretsFound.has("egg")) {
         secretsFound.add("egg");
@@ -713,6 +815,8 @@ export async function start({ container, onFallback, onExit }) {
     emitDust(body.x, body.y, body.z, 10);
     // Arrival: FOV punch, red confetti burst and the film-strip ribbon in the reveal wipe.
     cam.punch(8);
+    cam.roll(0);
+    if (!reduced) tweens.tween(0.6, (t) => post.setInk(t)).then(() => post.setInk(0));
     sfx.play("land");
     particles.emit(body.x, body.y + 1.6, body.z, 70, { color: 0xf50000, speed: 5, up: 7, size: 0.2, life: 1.6, gravity: 6 });
     particles.emit(body.x, body.y + 1.6, body.z, 30, { color: 0xf4ead4, speed: 4, up: 6, size: 0.16, life: 1.6, gravity: 6 });
@@ -820,6 +924,7 @@ export async function start({ container, onFallback, onExit }) {
       jumping = true;
       body.grounded = false;
       avatar.jump();
+      life.scatter(body.x, body.z);
       sfx.play("jump");
       emitDust(body.x, body.y, body.z, 4);
     }
@@ -853,6 +958,8 @@ export async function start({ container, onFallback, onExit }) {
   }
 
   let pending = null;
+  let sparkleT = 0;
+  const sunV = new Vector3();
   let freeze = 0;
   let heroPose = null;
 
@@ -1004,11 +1111,41 @@ export async function start({ container, onFallback, onExit }) {
     } else cam.update(dt, { x: rx, y: ry, z: rz, vx: state === "play" ? body.vx : 0, vz: state === "play" ? body.vz : 0, hint, card: state === "card", narrow: narrow() });
 
     uniforms.uFocus.value = rx;
+    uniforms.uPlayer.value.set(rx, ry, rz);
     crates.sync(dt);
     updateLabels(dt, rx, ry, rz);
 
+    // Era identity: the whole frame drifts from warm (early zones) to cool (recent ones).
+    const eraT = clamp((rx - 12) / Math.max(1, eraEnd - 12), 0, 1);
+    post.setTint(1.045 + (0.955 - 1.045) * eraT, 1.0 + (0.995 - 1.0) * eraT, 0.935 + (1.05 - 0.935) * eraT);
+    // God rays: the sun's screen position (rays fade out when the sun is behind the camera).
+    sunV.copy(camera.position).addScaledVector(SUN_DIR, 300).project(camera);
+    post.setSun(sunV.x * 0.5 + 0.5, sunV.y * 0.5 + 0.5, sunV.z < 1);
+    // Pennants flutter, and kick when the courier walks past.
+    flagState.forEach((f, i) => {
+      const near = Math.hypot(rx - f.x, rz - f.z) < 2.3;
+      if (near && !f.near && !reduced) f.sp.kick(7 + Math.random() * 3);
+      f.near = near;
+      const sv = f.sp.update(dt);
+      flagO.position.set(f.x, 3.05, f.z);
+      flagO.rotation.set(0, (reduced ? 0.3 : 0.3 + Math.sin(time * 1.8 + i * 1.7) * 0.12) + sv * 0.9, reduced ? 0 : Math.sin(time * 2.6 + i) * 0.05 + sv * 0.2);
+      flagO.updateMatrix();
+      pennants.setMatrixAt(i, flagO.matrix);
+    });
+    pennants.instanceMatrix.needsUpdate = true;
+    // Hidden crates glint now and then when the courier is nearby.
+    sparkleT -= dt;
+    if (sparkleT <= 0 && !reduced) {
+      sparkleT = 1.4;
+      for (const c of crates.list) {
+        if (c.secret !== undefined && !c.secretDone && Math.hypot(c.x - rx, c.z - rz) < 11) {
+          particles.emit(c.x, c.y + 0.55, c.z, 3, { color: 0xffd75a, speed: 0.5, up: 1.6, size: 0.1, life: 0.9, gravity: 1 });
+        }
+      }
+    }
+
     // Shadow camera follows the avatar.
-    sun.position.set(rx + 8, ry + 14, rz + 6);
+    sun.position.set(rx + SUN_OFF.x, ry + SUN_OFF.y, rz + SUN_OFF.z);
     sun.target.position.set(rx, 0, rz);
     sun.target.updateMatrixWorld();
 
@@ -1062,7 +1199,8 @@ export async function start({ container, onFallback, onExit }) {
   const handle = {
     begin,
     info: rig.renderer.info,
-    debug: { begunAt: () => begunAt, introDone: () => cam.introDone(), cloudBlobs: () => cloudBlobs(uniforms.uTime.value, uniforms.uFocus.value), hero: (pose) => { heroPose = pose; confetti = true; }, measure: () => { const i = rig.renderer.info; i.reset(); rig.renderer.render(scene, camera); const all = { calls: i.render.calls, tris: i.render.triangles }; const sm = rig.renderer.shadowMap; const was = sm.autoUpdate; sm.autoUpdate = false; i.reset(); rig.renderer.render(scene, camera); sm.autoUpdate = was; return { total: all, mainPass: { calls: i.render.calls, tris: i.render.triangles } }; }, quality: () => ({ level, ema }), setLevel, found, secretsFound, popCoin, body, crates, interactables, input: inp, blocks, coins, getState: () => state, warp, coinTotal: totalCoins, sfx, particles },
+    xp,
+    debug: { setWipe: (v) => post.setWipe(v), setInk: (v) => post.setInk(v), roll: (v) => cam.roll(v), begunAt: () => begunAt, introDone: () => cam.introDone(), cloudBlobs: () => cloudBlobs(uniforms.uTime.value, uniforms.uFocus.value), hero: (pose) => { heroPose = pose; confetti = true; }, measure: () => { const i = rig.renderer.info; i.reset(); rig.renderer.render(scene, camera); const all = { calls: i.render.calls, tris: i.render.triangles }; const sm = rig.renderer.shadowMap; const was = sm.autoUpdate; sm.autoUpdate = false; i.reset(); rig.renderer.render(scene, camera); sm.autoUpdate = was; return { total: all, mainPass: { calls: i.render.calls, tris: i.render.triangles } }; }, quality: () => ({ level, ema }), setLevel, found, secretsFound, popCoin, body, crates, interactables, input: inp, blocks, coins, getState: () => state, warp, coinTotal: totalCoins, sfx, particles },
     stop() {
       themeObserver.disconnect();
       scheme.removeEventListener("change", applySky);
