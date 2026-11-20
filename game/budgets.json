@@ -1,5 +1,5 @@
 {
-  "$comment": "Plan 6.5 (critical path, gz) + 7.4 (perf). maxKB = target (WARN above), failKB = hard fail. Categories are matched against the logical asset name then the dist path; first match wins. Any dist file that matches no category and no ignore entry FAILS the gate; every file referenced by index.html (script src, modulepreload, stylesheet) must be in a category of the critical group; requiredFiles must exist in dist/. Tune 'match' when new content lands (palette, victor, era batches, audio).",
+  "$comment": "Plan 6.5 (critical path, gz) + 7.4 (perf). maxKB = target (WARN above), failKB = hard fail. prodForbidden categories (debug-only chunks, test assets) fail in a production dist, allowed with --debug. Categories are matched against the logical asset name then the dist path; first match wins. Any dist file that matches no category and no ignore entry FAILS the gate; every file referenced by index.html (script src, modulepreload, stylesheet) must be in a category of the critical group; requiredFiles must exist in dist/. Tune 'match' when new content lands (palette, victor, era batches, audio).",
   "size": {
     "categories": [
       { "name": "html",       "match": "^index\\.html$",                         "budget": { "maxKB": 15,   "failKB": 30 } },
@@ -7,7 +7,7 @@
       { "name": "three",      "match": "assets/three\\.webgpu-.*\\.js$",         "budget": { "maxKB": 330,  "failKB": 380 } },
       { "name": "rapierJs",   "match": "assets/rapier-.*\\.js$",                 "budget": { "maxKB": 60,   "failKB": 120 } },
       { "name": "rapierWasm", "match": "\\.wasm$",                               "budget": { "maxKB": 1200, "failKB": 1300 } },
-      { "name": "lazyDebug",  "match": "assets/(Inspector|PerfHud|PhysicsSmoke)-.*\\.js$", "budget": null },
+      { "name": "lazyDebug",  "match": "assets/(Inspector|PerfHud|PhysicsSmoke)-.*\\.js$", "budget": { "maxKB": 200, "failKB": 400 }, "prodForbidden": true },
       { "name": "game",       "match": "assets/Game-.*\\.js$",                  "budget": { "maxKB": 110,  "failKB": 150 } },
       { "name": "ghost",      "match": "assets/Ghost-.*\\.js$",                "budget": { "maxKB": 10,   "failKB": 30 } },
       { "name": "licenses",   "match": "^LICENSES\\.md$",                       "budget": { "maxKB": 40,   "failKB": 80 } },
@@ -18,7 +18,7 @@
       { "name": "victor",     "match": "(^|/)victor[^/]*\\.(glb|bin|png)$",      "budget": { "maxKB": 200,  "failKB": 260 } },
       { "name": "eraOrigens", "match": "(^|/)origens[^/]*\\.(glb|bin|png|ktx2|json)$", "budget": { "maxKB": 850, "failKB": 1000 } },
       { "name": "audio",      "match": "\\.(ogg|mp3|m4a|opus|wav)$",             "budget": { "maxKB": 750,  "failKB": 900 } },
-      { "name": "testAssets", "match": "(^|/)probe[^/]*\\.glb$",                 "budget": null }
+      { "name": "testAssets", "match": "(^|/)probe[^/]*\\.glb$",                 "budget": { "maxKB": 100, "failKB": 500 }, "prodForbidden": true }
     ],
     "ignore": [],
     "requiredFiles": ["index.html", "LICENSES.md"],

@@ -2,7 +2,8 @@
 // Sources: dist/index.html (entry + modulepreload), dist/asset-manifest.*.json (hashed static assets), dist/assets/*.
 // (Vite's own manifest is not enabled in vite.config.js; the HTML + file-name rules cover the same ground.)
 // Related: `npm run gate:replay` runs the ghost determinism check (tools/capture/ghost-verify.mjs, headless Chrome); not part of `npm test`.
-// CLI: node scripts/check-size.mjs [--dist dist] [--budgets budgets.json] [--json]
+// CLI: node scripts/check-size.mjs [--dist dist] [--budgets budgets.json] [--json] [--debug]
+// Categories flagged "prodForbidden" (debug-only chunks, test assets) FAIL when present in a production dist; --debug (dist-debug builds) allows them.
 import { readFileSync, readdirSync, existsSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { gzipSync, brotliCompressSync, constants } from 'node:zlib'
@@ -93,13 +94,16 @@ export function measure({ dist = 'dist', budgets })
         const cat = fileCat.get(ref)
         if(!cat || !critical.has(cat)) referencedProblems.push(`${ref}: referenced by index.html but not counted in the critical group (category: ${cat ?? 'none'})`)
     }
-    return { categories, groups, unclassified, ignored, referenced, missing, referencedProblems }
+    const prodForbidden = budgets.categories.filter((c) => c.prodForbidden).flatMap((c) => categories[c.name].files.map((f) => [f, c.name]))
+    return { categories, groups, prodForbidden, unclassified, ignored, referenced, missing, referencedProblems }
 }
 
 // Structural failures (independent of byte budgets)
-export function integrity(result)
+export function integrity(result, { debug = false } = {})
 {
+    const forbidden = debug ? [] : result.prodForbidden.map(([f, c]) => `${f}: category "${c}" is debug-only and must not ship in a production build`)
     return [
+        ...forbidden,
         ...result.unclassified.map((f) => `unclassified file (add a category or an "ignore" entry in budgets.json): ${f}`),
         ...result.missing.map((f) => `required file missing from dist: ${f}`),
         ...result.referencedProblems,
@@ -122,12 +126,12 @@ export function evaluate(result, budgets)
 
 const fmt = (_n) => (_n / KB).toFixed(1).padStart(9) + ' KB'
 
-export function report(result, rows)
+export function report(result, rows, opts)
 {
     console.log('kind      name              gzip         brotli       budget(gz)   fail(gz)   status')
     for(const r of rows)
         console.log(`${r.kind.padEnd(9)} ${r.name.padEnd(16)} ${fmt(r.gz)} ${fmt(r.br)} ${String(r.maxKB).padStart(9)} KB ${String(r.failKB).padStart(7)} KB  ${r.status}`)
-    for(const p of integrity(result)) console.log('  FAIL', p)
+    for(const p of integrity(result, opts)) console.log('  FAIL', p)
 }
 
 if(process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1]))
@@ -137,9 +141,9 @@ if(process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1]
     const budgets = JSON.parse(readFileSync(resolve(arg('--budgets', process.env.BUDGETS ?? 'budgets.json')), 'utf8'))
     const result = measure({ dist: arg('--dist', 'dist'), budgets: budgets.size })
     const rows = evaluate(result, budgets.size)
-    const problems = integrity(result)
+    const problems = integrity(result, { debug: args.includes('--debug') })
     if(args.includes('--json')) console.log(JSON.stringify({ rows, unclassified: result.unclassified, problems }, null, 2))
-    else report(result, rows)
+    else report(result, rows, { debug: args.includes('--debug') })
     const failed = rows.filter((r) => r.status === 'FAIL')
     if(failed.length || problems.length) { console.error(`size gate FAILED: ${[...failed.map((r) => r.name), ...problems].join('; ')}`); process.exit(1) }
     console.log('size gate passed')

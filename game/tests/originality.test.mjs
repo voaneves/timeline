@@ -131,3 +131,57 @@ test('re-encoded PNG with the same pixels fails; different pixels pass', async (
         assert.equal(audit(root, game).code, 0)
     } finally { rmSync(join(root, '..'), { recursive: true, force: true }) }
 })
+
+const withTree = (fn) => {
+    const { root, game } = makeRoot()
+    try { fn(root, game) } finally { rmSync(join(root, '..'), { recursive: true, force: true }) }
+}
+const HDR = 'Adapted from folio-2025 by Bruno Simon (MIT)'
+
+test('exact attribution header comment line is allowed; header with trailing copy phrase or code fails', () => withTree((root, game) => {
+    writeFileSync(join(game, 'sources', 'hdr.js'), `// ${HDR}\n/* ${HDR} */\nexport const a = 1\n`)
+    assert.equal(audit(root, game).code, 0)
+    writeFileSync(join(game, 'sources', 'hdr.js'), `// ${HDR} Wake & bake\n`)
+    assert.equal(audit(root, game).code, 1)
+    writeFileSync(join(game, 'sources', 'hdr.js'), `const brunoSecret = 1 // ${HDR}\n`)
+    assert.equal(audit(root, game).code, 1)
+    writeFileSync(join(game, 'sources', 'hdr.js'), `// ${HDR}; but see Bruno's other thing\n`)
+    assert.equal(audit(root, game).code, 1)
+}))
+
+test('upstream file inside a nested node_modules or .git fails; root node_modules is skipped', () => withTree((root, game) => {
+    mkdirSync(join(game, 'node_modules'), { recursive: true })
+    writeFileSync(join(game, 'node_modules', 'dep.bin'), UPSTREAM_BYTES)
+    assert.equal(audit(root, game).code, 0, 'game/node_modules is skipped')
+    for(const nested of [join('sources', 'node_modules'), join('sources', '.git')]) {
+        mkdirSync(join(game, nested), { recursive: true })
+        writeFileSync(join(game, nested, 'hidden.bin'), UPSTREAM_BYTES)
+        assert.equal(audit(root, game).code, 1, nested)
+        rmSync(join(game, nested), { recursive: true, force: true })
+    }
+}))
+
+test('attribution docs are exempt only at the roots, not in subfolders', () => withTree((root, game) => {
+    writeFileSync(join(game, 'README.md'), 'Adapted from the work of Bruno Simon.\n')
+    writeFileSync(join(root, 'NOTICE.md'), 'folio-2025 by Bruno Simon\n')
+    assert.equal(audit(root, game).code, 0, 'root docs may name the author')
+    for(const dir of [join(game, 'sources'), join(root, 'src')]) {
+        mkdirSync(dir, { recursive: true })
+        writeFileSync(join(dir, 'README.md'), 'notes by Bruno\n')
+        const r = audit(root, game)
+        assert.equal(r.code, 1, dir)
+        rmSync(join(dir, 'README.md'))
+    }
+}))
+
+test('copy phrase in an unknown-extension or no-extension file fails', () => withTree((root, game) => {
+    writeFileSync(join(game, 'sources', 'data.dat'), Buffer.concat([Buffer.from([0, 1, 2, 3]), Buffer.from('xx Wake & bake xx'), Buffer.from([0, 255])]))
+    const r = audit(root, game)
+    assert.equal(r.code, 1)
+    assert.match(r.out, /in non-text file/)
+    rmSync(join(game, 'sources', 'data.dat'))
+    writeFileSync(join(game, 'sources', 'NOEXT'), 'Cookie Clicker')
+    assert.equal(audit(root, game).code, 1)
+    rmSync(join(game, 'sources', 'NOEXT'))
+    assert.equal(audit(root, game).code, 0)
+}))

@@ -8,9 +8,9 @@
 //
 // What is scanned
 //   - EVERY file under game/ (not only sources/static/dist), plus the repo root: top-level files and the
-//     assets/, src/, scripts/, tokens/ and docs/ folders. Skipped: node_modules, .git, game/ when scanning the
+//     assets/, src/, scripts/, tokens/ and docs/ folders. Skipped: node_modules and .git only directly at the game root / repo root (never nested), game/ when scanning the
 //     repo root (it is its own tree), and scripts/upstream-hashes.json (the manifest itself).
-//   - docs/ (repo root) and attribution documents (NOTICE.md, LICENSES.md, LICENSE, README.md) legitimately
+//   - docs/ (repo root) and attribution documents (NOTICE.md, LICENSES.md, LICENSE, README.md; only at the repo root and the game/ root) legitimately
 //     name the upstream author, so text phrases / identifiers are NOT checked there; byte hashes and decoded
 //     blobs still are. tools/capture/ (baselines of the reference site) and tests/ get the same treatment. This script and its tests name the identifiers on purpose and get the same treatment.
 //
@@ -38,7 +38,7 @@
 //   - Interlaced (Adam7) PNGs are not pixel-hashed. Blobs compressed (gzip/deflate) before base64 are not decoded.
 //   - Copy phrases are a short curated list, not the upstream text; paraphrases are not detected.
 //
-// Allowlist: lines with the attribution header ("Adapted from folio-2025 by Bruno Simon (MIT)"),
+// Allowlist: a line that is exactly one comment holding the attribution header ("Adapted from folio-2025 by Bruno Simon (MIT)", nothing else on the line),
 // and anything under three/examples/jsm/libs/** (or byte-identical to a file there).
 import { createHash } from 'node:crypto'
 import { readFileSync, writeFileSync, readdirSync, statSync, existsSync } from 'node:fs'
@@ -62,9 +62,13 @@ const TEXT_EXT = new Set([
     '.glsl', '.wgsl', '.frag', '.vert', '.txt', '.plist', '.md', '.mdx', '.yml', '.yaml', '.toml', '.xml', '.csv',
     '.py', '.ps1', '.sh', '.bat', '.map', '.gltf', '.mtl', '.obj',
 ])
-const HEADER = /Adapted from folio-2025 by Bruno Simon[,]? \(?MIT\)?/i
+// A line is exempt only if it is exactly one comment holding the header and nothing else.
+const HEADER_LINE = /^\s*(?:\/\/+|\/\*+|\*+|#+|<!--)\s*Adapted from folio-2025 by Bruno Simon,? \(?MIT\)?(?:\s+[—–-]+\s+https:\/\/github\.com\/brunosimon\/folio-2025\/?)?\s*(?:\*+\/|-->)?\s*$/i
+// The same phrase inside the root package.json "description" string (only that phrase is stripped; the rest of the line is still checked).
+const HEADER_IN_DESCRIPTION = /("description"\s*:\s*"[^"\n]*?)Adapted from folio-2025 by Bruno Simon,? \(?MIT\)?/i
 const THREE_LIBS = /(^|[\\/])three[\\/]examples[\\/]jsm[\\/]libs[\\/]/
 const ATTRIBUTION_DOCS = new Set(['notice.md', 'licenses.md', 'license', 'license.md', 'readme.md'])
+const GENERATED_ATTRIBUTION = new Set(['dist/licenses.md']) // posix, lowercase, relative to game/: emitted by scripts/hash-assets.mjs
 const SELF_FILES = new Set(['scripts/audit-originality.mjs']) // posix path relative to game/
 // Reference tooling and tests that legitimately name the upstream site/author (baseline captures of the reference site, attribution asserts).
 // Identifier checks are off there; hashes, copy phrases and blobs are still checked.
@@ -108,14 +112,15 @@ function normalize(s) {
 }
 const COPY_PHRASES = [...new Set(COPY_PHRASES_RAW.map(normalize))]
 
-function* walk(dir, skip = SKIP_DIRS) {
+// `skip` names are skipped only directly under the walk root (e.g. game/node_modules), never in nested folders.
+function* walk(dir, skip = SKIP_DIRS, atRoot = true) {
     if(!existsSync(dir)) return
     for(const name of readdirSync(dir)) {
-        if(skip.has(name)) continue
+        if(atRoot && skip.has(name)) continue
         const full = join(dir, name)
         let st
         try { st = statSync(full) } catch { continue }
-        if(st.isDirectory()) yield* walk(full, skip)
+        if(st.isDirectory()) yield* walk(full, skip, false)
         else if(st.isFile()) yield full
     }
 }
@@ -263,7 +268,7 @@ function textFindings(text, names, { identifiers }) {
         const lineCount = Math.max(lines.length, flines.length)
         for(let i = 0; i < lineCount; i++) {
             const a = lines[i] ?? '', b = flines[i] ?? ''
-            if(HEADER.test(a) || HEADER.test(b)) continue
+            if(HEADER_LINE.test(a)) continue
             for(const re of IDENTIFIERS) {
                 if(re.test(a)) out.push(['upstream identifier', `line ${i + 1} ${re}`])
                 else if(a !== b && re.test(b)) out.push(['upstream identifier (obfuscated)', `line ${i + 1} ${re}`])
@@ -271,7 +276,7 @@ function textFindings(text, names, { identifiers }) {
         }
     }
     // Copy phrases on the whole normalised text (survives wrapped lines, double spaces, curly quotes).
-    const flat = normalize(folded.split(/\r?\n/).filter((l) => !HEADER.test(l)).join('\n'))
+    const flat = normalize(folded.split(/\r?\n/).filter((l) => !HEADER_LINE.test(l)).join('\n'))
     for(const phrase of COPY_PHRASES) if(flat.includes(phrase)) out.push(['upstream copy', `"${phrase}"`])
     if(identifiers) {
         for(const token of folded.match(/[\w.\-]+\.[a-z0-9]{2,5}/gi) ?? []) {
@@ -360,7 +365,9 @@ function audit() {
         const isText = TEXT_EXT.has(ext)
         const lowerName = basename(file).toLowerCase()
         const skipText = hashOnly || SELF_FILES.has(relGame) || SELF_TEST.test(relGame)
-        const attribution = ATTRIBUTION_DOCS.has(lowerName) || IDENT_ALLOWED.test(relGame)
+        // Attribution docs are exempt only at the repo root and the game/ root, not in subfolders.
+        const rootLevel = !posix(relative(base, file)).includes('/')
+        const attribution = (ATTRIBUTION_DOCS.has(lowerName) && rootLevel) || GENERATED_ATTRIBUTION.has(relGame.toLowerCase()) || IDENT_ALLOWED.test(relGame)
         if(!hashOnly && names.has(lowerName)) flag(rel, 'same filename as upstream asset', basename(file))
 
         if(!isText) {
@@ -369,10 +376,15 @@ function audit() {
                 const latin = buf.toString('latin1')
                 for(const re of BINARY_IDENTIFIERS) if(re.test(latin)) flag(rel, 'upstream identifier in binary', `${re}`)
             }
+            // Unknown / no-extension / binary files: also scan as text (latin1 and utf8) for upstream copy phrases.
+            if(!skipText) {
+                for(const enc of ['latin1', 'utf8']) for(const [kind, detail] of textFindings(buf.toString(enc), names, { identifiers: false })) flag(rel, `${kind} (in non-text file)`, detail)
+            }
             continue
         }
 
-        const text = buf.toString('utf8')
+        let text = buf.toString('utf8')
+        if(rootLevel && lowerName === 'package.json') text = text.replace(HEADER_IN_DESCRIPTION, '$1attribution')
         if(!skipText) {
             for(const [kind, detail] of textFindings(text, names, { identifiers: !attribution })) flag(rel, kind, detail)
         }

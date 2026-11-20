@@ -114,3 +114,29 @@ test('BUILD_ID is restricted to alphanumerics', () =>
     for(const bad of ['../x', 'a.b', 'a"b', "a'b", '', 'a b', 'a/b', 'x'.repeat(65)])
         assert.throws(() => sanitizeBuildId(bad), bad)
 })
+
+test('3 MB planted lazyDebug chunk fails the size budget', () =>
+{
+    const dir = makeDist({ 'assets/PerfHud-ABCD.js': randomBytes(3 * 1024 * 1024) })
+    const failed = run(dir).rows.filter((r) => r.status === 'FAIL').map((r) => r.name)
+    assert.ok(failed.includes('lazyDebug'), failed.join())
+    rmSync(dir, { recursive: true })
+})
+
+test('3 MB planted test asset fails the size budget', () =>
+{
+    const dir = makeDist({ 'probe-ab12.glb': randomBytes(3 * 1024 * 1024) })
+    const failed = run(dir).rows.filter((r) => r.status === 'FAIL').map((r) => r.name)
+    assert.ok(failed.includes('testAssets'), failed.join())
+    rmSync(dir, { recursive: true })
+})
+
+test('debug-only chunks and test assets fail in a production dist, pass with debug', () =>
+{
+    const dir = makeDist({ 'assets/Inspector-ABCD.js': 'export{}', 'assets/PhysicsSmoke-ABCD.js': 'export{}', 'probe-ab12.glb': 'glb' })
+    const result = measure({ dist: dir, budgets })
+    const prod = integrity(result)
+    for(const f of ['Inspector-ABCD.js', 'PhysicsSmoke-ABCD.js', 'probe-ab12.glb']) assert.ok(prod.some((p) => p.includes(f) && p.includes('debug-only')), f)
+    assert.deepEqual(integrity(result, { debug: true }), [])
+    rmSync(dir, { recursive: true })
+})
