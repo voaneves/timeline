@@ -1,7 +1,7 @@
 import * as THREE from 'three/webgpu'
 import { Debug } from '../Debug.js'
 import { Game } from '../Game.js'
-import { Fn, color, float, frontFacing, If, max, mix, normalWorld, positionWorld, uniform, vec2, vec3, vec4, vertexColor } from 'three/tsl'
+import { Fn, color, float, frontFacing, If, max, mix, normalWorld, positionWorld, texture, uniform, vec2, vec3, vec4, vertexColor } from 'three/tsl'
 
 export class MeshDefaultMaterial extends THREE.MeshLambertNodeMaterial
 {
@@ -30,6 +30,78 @@ export class MeshDefaultMaterial extends THREE.MeshLambertNodeMaterial
         if(Number.isFinite(parsed))
             MeshDefaultMaterial.aoStrengthUniform.value = Math.max(0, Math.min(2, parsed))
         return MeshDefaultMaterial.aoStrengthUniform.value
+    }
+
+    static createDefaultBakedShadowTexture()
+    {
+        const data = new Uint8Array([ 255, 255, 255, 255 ])
+        const tex = new THREE.DataTexture(data, 1, 1, THREE.RGBAFormat, THREE.UnsignedByteType)
+        tex.colorSpace = THREE.NoColorSpace
+        tex.minFilter = THREE.LinearFilter
+        tex.magFilter = THREE.LinearFilter
+        tex.wrapS = THREE.ClampToEdgeWrapping
+        tex.wrapT = THREE.ClampToEdgeWrapping
+        tex.flipY = false
+        tex.generateMipmaps = false
+        tex.needsUpdate = true
+        return tex
+    }
+
+    static defaultBakedShadowTexture = MeshDefaultMaterial.createDefaultBakedShadowTexture()
+    static bakedShadowTexture = MeshDefaultMaterial.defaultBakedShadowTexture
+    static bakedShadowNode = texture(MeshDefaultMaterial.defaultBakedShadowTexture)
+    static bakedShadowEnabledUniform = uniform(0)
+    // vec4(minX, minZ, invSpanX, invSpanZ)
+    static bakedShadowBoundsUniform = uniform(new THREE.Vector4(-10, -10, 1 / 20, 1 / 20))
+    static bakedShadowBounds = null
+
+    static setBakedShadow(shadowTexture, bounds)
+    {
+        if(!shadowTexture || !bounds)
+        {
+            MeshDefaultMaterial.clearBakedShadow()
+            return false
+        }
+
+        const minX = Number(bounds.minX ?? bounds[0] ?? -10)
+        const maxX = Number(bounds.maxX ?? bounds[1] ?? 10)
+        const minZ = Number(bounds.minZ ?? bounds[2] ?? -10)
+        const maxZ = Number(bounds.maxZ ?? bounds[3] ?? 10)
+        const spanX = Math.max(1e-4, maxX - minX)
+        const spanZ = Math.max(1e-4, maxZ - minZ)
+
+        shadowTexture.colorSpace = THREE.NoColorSpace
+        shadowTexture.minFilter = THREE.LinearFilter
+        shadowTexture.magFilter = THREE.LinearFilter
+        shadowTexture.wrapS = THREE.ClampToEdgeWrapping
+        shadowTexture.wrapT = THREE.ClampToEdgeWrapping
+        shadowTexture.flipY = bounds.flipY === true
+        shadowTexture.generateMipmaps = false
+        shadowTexture.needsUpdate = true
+
+        MeshDefaultMaterial.bakedShadowTexture = shadowTexture
+        MeshDefaultMaterial.bakedShadowNode.value = shadowTexture
+        MeshDefaultMaterial.bakedShadowBoundsUniform.value.set(minX, minZ, 1 / spanX, 1 / spanZ)
+        MeshDefaultMaterial.bakedShadowBounds = { minX, maxX, minZ, maxZ, spanX, spanZ }
+        MeshDefaultMaterial.bakedShadowEnabledUniform.value = 1
+
+        const game = Game.getInstance()
+        if(game?.lighting && typeof game.lighting.setStaticBakedShadowActive === 'function')
+            game.lighting.setStaticBakedShadowActive(true)
+
+        return true
+    }
+
+    static clearBakedShadow()
+    {
+        MeshDefaultMaterial.bakedShadowTexture = MeshDefaultMaterial.defaultBakedShadowTexture
+        MeshDefaultMaterial.bakedShadowNode.value = MeshDefaultMaterial.defaultBakedShadowTexture
+        MeshDefaultMaterial.bakedShadowEnabledUniform.value = 0
+        MeshDefaultMaterial.bakedShadowBounds = null
+
+        const game = Game.getInstance()
+        if(game?.lighting && typeof game.lighting.setStaticBakedShadowActive === 'function')
+            game.lighting.setStaticBakedShadowActive(false)
     }
 
     static revealDiscardNodeBuilder = (game, outputColor) =>
@@ -137,10 +209,26 @@ export class MeshDefaultMaterial extends THREE.MeshLambertNodeMaterial
             if(this.hasCoreShadows)
                 coreShadowMix = reorientedNormal.dot(this.game.lighting.directionUniform).smoothstep(this.game.lighting.coreShadowEdgeHigh, this.game.lighting.coreShadowEdgeLow)
             
-            // Cast shadow
+            // Cast shadow (real-time shadow map + Q1 top-down baked shadow texture sampled by positionWorld.xz)
             let dropShadowMix = float(0)
             if(this.hasDropShadows)
-                dropShadowMix = catchedShadow.oneMinus()
+            {
+                const bakedUv = positionWorld.xz
+                    .sub(MeshDefaultMaterial.bakedShadowBoundsUniform.xy)
+                    .mul(MeshDefaultMaterial.bakedShadowBoundsUniform.zw)
+                    .clamp(0, 1)
+                const bakedShadowSample = MeshDefaultMaterial.bakedShadowNode.sample(bakedUv).r
+                // Apply top-down baked shadow on ground & near-ground contact surfaces while keeping
+                // elevated step treads, ramp tops, and floating blocks free of top-down self-footprint streaks
+                const heightWeight = float(1).sub(positionWorld.y.smoothstep(0.05, 0.25))
+                const upwardWeight = reorientedNormal.y.smoothstep(-0.1, 0.5)
+                const bakedDropMix = float(1)
+                    .sub(bakedShadowSample)
+                    .mul(MeshDefaultMaterial.bakedShadowEnabledUniform)
+                    .mul(heightWeight)
+                    .mul(upwardWeight)
+                dropShadowMix = max(catchedShadow.oneMinus(), bakedDropMix)
+            }
 
             // Combined shadows
             if(this.hasCoreShadows || this.hasDropShadows)

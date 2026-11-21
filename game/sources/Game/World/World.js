@@ -5,6 +5,8 @@ import * as THREE from 'three/webgpu'
 import { Debug } from '../Debug.js'
 import { Game } from '../Game.js'
 import { Player } from '../Character/Player.js'
+import { MeshDefaultMaterial } from '../Materials/MeshDefaultMaterial.js'
+import { resolveAsset } from '../assetManifest.js'
 import { MovingPlatform } from './MovingPlatform.js'
 
 // Name of a glTF root node -> how the engine reads it (docs/PLAN-3D.md 5.3, Objects.getFromModel):
@@ -77,6 +79,67 @@ export class World
         this.setRespawn()
         this.setMovingPlatform()
         this.setPlayer()
+        await this.loadEraBakedShadow('eras/greybox/greybox_shadow')
+    }
+
+    async loadEraBakedShadow(baseLogicalPath)
+    {
+        MeshDefaultMaterial.clearBakedShadow()
+
+        const shadowParam = (Debug.getParam('q1shadow') || '').trim().toLowerCase()
+        if(shadowParam === 'realtime' || shadowParam === 'map' || shadowParam === '0' || shadowParam === 'off')
+            return false
+
+        // Only activate static top-down baked shadow on Q1+ (or when explicitly requested via ?q1shadow=baked)
+        if(this.game.quality.level === 0 && shadowParam !== 'baked' && shadowParam !== 'static')
+            return false
+
+        const pngLogical = `${baseLogicalPath}.png`
+        const metaLogical = `${baseLogicalPath}.json`
+
+        try
+        {
+            const manifest = await this.game.resourcesLoader.getManifest()
+            let pngUrl = null
+            let metaUrl = null
+
+            if(manifest?.assets?.[pngLogical] && manifest?.assets?.[metaLogical])
+            {
+                pngUrl = resolveAsset(manifest, pngLogical, document.baseURI)
+                metaUrl = resolveAsset(manifest, metaLogical, document.baseURI)
+            }
+            else if(shadowParam === 'baked' || shadowParam === 'static')
+            {
+                // Fallback direct fetch from root/static if staged directly in dist root
+                const shortBase = baseLogicalPath.split('/').pop()
+                pngUrl = new URL(`${shortBase}.png`, document.baseURI).href
+                metaUrl = new URL(`${shortBase}.json`, document.baseURI).href
+            }
+            else
+            {
+                return false
+            }
+
+            const metaResp = await fetch(metaUrl)
+            if(!metaResp.ok)
+                return false
+            const meta = await metaResp.json()
+
+            const texLoader = this.game.resourcesLoader.getLoader('texture')
+            const shadowTex = await new Promise((resolve, reject) =>
+            {
+                texLoader.load(pngUrl, resolve, undefined, reject)
+            })
+
+            this.bakedShadowTexture = shadowTex
+            this.bakedShadowMeta = meta
+            MeshDefaultMaterial.setBakedShadow(shadowTex, meta)
+            return true
+        }
+        catch
+        {
+            return false
+        }
     }
 
     addPhysicalNode(node)

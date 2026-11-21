@@ -1,4 +1,5 @@
 import * as THREE from 'three/webgpu'
+import { Debug } from './Debug.js'
 import { Game } from './Game.js'
 import { uniform, color, float, Fn, vec4, positionWorld, vec3, mix, max, If, frontFacing } from 'three/tsl'
 
@@ -26,6 +27,8 @@ export class Lighting
         this.shadowBias = -0.001
         this.shadowNormalBias = 0.1
         this.shadowRadius = this.game.quality.level === 0 ? 3 : 2
+        this.staticBakedShadowActive = false
+        this.shadowModeOverride = Lighting.resolveShadowModeOverride()
 
         if(this.game.debug.active)
         {
@@ -58,6 +61,7 @@ export class Lighting
             this.shadowRadius = this.game.quality.level === 0 ? 3 : 2
             this.light.shadow.mapSize.set(this.mapSize, this.mapSize)
             this.light.shadow.radius = this.shadowRadius
+            this.syncRealTimeShadowState()
         })
 
         // Debug
@@ -113,6 +117,56 @@ export class Lighting
         }
     }
 
+    static resolveShadowModeOverride()
+    {
+        if(typeof location === 'undefined')
+            return null
+
+        const raw = Debug.getParam('q1shadow')
+        if(!raw)
+            return null
+
+        const normalized = String(raw).trim().toLowerCase()
+        if(normalized === 'realtime' || normalized === 'map' || normalized === '1')
+            return 'realtime'
+        if(normalized === 'baked' || normalized === 'static' || normalized === '0')
+            return 'baked'
+        return null
+    }
+
+    setStaticBakedShadowActive(active)
+    {
+        this.staticBakedShadowActive = Boolean(active)
+        this.syncRealTimeShadowState()
+        return this.light?.castShadow ?? true
+    }
+
+    syncRealTimeShadowState()
+    {
+        if(!this.light)
+            return
+
+        // On Q1+ (quality.level >= 1), skip the real-time directional shadow map pass
+        // whenever a top-down static baked shadow is active (unless ?q1shadow=realtime is forced).
+        let useRealTimeShadow = true
+        if(this.game.quality.level >= 1)
+        {
+            if(this.shadowModeOverride === 'realtime')
+                useRealTimeShadow = true
+            else if(this.shadowModeOverride === 'baked')
+                useRealTimeShadow = false
+            else if(this.staticBakedShadowActive)
+                useRealTimeShadow = false
+        }
+
+        this.light.castShadow = useRealTimeShadow
+        if(this.game.rendering?.renderer?.shadowMap)
+        {
+            this.game.rendering.renderer.shadowMap.enabled = useRealTimeShadow
+            this.game.rendering.renderer.shadowMap.needsUpdate = true
+        }
+    }
+
     setLight()
     {
         this.light = new THREE.DirectionalLight(0xffffff, 5)
@@ -121,6 +175,7 @@ export class Lighting
 
         this.game.scene.add(this.light)
         this.game.scene.add(this.light.target)
+        this.syncRealTimeShadowState()
     }
 
     setHelpers()
