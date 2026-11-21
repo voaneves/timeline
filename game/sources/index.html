@@ -10,8 +10,21 @@
     <link rel="stylesheet" href="./style.css">
 </head>
 <body>
-    <div class="game">
-        <canvas class="js-canvas" tabindex="0" role="application" aria-label="Linha do Tempo 3D"></canvas>
+    <div class="vn-loader js-loader" role="status" aria-live="polite" aria-label="Carregando linha do tempo">
+        <div class="vn-loader-inner">
+            <svg class="vn-loader-svg" viewBox="0 0 280 48" width="280" height="48" aria-hidden="true">
+                <line class="vn-loader-track" x1="16" y1="30" x2="246" y2="30" />
+                <line class="vn-loader-line js-loader-line" x1="16" y1="30" x2="246" y2="30" />
+                <circle class="vn-loader-dot js-loader-dot" cx="262" cy="30" r="6" />
+            </svg>
+            <span class="vn-loader-pct js-loader-pct">0%</span>
+        </div>
+    </div>
+
+    <main class="game">
+        <h1 class="sr-only">Linha do Tempo 3D — Victor Alves Neves</h1>
+        <canvas class="js-canvas" tabindex="0" role="application" aria-label="Linha do Tempo 3D" aria-describedby="canvas-controls-desc"></canvas>
+        <p id="canvas-controls-desc" class="sr-only">Use WASD ou setas para andar, Espaço para pular, E ou clique para carimbar, F para interagir, arraste para girar a câmera e P para pausar.</p>
 
         <div class="js-touch-controls touch-controls" aria-label="Controles de toque">
             <div class="js-touch-joystick touch-joystick" aria-hidden="true">
@@ -43,7 +56,7 @@
                 <button type="button" data-name="interact" class="js-button touch-btn interact">Interagir</button>
             </div>
         </div>
-    </div>
+    </main>
 
     <script type="module" src="./index.js"></script>
 </body>

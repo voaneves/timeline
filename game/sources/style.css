@@ -809,3 +809,108 @@ html.is-mode-touch .touch-buttons
         justify-content: flex-end;
     }
 }
+
+/* Line Loader (T2.25a) */
+.vn-loader
+{
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--vn-paper, #f4ead4);
+    color: var(--vn-ink, #0a0a0a);
+    font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+    transition: opacity 0.3s ease, visibility 0.3s ease;
+}
+
+.vn-loader-inner
+{
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+}
+
+.vn-loader-svg
+{
+    display: block;
+    overflow: visible;
+}
+
+.vn-loader-track
+{
+    stroke: var(--vn-tag-bg, #e6d8b5);
+    stroke-width: 5;
+    stroke-linecap: round;
+}
+
+.vn-loader-line
+{
+    stroke: var(--vn-signal, #f50000);
+    stroke-width: 5;
+    stroke-linecap: round;
+    stroke-dasharray: 230;
+    stroke-dashoffset: calc(230 * (1 - var(--loader-progress, 0)));
+    transition: stroke-dashoffset 0.12s linear;
+}
+
+.vn-loader-dot
+{
+    fill: var(--vn-signal, #f50000);
+    transform: translateY(-22px) scale(0.4);
+    transform-origin: 262px 30px;
+    opacity: 0;
+    transition: transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.12s ease;
+}
+
+.vn-loader.is-complete .vn-loader-dot
+{
+    transform: translateY(0) scale(1);
+    opacity: 1;
+}
+
+.vn-loader.is-fading
+{
+    opacity: 0;
+    pointer-events: none;
+}
+
+.vn-loader.is-done
+{
+    display: none;
+    visibility: hidden;
+    pointer-events: none;
+}
+
+.vn-loader-pct
+{
+    font-size: 13px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: var(--vn-muted, #5c5446);
+}
+
+.vn-hud-btn.is-paused
+{
+    background: var(--vn-signal, #f50000);
+    color: var(--vn-ink, #0a0a0a);
+}
+
+@media (prefers-reduced-motion: reduce)
+{
+    .vn-loader,
+    .vn-loader-line,
+    .vn-loader-dot
+    {
+        transition-duration: 0.01s !important;
+    }
+}
+
+html.is-reduced-motion .vn-loader,
+html.is-reduced-motion .vn-loader-line,
+html.is-reduced-motion .vn-loader-dot
+{
+    transition-duration: 0.01s !important;
+}

@@ -9,6 +9,8 @@ export class Announcer
     {
         this.game = Game.getInstance()
         this.parent = parent || this.game?.domElement || document.body
+        this.lastByKey = new Map()
+        this.lastMessage = ''
 
         this.element = document.createElement('div')
         this.element.className = 'sr-only js-announcer'
@@ -25,10 +27,41 @@ export class Announcer
         if(!message)
             return
 
+        const text = String(message)
+        this.lastMessage = text
         this.element.textContent = ''
         queueMicrotask(() =>
         {
-            this.element.textContent = String(message)
+            this.element.textContent = text
         })
+    }
+
+    /**
+     * Announce a message throttled per key (default 1.5 s) to avoid screen-reader spam.
+     */
+    announceThrottled(key, message, minIntervalMs = 1500)
+    {
+        if(!message)
+            return false
+
+        const now = typeof performance !== 'undefined' ? performance.now() : Date.now()
+        const prev = this.lastByKey.get(key)
+        if(prev !== undefined && (now - prev) < minIntervalMs)
+            return false
+
+        this.lastByKey.set(key, now)
+        this.announce(message)
+        return true
+    }
+
+    /**
+     * Announce entry into an era and its milestone count.
+     */
+    announceEra(eraName, milestoneCount)
+    {
+        if(!eraName)
+            return
+        const label = milestoneCount === 1 ? '1 marco' : `${milestoneCount} marcos`
+        this.announce(`${eraName}, ${label}`)
     }
 }
