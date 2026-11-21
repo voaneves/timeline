@@ -12,6 +12,7 @@ import * as THREE from 'three/webgpu'
 import { Events } from '../Events.js'
 import { Game } from '../Game.js'
 import { CharacterController } from './CharacterController.js'
+import { CharacterVisual } from './CharacterVisual.js'
 import { feel, resetFeel } from '../../data/feel.js'
 
 const PRESET_KEY = 'timeline.feel.preset'
@@ -101,20 +102,10 @@ export class Player
         const respawn = this.game.respawns.getDefault()
         const { radius, halfHeight } = feel.body
 
-        // Visual: capsule (total height 1.2 m) + a small nose on the -Z side so the heading is readable
+        // Visual container: CharacterVisual attaches the rigged Victor model inside `this.mesh`
         this.model = new THREE.Group()
         this.model.name = 'player'
         this.mesh = new THREE.Group()
-        const capsule = new THREE.Mesh(
-            new THREE.CapsuleGeometry(radius, halfHeight * 2, 4, 16),
-            new THREE.MeshStandardMaterial({ name: 'greyMarker', color: '#e0e0e0' })
-        )
-        const nose = new THREE.Mesh(
-            new THREE.BoxGeometry(0.16, 0.16, 0.16),
-            new THREE.MeshStandardMaterial({ name: 'greyDark', color: '#4a4a4a' })
-        )
-        nose.position.set(0, halfHeight * 0.7, - radius)
-        this.mesh.add(capsule, nose)
         this.model.add(this.mesh)
 
         // The body origin is the capsule centre: feet = centre - (halfHeight + radius)
@@ -134,6 +125,9 @@ export class Player
         this.controller = new CharacterController(this.object, yaw)
         this.controller.events.on('teleport', () => this.clearWalkTarget())
         this.controller.stamp.attachVisual(this.mesh)
+
+        this.visual = new CharacterVisual(this)
+        this.mesh.add(this.visual.root)
 
         // The first capture() (order 4) records this pose as previous and current: no interpolation from the origin
         this.model.position.set(respawn.position.x, centerY, respawn.position.z)
@@ -314,12 +308,14 @@ export class Player
                     this.clearWalkTarget()
             }
         }
+
+        this.visual?.fixedUpdate(this.game.ticker.fixedDelta)
     }
 
     // Per frame, visual only
     update()
     {
-        this.mesh.rotation.z = this.controller.lean
+        this.visual?.update(this.game.ticker.delta)
 
         if(this.walkTargetRing)
         {

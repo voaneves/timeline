@@ -120,6 +120,15 @@ export class Game
 
         this.RAPIER = await rapierPromise
 
+        if(Debug.getParam('demo') === null && Debug.getParam('debug') !== 'palette' && Debug.getParam('loco') !== 'vehicle')
+        {
+            const characterResources = await this.resourcesLoader.load([
+                [ 'victorCore', 'character/victor_core.glb', 'gltf' ],
+                [ 'palette', 'palette.png', 'texture' ],
+            ])
+            Object.assign(this.resources, characterResources)
+        }
+
         this.terrain = new Terrain()
         this.physics = new Physics()
         this.wireframe = new PhysicsWireframe()
@@ -134,6 +143,9 @@ export class Game
         this.ghost?.begin()
 
         this.ready = true
+
+        // Lazy-load extra animation clips post-reveal
+        this.world?.player?.visual?.loadExtras()
     }
 
     reset()
