@@ -53,6 +53,16 @@ export const feel = {
         requireHold: true, // the reduced gravity lasts while the jump button is held
         minHeight: 0.8, // m above the ground needed to start a glide (below it the press is a buffered jump)
     },
+    // Stamp (plan 3.2): in the air, lock, then dive straight down; the impact breaks the crates and emits 'stamp'
+    stamp: {
+        lockTime: 0.12, // s hanging in the air before the dive
+        diveSpeed: 26, // m/s straight down
+        minHeight: 0.6, // m above the ground needed to start a stamp (below it the press does nothing)
+        breakRadius: 1.0, // m (horizontal, centre to centre) around the impact that breaks crates
+        breakDepth: 1.2, // m below the stamped surface still counted
+        breakHeight: 0.8, // m above the stamped surface still counted
+        ringLife: 1.5, // s the ring mark stays visible (visual only)
+    },
     body: {
         radius: 0.28, // capsule: total height = 2 * halfHeight + 2 * radius = 1.2 m (greybox stand-in)
         halfHeight: 0.32,

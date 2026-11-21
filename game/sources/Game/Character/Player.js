@@ -23,6 +23,7 @@ const RANGES = {
     skid: { angle: [ 90, 180, 1 ], minSpeed: [ 0, 15, 0.1 ], duration: [ 0, 1, 0.01 ] },
     jump: { height: [ 0.2, 5, 0.01 ], apexTime: [ 0.1, 1, 0.005 ], fallMultiplier: [ 1, 3, 0.01 ], terminal: [ 1, 60, 0.1 ], cutSpeed: [ 0, 12, 0.1 ], minHeight: [ 0, 2, 0.01 ], coyoteTime: [ 0, 0.5, 0.005 ], bufferTime: [ 0, 0.5, 0.005 ] },
     glide: { impulseHeight: [ 0, 2, 0.01 ], gravityScale: [ 0, 1, 0.01 ], maxTime: [ 0, 3, 0.01 ], minHeight: [ 0, 3, 0.05 ] },
+    stamp: { lockTime: [ 0, 1, 0.005 ], diveSpeed: [ 5, 60, 0.5 ], minHeight: [ 0, 3, 0.05 ], breakRadius: [ 0.2, 3, 0.05 ], breakDepth: [ 0, 3, 0.05 ], breakHeight: [ 0, 3, 0.05 ], ringLife: [ 0.1, 5, 0.1 ] },
     kcc: { offset: [ 0.001, 0.1, 0.001 ], maxSlopeClimbAngle: [ 0, 89, 0.5 ], minSlopeSlideAngle: [ 0, 89, 0.5 ], autostepHeight: [ 0, 1, 0.01 ], autostepMinWidth: [ 0, 1, 0.01 ], snapToGround: [ 0, 1, 0.01 ], characterMass: [ 1, 500, 1 ] },
 }
 
@@ -32,8 +33,9 @@ export class Player
     {
         this.game = Game.getInstance()
         this.feel = feel // tunables, reachable from tests (window.game.world.player.feel)
+        this.stampLatch = false // same, for the stamp
         this.jumpLatch = false // a press since the last fixed step (a tap shorter than a frame is never lost)
-        this.input = { x: 0, z: 0, speed: 0, jumpPressed: false, jumpHeld: false } // world-space wanted direction (unit) and speed, last fixed step
+        this.input = { x: 0, z: 0, speed: 0, jumpPressed: false, jumpHeld: false, stampPressed: false } // world-space wanted direction (unit) and speed, last fixed step
 
         this.setActions()
         this.setBody()
@@ -60,8 +62,9 @@ export class Player
             { name: 'backward', categories, keys: [ 'Keyboard.KeyS', 'Keyboard.ArrowDown', 'Gamepad.down' ] },
             { name: 'left', categories, keys: [ 'Keyboard.KeyA', 'Keyboard.ArrowLeft', 'Gamepad.left' ] },
             { name: 'right', categories, keys: [ 'Keyboard.KeyD', 'Keyboard.ArrowRight', 'Gamepad.right' ] },
-            { name: 'run', categories, keys: [ 'Keyboard.ShiftLeft' ] }, // forces a run whatever the deflection
+            { name: 'run', categories, keys: [] }, // forces a run whatever the deflection (no default key: Shift is the stamp; ghosts inject it by name)
             { name: 'jump', categories, keys: [ 'Keyboard.Space', 'Gamepad.cross' ] }, // press = jump (buffered), in the air = ribbon glide
+            { name: 'stamp', categories, keys: [ 'Keyboard.ShiftLeft', 'Keyboard.ShiftRight', 'Keyboard.KeyC', 'Gamepad.circle' ] }, // in the air: lock, dive, mark the ground
             { name: 'moveStick', categories, keys: [ 'Gamepad.joystickLeft' ] }, // analog: value { x, y, radius, active }
         ])
 
@@ -69,6 +72,11 @@ export class Player
         {
             if(action.active)
                 this.jumpLatch = true
+        })
+        this.game.inputs.events.on('stamp', (action) =>
+        {
+            if(action.active)
+                this.stampLatch = true
         })
     }
 
@@ -107,6 +115,7 @@ export class Player
             }
         )
         this.controller = new CharacterController(this.object, yaw)
+        this.controller.stamp.attachVisual(this.mesh)
 
         // The first capture() (order 4) records this pose as previous and current: no interpolation from the origin
         this.model.position.set(respawn.position.x, centerY, respawn.position.z)
@@ -180,7 +189,9 @@ export class Player
         const input = this.readInput()
         input.jumpPressed = this.jumpLatch
         input.jumpHeld = this.game.inputs.actions.get('jump').active
+        input.stampPressed = this.stampLatch
         this.jumpLatch = false
+        this.stampLatch = false
         this.controller.step(input, this.game.ticker.fixedDelta)
     }
 

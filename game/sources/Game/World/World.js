@@ -33,6 +33,7 @@ export class World
 
     async loadGreybox()
     {
+        this.breakables = []
         const resources = await this.game.resourcesLoader.load([ [ 'greybox', 'eras/greybox/greybox.glb', 'gltf' ] ])
         this.greybox = resources.greybox.scene
 
@@ -85,6 +86,10 @@ export class World
             physicalDescription.canSleep = false // driven by setNextKinematicTranslation
 
         const object = this.game.objects.addFromModel(node, {}, physicalDescription)
+
+        // Crates break under the stamp (T1.4): `breakables` is read by Character/Stamp.js
+        if(/^crate\d/i.test(node.name))
+            this.breakables.push(object)
 
         if(kinematic)
             this.movingPlatform = { object, userData: { ...node.userData } }

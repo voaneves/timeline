@@ -12,6 +12,7 @@
 import { Game } from '../Game.js'
 import { Events } from '../Events.js'
 import { feel } from '../../data/feel.js'
+import { Stamp } from './Stamp.js'
 
 const DEG = Math.PI / 180
 const GRAVITY_FOR_LEAN = 9.81
@@ -29,7 +30,7 @@ export class CharacterController
     constructor(object, yaw = 0)
     {
         this.game = Game.getInstance()
-        this.events = new Events() // 'skid'
+        this.events = new Events() // 'skid', 'jump', 'glide', 'land', 'bump', 'stampStart', 'stamp', 'break'
         this.object = object
         this.body = object.physical.body
 
@@ -75,6 +76,7 @@ export class CharacterController
         this.spawn = { x: translation.x, y: translation.y, z: translation.z, yaw }
         this.next = { x: translation.x, y: translation.y, z: translation.z }
         this.body.setNextKinematicRotation(this.yawQuaternion())
+        this.stamp = new Stamp(this)
     }
 
     // KCC parameters are cheap setters: re-applied when a value changes in the debug panel
@@ -106,6 +108,7 @@ export class CharacterController
         this.grounded = false
         this.coyoteTimer = this.bufferTimer = this.glideTimer = 0
         this.jumping = this.gliding = this.glideUsed = false
+        this.stamp.reset()
         this.body.setTranslation({ x, y, z }, true)
         this.body.setRotation(this.yawQuaternion(), true)
         this.body.setNextKinematicTranslation({ x, y, z })
@@ -171,7 +174,14 @@ export class CharacterController
         this.coyoteTimer = this.grounded ? jump.coyoteTime : Math.max(0, this.coyoteTimer - dt)
         this.bufferTimer = input.jumpPressed ? jump.bufferTime : Math.max(0, this.bufferTimer - dt)
 
-        if(this.bufferTimer > 0 && (this.grounded || this.coyoteTimer > 0))
+        const stamping = this.stamp.advance(input, dt)
+
+        if(stamping)
+        {
+            // Stamp lock / dive owns the step: no jump, no glide
+            this.bufferTimer = 0
+        }
+        else if(this.bufferTimer > 0 && (this.grounded || this.coyoteTimer > 0))
         {
             this.bufferTimer = 0
             this.coyoteTimer = 0
@@ -199,7 +209,7 @@ export class CharacterController
         let speed = Math.hypot(velocity.x, velocity.z)
         if(this.skidTimer > 0)
             this.skidTimer = Math.max(0, this.skidTimer - dt)
-        else if(hasInput && this.grounded && speed > feel.skid.minSpeed)
+        else if(!stamping && hasInput && this.grounded && speed > feel.skid.minSpeed)
         {
             const cosine = (velocity.x * input.x + velocity.z * input.z) / speed
             if(cosine < Math.cos(feel.skid.angle * DEG))
@@ -211,7 +221,9 @@ export class CharacterController
         const braking = this.skidTimer > 0
 
         // --- Horizontal velocity
-        if(this.grounded)
+        if(stamping)
+            velocity.x = velocity.z = 0
+        else if(this.grounded)
         {
             if(!hasInput || braking)
             {
@@ -275,7 +287,12 @@ export class CharacterController
         // --- Vertical velocity: own gravity (rise g, fall 1.7 g), variable height, glide. Velocity-Verlet: the position
         // follows the exact parabola at every step boundary.
         let verticalStep = 0
-        if(this.grounded)
+        if(stamping)
+        {
+            velocity.y = this.stamp.verticalSpeed
+            verticalStep = velocity.y * dt
+        }
+        else if(this.grounded)
             velocity.y = 0
         else
         {
@@ -324,8 +341,8 @@ export class CharacterController
 
         const desired = { x: velocity.x * dt * slopeFactor, y: verticalStep, z: velocity.z * dt * slopeFactor }
 
-        // Snap-to-ground would glue the character to the floor on takeoff
-        if(velocity.y > 0)
+        // Snap-to-ground would glue the character to the floor on takeoff (or pull them down during a stamp lock)
+        if(velocity.y > 0 || this.stamp.phase === Stamp.LOCK)
             this.controller.disableSnapToGround()
         else
             this.controller.enableSnapToGround(feel.kcc.snapToGround)
@@ -372,6 +389,10 @@ export class CharacterController
             this.gliding = false
             this.glideUsed = false
             this.events.trigger('land', [ { speed: fallSpeed } ])
+            if(this.stamp.phase === Stamp.DIVE)
+                this.stamp.impact(this.next)
+            else if(this.stamp.phase === Stamp.LOCK)
+                this.stamp.reset()
         }
 
         // --- Body yaw (slerp toward the heading) and visual lean
