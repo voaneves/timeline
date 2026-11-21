@@ -16,6 +16,8 @@ import { Stamp } from './Stamp.js'
 
 const DEG = Math.PI / 180
 const GRAVITY_FOR_LEAN = 9.81
+const IDENTITY_QUAT = { x: 0, y: 0, z: 0, w: 1 }
+const DOWN = { x: 0, y: - 1, z: 0 }
 
 // Ease-out exponent so that the 0 -> runSpeed curve `1 - (1 - t / T)^p` is at 50% after `accelHalfTime`
 function accelExponent(move)
@@ -49,10 +51,14 @@ export class CharacterController
         this.controller.setUp({ x: 0, y: 1, z: 0 })
         this.controller.setSlideEnabled(true)
         this.applySettings()
+        this.groundProbeShape = new RAPIER.Capsule(feel.body.halfHeight, Math.max(0.01, feel.body.radius - 0.005))
 
         // Simulation state
         this.velocity = { x: 0, y: 0, z: 0 } // m/s (x, z: horizontal)
         this.grounded = false
+        this.groundPlatform = null // MovingPlatform currently carrying the character (T1.5)
+        this.platformVelocity = { x: 0, y: 0, z: 0 } // m/s, remembered during coyote time for takeoff inheritance
+        this.inheritedAirVelocity = { x: 0, z: 0 } // m/s horizontal velocity inherited from a moving platform on jump takeoff
         this.yaw = yaw // rad, 0 faces -Z
         this.lean = 0 // rad, visual bank (read by the Player every frame)
         this.skidTimer = 0 // s left of the skid brake
@@ -106,6 +112,9 @@ export class CharacterController
         this.skidTimer = 0
         this.lean = 0
         this.grounded = false
+        this.groundPlatform = null
+        this.platformVelocity.x = this.platformVelocity.y = this.platformVelocity.z = 0
+        this.inheritedAirVelocity.x = this.inheritedAirVelocity.z = 0
         this.coyoteTimer = this.bufferTimer = this.glideTimer = 0
         this.jumping = this.gliding = this.glideUsed = false
         this.stamp.reset()
@@ -158,6 +167,69 @@ export class CharacterController
         return hit ? hit.timeOfImpact - half : Infinity
     }
 
+    findPlatformForCollider(collider)
+    {
+        const platforms = this.game.world?.movingPlatforms
+        if(!collider || !platforms || platforms.length === 0)
+            return null
+        for(const platform of platforms)
+        {
+            if(platform.ownsCollider(collider))
+                return platform
+        }
+        return null
+    }
+
+    // Detects the MovingPlatform under the feet (null on fixed ground or airborne). Checks KCC computed collisions
+    // (when requested) plus a short downward capsule shape-cast (and centre ray fallback) so idle pauses and rims work.
+    detectGroundPlatform(origin = this.body.translation(), checkCollisions = false)
+    {
+        const platforms = this.game.world?.movingPlatforms
+        if(!platforms || platforms.length === 0)
+            return null
+
+        if(checkCollisions)
+        {
+            const count = this.controller.numComputedCollisions()
+            for(let i = 0; i < count; i++)
+            {
+                const collision = this.controller.computedCollision(i)
+                if(collision?.collider && collision.normal1 && collision.normal1.y > 0.5)
+                {
+                    const platform = this.findPlatformForCollider(collision.collider)
+                    if(platform)
+                        return platform
+                }
+            }
+        }
+
+        const world = this.game.physics.world
+        const maxToi = feel.kcc.offset + 0.08
+        const hit = world.castShape(
+            origin,
+            IDENTITY_QUAT,
+            DOWN,
+            this.groundProbeShape,
+            0,
+            maxToi,
+            false,
+            undefined,
+            this.game.physics.categories.floor,
+            this.collider,
+            this.body
+        )
+        if(hit?.collider && (hit.normal1.y > 0.5 || hit.normal2.y > 0.5))
+            return this.findPlatformForCollider(hit.collider)
+
+        const half = feel.body.halfHeight + feel.body.radius
+        const ray = new this.game.RAPIER.Ray(origin, DOWN)
+        const rayHit = world.castRayAndGetNormal(ray, half + maxToi, true, undefined, this.game.physics.categories.floor, this.collider, this.body)
+        if(rayHit?.collider && rayHit.normal && rayHit.normal.y > 0.5)
+            return this.findPlatformForCollider(rayHit.collider)
+
+        return null
+    }
+
     // One fixed step. input: { x, z } unit vector in world space (or zero), `speed` wanted speed in m/s (0 = no input),
     // `jumpPressed` (edge, latched by the Player) and `jumpHeld`.
     step(input, dt)
@@ -167,6 +239,29 @@ export class CharacterController
         const velocity = this.velocity
         const hasInput = input.speed > 0 && (input.x !== 0 || input.z !== 0)
         const decelRate = move.runSpeed / move.decelTime
+
+        // --- Moving platform detection (before jump/movement so takeoff and carry both read this step's delta/velocity)
+        if(this.grounded)
+        {
+            const platform = this.detectGroundPlatform()
+            this.groundPlatform = platform
+            if(platform)
+            {
+                this.platformVelocity.x = platform.velocity.x
+                this.platformVelocity.y = platform.velocity.y
+                this.platformVelocity.z = platform.velocity.z
+            }
+            else
+            {
+                this.platformVelocity.x = this.platformVelocity.y = this.platformVelocity.z = 0
+            }
+        }
+        else
+        {
+            this.groundPlatform = null
+            if(this.coyoteTimer <= 0)
+                this.platformVelocity.x = this.platformVelocity.y = this.platformVelocity.z = 0
+        }
 
         // --- Jump / glide decisions (before the horizontal model: a takeoff step already uses the air control)
         const jump = feel.jump
@@ -190,7 +285,13 @@ export class CharacterController
             this.gliding = false
             this.glideUsed = false
             this.jumpStartY = this.body.translation().y
-            velocity.y = this.jumpSpeed
+            velocity.x += this.platformVelocity.x
+            velocity.z += this.platformVelocity.z
+            velocity.y = this.jumpSpeed + Math.max(0, this.platformVelocity.y)
+            this.inheritedAirVelocity.x = this.platformVelocity.x
+            this.inheritedAirVelocity.z = this.platformVelocity.z
+            this.groundPlatform = null
+            this.platformVelocity.x = this.platformVelocity.y = this.platformVelocity.z = 0
             this.events.trigger('jump', [ { speed: this.jumpSpeed } ])
         }
         else if(input.jumpPressed && !this.grounded && !this.glideUsed && this.heightAboveGround(feel.glide.minHeight) >= feel.glide.minHeight)
@@ -222,7 +323,10 @@ export class CharacterController
 
         // --- Horizontal velocity
         if(stamping)
+        {
             velocity.x = velocity.z = 0
+            this.inheritedAirVelocity.x = this.inheritedAirVelocity.z = 0
+        }
         else if(this.grounded)
         {
             if(!hasInput || braking)
@@ -260,11 +364,13 @@ export class CharacterController
         }
         else
         {
-            // Air control: accelerate toward the wanted velocity, decelerate with no input
+            // Air control: accelerate toward the wanted velocity (in the inherited platform frame), decelerate relative velocity with no input
+            const baseX = this.inheritedAirVelocity.x
+            const baseZ = this.inheritedAirVelocity.z
             if(hasInput)
             {
-                const dx = input.x * input.speed - velocity.x
-                const dz = input.z * input.speed - velocity.z
+                const dx = input.x * input.speed + baseX - velocity.x
+                const dz = input.z * input.speed + baseZ - velocity.z
                 const length = Math.hypot(dx, dz)
                 const maxDelta = air.accel * dt
                 const scale = length > maxDelta ? maxDelta / length : 1
@@ -273,11 +379,13 @@ export class CharacterController
             }
             else
             {
-                speed = Math.max(0, speed - air.decel * dt)
-                const current = Math.hypot(velocity.x, velocity.z)
-                const scale = current > 0 ? speed / current : 0
-                velocity.x *= scale
-                velocity.z *= scale
+                const relX = velocity.x - baseX
+                const relZ = velocity.z - baseZ
+                const relSpeed = Math.hypot(relX, relZ)
+                const nextRel = Math.max(0, relSpeed - air.decel * dt)
+                const scale = relSpeed > 0 ? nextRel / relSpeed : 0
+                velocity.x = baseX + relX * scale
+                velocity.z = baseZ + relZ * scale
             }
         }
 
@@ -339,10 +447,16 @@ export class CharacterController
         if(startedGrounded && this.grounded && this.slopeAngle > 0.01 && this.slopeAngle <= move.slopeMaxAngle * DEG)
             slopeFactor = 1 + (Math.min(1 / Math.cos(this.slopeAngle), move.slopeMaxFactor) - 1) * move.slopeCompensation
 
-        const desired = { x: velocity.x * dt * slopeFactor, y: verticalStep, z: velocity.z * dt * slopeFactor }
+        const carryPlatform = this.grounded ? this.groundPlatform : null
+        const carryX = carryPlatform ? carryPlatform.delta.x : 0
+        const carryY = carryPlatform ? carryPlatform.delta.y : 0
+        const carryZ = carryPlatform ? carryPlatform.delta.z : 0
 
-        // Snap-to-ground would glue the character to the floor on takeoff (or pull them down during a stamp lock)
-        if(velocity.y > 0 || this.stamp.phase === Stamp.LOCK)
+        const playerDesired = { x: velocity.x * dt * slopeFactor, y: verticalStep, z: velocity.z * dt * slopeFactor }
+        const desired = { x: playerDesired.x + carryX, y: playerDesired.y + carryY, z: playerDesired.z + carryZ }
+
+        // Snap-to-ground would glue the character to the floor on takeoff, during a stamp lock, or when a platform rises
+        if(velocity.y > 0 || this.stamp.phase === Stamp.LOCK || carryY > 1e-6)
             this.controller.disableSnapToGround()
         else
             this.controller.enableSnapToGround(feel.kcc.snapToGround)
@@ -358,19 +472,30 @@ export class CharacterController
         this.next.y = current.y + movement.y
         this.next.z = current.z + movement.z
 
-        // Blocked (wall, corner): the velocity follows what was actually achieved, so no speed is stored "into" the wall.
-        // Not while climbing (slope or step): the KCC projects the move onto the slope and a climb is progress, not a block.
-        const desiredLength = Math.hypot(desired.x, desired.z)
-        const movedLength = Math.hypot(movement.x, movement.z)
-        this.movedSpeed = movedLength / dt
-        if(desiredLength > 0 && (!startedGrounded || movement.y <= 1e-4) && movedLength < desiredLength * 0.9)
+        // Rising platform with snapToGround disabled: stay grounded if the player rose with the platform and is still over it
+        if(carryY > 1e-6 && !this.grounded && velocity.y <= 0 && movement.y >= carryY - 1e-4)
         {
-            velocity.x = movement.x / dt
-            velocity.z = movement.z / dt
+            const relativeProbe = { x: this.next.x - carryX, y: this.next.y - carryY, z: this.next.z - carryZ }
+            if(this.detectGroundPlatform(relativeProbe) === carryPlatform)
+                this.grounded = true
+        }
+
+        // Blocked (wall, corner): compare only the player's own movement (excluding platform carry) so platform motion
+        // never leaks into player velocity or triggers false wall blocks.
+        const playerMoveX = movement.x - carryX
+        const playerMoveY = movement.y - carryY
+        const playerMoveZ = movement.z - carryZ
+        const playerDesiredLength = Math.hypot(playerDesired.x, playerDesired.z)
+        const playerMovedLength = Math.hypot(playerMoveX, playerMoveZ)
+        this.movedSpeed = playerMovedLength / dt
+        if(playerDesiredLength > 0 && (!startedGrounded || playerMoveY <= 1e-4) && playerMovedLength < playerDesiredLength * 0.9)
+        {
+            velocity.x = playerMoveX / dt
+            velocity.z = playerMoveZ / dt
         }
         this.slopeAngle = 0
-        if(startedGrounded && this.grounded && movedLength > 1e-6)
-            this.slopeAngle = Math.atan2(movement.y, movedLength)
+        if(startedGrounded && this.grounded && playerMovedLength > 1e-6)
+            this.slopeAngle = Math.atan2(playerMoveY, playerMovedLength)
 
         // Head hit (ceiling): rising stops
         if(desired.y > 0 && movement.y < desired.y - 1e-4)
@@ -388,6 +513,18 @@ export class CharacterController
             this.jumping = false
             this.gliding = false
             this.glideUsed = false
+            this.inheritedAirVelocity.x = 0
+            this.inheritedAirVelocity.z = 0
+            const landedPlatform = this.detectGroundPlatform(this.next, true)
+            if(landedPlatform)
+            {
+                velocity.x -= landedPlatform.velocity.x
+                velocity.z -= landedPlatform.velocity.z
+                this.groundPlatform = landedPlatform
+                this.platformVelocity.x = landedPlatform.velocity.x
+                this.platformVelocity.y = landedPlatform.velocity.y
+                this.platformVelocity.z = landedPlatform.velocity.z
+            }
             this.events.trigger('land', [ { speed: fallSpeed } ])
             if(this.stamp.phase === Stamp.DIVE)
                 this.stamp.impact(this.next)
@@ -399,8 +536,13 @@ export class CharacterController
         let heading = null
         if(hasInput && !braking)
             heading = Math.atan2(- input.x, - input.z)
-        else if(this.speed > 0.5)
-            heading = Math.atan2(- velocity.x, - velocity.z)
+        else
+        {
+            const relVx = velocity.x - this.inheritedAirVelocity.x
+            const relVz = velocity.z - this.inheritedAirVelocity.z
+            if(Math.hypot(relVx, relVz) > 0.5)
+                heading = Math.atan2(- relVx, - relVz)
+        }
 
         let yawDelta = 0
         if(heading !== null)

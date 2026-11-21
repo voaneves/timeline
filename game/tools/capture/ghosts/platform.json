@@ -1,0 +1,560 @@
+{
+ "v": 1,
+ "dt": 0.008333333333333333,
+ "seed": "timeline-ghost-v1",
+ "steps": 2440,
+ "events": [
+  {
+   "t": 0.066667,
+   "action": "forward",
+   "value": 1,
+   "trigger": "start"
+  },
+  {
+   "t": 0.066667,
+   "action": "right",
+   "value": 1,
+   "trigger": "start"
+  },
+  {
+   "t": 0.85,
+   "action": "right",
+   "value": 0,
+   "trigger": "end"
+  },
+  {
+   "t": 0.916667,
+   "action": "right",
+   "value": 1,
+   "trigger": "start"
+  },
+  {
+   "t": 0.966667,
+   "action": "right",
+   "value": 0,
+   "trigger": "end"
+  },
+  {
+   "t": 1.008333,
+   "action": "right",
+   "value": 1,
+   "trigger": "start"
+  },
+  {
+   "t": 1.041667,
+   "action": "right",
+   "value": 0,
+   "trigger": "end"
+  },
+  {
+   "t": 1.075,
+   "action": "right",
+   "value": 1,
+   "trigger": "start"
+  },
+  {
+   "t": 1.116667,
+   "action": "right",
+   "value": 0,
+   "trigger": "end"
+  },
+  {
+   "t": 1.166667,
+   "action": "right",
+   "value": 1,
+   "trigger": "start"
+  },
+  {
+   "t": 1.216667,
+   "action": "right",
+   "value": 0,
+   "trigger": "end"
+  },
+  {
+   "t": 1.258333,
+   "action": "right",
+   "value": 1,
+   "trigger": "start"
+  },
+  {
+   "t": 1.291667,
+   "action": "right",
+   "value": 0,
+   "trigger": "end"
+  },
+  {
+   "t": 1.325,
+   "action": "right",
+   "value": 1,
+   "trigger": "start"
+  },
+  {
+   "t": 1.358333,
+   "action": "right",
+   "value": 0,
+   "trigger": "end"
+  },
+  {
+   "t": 1.391667,
+   "action": "right",
+   "value": 1,
+   "trigger": "start"
+  },
+  {
+   "t": 1.425,
+   "action": "right",
+   "value": 0,
+   "trigger": "end"
+  },
+  {
+   "t": 1.458333,
+   "action": "right",
+   "value": 1,
+   "trigger": "start"
+  },
+  {
+   "t": 1.483333,
+   "action": "right",
+   "value": 0,
+   "trigger": "end"
+  },
+  {
+   "t": 1.5,
+   "action": "right",
+   "value": 1,
+   "trigger": "start"
+  },
+  {
+   "t": 1.508333,
+   "action": "right",
+   "value": 0,
+   "trigger": "end"
+  },
+  {
+   "t": 1.516667,
+   "action": "right",
+   "value": 1,
+   "trigger": "start"
+  },
+  {
+   "t": 1.533333,
+   "action": "right",
+   "value": 0,
+   "trigger": "end"
+  },
+  {
+   "t": 1.558333,
+   "action": "right",
+   "value": 1,
+   "trigger": "start"
+  },
+  {
+   "t": 1.583333,
+   "action": "right",
+   "value": 0,
+   "trigger": "end"
+  },
+  {
+   "t": 1.608333,
+   "action": "right",
+   "value": 1,
+   "trigger": "start"
+  },
+  {
+   "t": 1.633333,
+   "action": "right",
+   "value": 0,
+   "trigger": "end"
+  },
+  {
+   "t": 1.658333,
+   "action": "right",
+   "value": 1,
+   "trigger": "start"
+  },
+  {
+   "t": 1.683333,
+   "action": "right",
+   "value": 0,
+   "trigger": "end"
+  },
+  {
+   "t": 1.708333,
+   "action": "right",
+   "value": 1,
+   "trigger": "start"
+  },
+  {
+   "t": 1.733333,
+   "action": "right",
+   "value": 0,
+   "trigger": "end"
+  },
+  {
+   "t": 1.758333,
+   "action": "right",
+   "value": 1,
+   "trigger": "start"
+  },
+  {
+   "t": 1.783333,
+   "action": "right",
+   "value": 0,
+   "trigger": "end"
+  },
+  {
+   "t": 1.808333,
+   "action": "right",
+   "value": 1,
+   "trigger": "start"
+  },
+  {
+   "t": 1.833333,
+   "action": "right",
+   "value": 0,
+   "trigger": "end"
+  },
+  {
+   "t": 1.858333,
+   "action": "right",
+   "value": 1,
+   "trigger": "start"
+  },
+  {
+   "t": 1.891667,
+   "action": "right",
+   "value": 0,
+   "trigger": "end"
+  },
+  {
+   "t": 1.916667,
+   "action": "right",
+   "value": 1,
+   "trigger": "start"
+  },
+  {
+   "t": 1.925,
+   "action": "forward",
+   "value": 0,
+   "trigger": "end"
+  },
+  {
+   "t": 2.066667,
+   "action": "forward",
+   "value": 1,
+   "trigger": "start"
+  },
+  {
+   "t": 2.158333,
+   "action": "forward",
+   "value": 0,
+   "trigger": "end"
+  },
+  {
+   "t": 2.233333,
+   "action": "forward",
+   "value": 1,
+   "trigger": "start"
+  },
+  {
+   "t": 2.3,
+   "action": "forward",
+   "value": 0,
+   "trigger": "end"
+  },
+  {
+   "t": 2.358333,
+   "action": "forward",
+   "value": 1,
+   "trigger": "start"
+  },
+  {
+   "t": 2.408333,
+   "action": "forward",
+   "value": 0,
+   "trigger": "end"
+  },
+  {
+   "t": 2.425,
+   "action": "forward",
+   "value": 1,
+   "trigger": "start"
+  },
+  {
+   "t": 2.566667,
+   "action": "right",
+   "value": 0,
+   "trigger": "end"
+  },
+  {
+   "t": 2.666667,
+   "action": "right",
+   "value": 1,
+   "trigger": "start"
+  },
+  {
+   "t": 2.716667,
+   "action": "right",
+   "value": 0,
+   "trigger": "end"
+  },
+  {
+   "t": 2.758333,
+   "action": "right",
+   "value": 1,
+   "trigger": "start"
+  },
+  {
+   "t": 2.8,
+   "action": "right",
+   "value": 0,
+   "trigger": "end"
+  },
+  {
+   "t": 2.85,
+   "action": "right",
+   "value": 1,
+   "trigger": "start"
+  },
+  {
+   "t": 2.908333,
+   "action": "right",
+   "value": 0,
+   "trigger": "end"
+  },
+  {
+   "t": 2.975,
+   "action": "right",
+   "value": 1,
+   "trigger": "start"
+  },
+  {
+   "t": 3.05,
+   "action": "right",
+   "value": 0,
+   "trigger": "end"
+  },
+  {
+   "t": 3.125,
+   "action": "right",
+   "value": 1,
+   "trigger": "start"
+  },
+  {
+   "t": 3.133333,
+   "action": "right",
+   "value": 0,
+   "trigger": "end"
+  },
+  {
+   "t": 3.133333,
+   "action": "left",
+   "value": 1,
+   "trigger": "start"
+  },
+  {
+   "t": 3.283333,
+   "action": "left",
+   "value": 0,
+   "trigger": "end"
+  },
+  {
+   "t": 3.341667,
+   "action": "left",
+   "value": 1,
+   "trigger": "start"
+  },
+  {
+   "t": 3.391667,
+   "action": "left",
+   "value": 0,
+   "trigger": "end"
+  },
+  {
+   "t": 3.441667,
+   "action": "left",
+   "value": 1,
+   "trigger": "start"
+  },
+  {
+   "t": 3.491667,
+   "action": "left",
+   "value": 0,
+   "trigger": "end"
+  },
+  {
+   "t": 3.541667,
+   "action": "left",
+   "value": 1,
+   "trigger": "start"
+  },
+  {
+   "t": 3.591667,
+   "action": "left",
+   "value": 0,
+   "trigger": "end"
+  },
+  {
+   "t": 3.916667,
+   "action": "jump",
+   "value": 1,
+   "trigger": "start"
+  },
+  {
+   "t": 4.375,
+   "action": "jump",
+   "value": 0,
+   "trigger": "end"
+  },
+  {
+   "t": 5.3,
+   "action": "left",
+   "value": 1,
+   "trigger": "start"
+  },
+  {
+   "t": 5.408333,
+   "action": "left",
+   "value": 0,
+   "trigger": "end"
+  },
+  {
+   "t": 5.466667,
+   "action": "left",
+   "value": 1,
+   "trigger": "start"
+  },
+  {
+   "t": 5.525,
+   "action": "left",
+   "value": 0,
+   "trigger": "end"
+  },
+  {
+   "t": 5.583333,
+   "action": "left",
+   "value": 1,
+   "trigger": "start"
+  },
+  {
+   "t": 5.633333,
+   "action": "left",
+   "value": 0,
+   "trigger": "end"
+  },
+  {
+   "t": 5.675,
+   "action": "left",
+   "value": 1,
+   "trigger": "start"
+  },
+  {
+   "t": 5.708333,
+   "action": "left",
+   "value": 0,
+   "trigger": "end"
+  },
+  {
+   "t": 5.741667,
+   "action": "left",
+   "value": 1,
+   "trigger": "start"
+  },
+  {
+   "t": 5.775,
+   "action": "left",
+   "value": 0,
+   "trigger": "end"
+  },
+  {
+   "t": 5.816667,
+   "action": "left",
+   "value": 1,
+   "trigger": "start"
+  },
+  {
+   "t": 5.858333,
+   "action": "left",
+   "value": 0,
+   "trigger": "end"
+  },
+  {
+   "t": 5.866667,
+   "action": "forward",
+   "value": 0,
+   "trigger": "end"
+  },
+  {
+   "t": 5.908333,
+   "action": "backward",
+   "value": 1,
+   "trigger": "start"
+  },
+  {
+   "t": 5.908333,
+   "action": "right",
+   "value": 1,
+   "trigger": "start"
+  },
+  {
+   "t": 5.966667,
+   "action": "backward",
+   "value": 0,
+   "trigger": "end"
+  },
+  {
+   "t": 5.966667,
+   "action": "right",
+   "value": 0,
+   "trigger": "end"
+  },
+  {
+   "t": 7.808333,
+   "action": "forward",
+   "value": 1,
+   "trigger": "start"
+  },
+  {
+   "t": 7.908333,
+   "action": "left",
+   "value": 1,
+   "trigger": "start"
+  },
+  {
+   "t": 7.975,
+   "action": "left",
+   "value": 0,
+   "trigger": "end"
+  },
+  {
+   "t": 8.041667,
+   "action": "left",
+   "value": 1,
+   "trigger": "start"
+  },
+  {
+   "t": 8.108333,
+   "action": "left",
+   "value": 0,
+   "trigger": "end"
+  },
+  {
+   "t": 8.158333,
+   "action": "forward",
+   "value": 0,
+   "trigger": "end"
+  },
+  {
+   "t": 18.941667,
+   "action": "jump",
+   "value": 1,
+   "trigger": "start"
+  },
+  {
+   "t": 19.316667,
+   "action": "jump",
+   "value": 0,
+   "trigger": "end"
+  }
+ ]
+}

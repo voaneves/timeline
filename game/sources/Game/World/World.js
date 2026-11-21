@@ -5,6 +5,7 @@ import * as THREE from 'three/webgpu'
 import { Debug } from '../Debug.js'
 import { Game } from '../Game.js'
 import { Player } from '../Character/Player.js'
+import { MovingPlatform } from './MovingPlatform.js'
 
 // Name of a glTF root node -> how the engine reads it (docs/PLAN-3D.md 5.3, Objects.getFromModel):
 //   `...Physical<Fixed|Dynamic|KinematicPositionBased>`  one rigid body; children cuboid*/tube*/hull*/trimesh*/ball* are its colliders
@@ -16,6 +17,7 @@ export class World
     {
         this.game = Game.getInstance()
         this.references = new Map()
+        this.movingPlatforms = []
 
         if(Debug.getParam('demo') !== null)
         {
@@ -117,7 +119,7 @@ export class World
     }
 
     // Kinematic platform shuttling between refPlatformPath1 and refPlatformPath2 (props `speed` m/s, `pause` s at each end).
-    // Driven by the fixed-step counter (not wall clock), before the physics step (order 2 < 3), so ghosts replay it exactly.
+    // Driven by the fixed-step counter (not wall clock), before Player and Physics (order 2 < 3), so ghosts replay it exactly.
     setMovingPlatform()
     {
         const a = this.references.get('refPlatformPath1')
@@ -125,31 +127,17 @@ export class World
         if(!this.movingPlatform || !a || !b)
             return
 
-        const speed = this.movingPlatform.userData.speed ?? 2
-        const pause = this.movingPlatform.userData.pause ?? 0.5
-        const distance = a.position.distanceTo(b.position)
-        const travel = distance / speed
-        const period = 2 * (travel + pause)
-        const position = new THREE.Vector3()
-        let steps = 0
-
-        this.platformPositionAt = (time) =>
-        {
-            const t = time % period
-            let ratio = 0
-            if(t < pause) ratio = 0
-            else if(t < pause + travel) ratio = (t - pause) / travel
-            else if(t < 2 * pause + travel) ratio = 1
-            else ratio = 1 - (t - 2 * pause - travel) / travel
-            return position.lerpVectors(a.position, b.position, ratio)
-        }
-
-        this.game.ticker.events.on('fixedTick', () =>
-        {
-            steps++
-            const target = this.platformPositionAt(steps * this.game.ticker.fixedDelta)
-            this.movingPlatform.object.physical.body.setNextKinematicTranslation({ x: target.x, y: target.y, z: target.z })
-        }, 2)
+        const platform = new MovingPlatform({
+            object: this.movingPlatform.object,
+            start: a.position,
+            end: b.position,
+            speed: this.movingPlatform.userData.speed ?? 2,
+            pause: this.movingPlatform.userData.pause ?? 0.5,
+            userData: this.movingPlatform.userData,
+        })
+        this.movingPlatform = platform
+        this.movingPlatforms.push(platform)
+        this.platformPositionAt = (time) => platform.positionAt(time)
     }
 
     // The player (T1.2): kinematic capsule on the Rapier KCC, spawned at the default respawn. Created after the moving
