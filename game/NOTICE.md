@@ -59,3 +59,18 @@ Supersedes the "25 packages" figures in the T0.5 and T0.7 sections above (those 
 - Native binaries / compiled code actually on disk: `@rolldown/binding-win32-x64-msvc` 1.2.19 (`rolldown-binding.win32-x64-msvc.node`, sha256 `e0a93949…4bf819`) and `lightningcss-win32-x64-msvc` 1.33.0 (`lightningcss.win32-x64-msvc.node`, sha256 `d043df0f…b5a91`), unchanged from T0.5 (both re-hashed 2026-11-20). WebAssembly only: `@dimforge/rapier3d` `rapier_wasm3d_bg.wasm`, `playwright-core` `lib/webp_codec.wasm`, and three's `basis_transcoder.wasm` / `draco_decoder.wasm` (x2) which are the only upstream-vendored binaries in `three/examples/jsm/libs/` (allowlisted by the originality audit). No other `.node`, `.exe`, `.dll`, `.so` or `.dylib` in `node_modules`.
 - Verification run 2026-11-20 in `game/`: `npm audit`: 0 vulnerabilities; `npm audit signatures`: 45 verified registry signatures, 20 verified attestations. `npm ci --ignore-scripts` was attempted first but could not finish because running dev/preview servers locked `rolldown-binding.win32-x64-msvc.node` (EPERM on unlink, node_modules left half-removed); `npm install --ignore-scripts` against the unchanged lockfile restored the exact tree (lockfile not modified, `npm ls --all` clean). Re-run a clean `npm ci --ignore-scripts` with no vite process running before a release.
 - 2026-11-20: `overrides.source-map-js = 1.2.2` (published 2026-09-30) to respect the 7-day cooldown; 1.2.4 (2026-11-19) was pulled transitively by postcss via vite. Remove the override after 2026-11-26.
+
+## Backend matrix (T1.11)
+- Policy: mobile devices (`Quality.isMobile()`, checking UA and `navigator.userAgentData?.mobile`) default to WebGL2 (`forceWebGL: true`) and quality tier 1; desktop defaults to WebGPU with WebGL2 fallback and quality tier 0. Query overrides: `?webgl` always forces WebGL2; `?webgpu` overrides the mobile default and enables WebGPU. `Rendering.backendName` exposes the active backend (`webgpu` or `webgl2`) alongside `window.__perf.backend`.
+- Measured on the dev machine (2026-11-21, greybox debug build, headed Chrome with `--use-angle=d3d11 --ignore-gpu-blocklist`, RX 6750 XT, 75 Hz display, 2 s warmup + 5 s sample per cell via `tools/capture/t111-backends.mjs`, raw output `tools/capture/out/t111-backends.json`). Mobile proxy emulates 390×844, DPR 2, Android mobile UA, and 4× CDP CPU throttle (GPU is not throttled by CDP; real phone numbers are still required for G1 / D10 / D17).
+
+| Device / profile | Query | Expected backend | Actual backend | Quality | Avg fps | Frame p95 (ms) | Draw calls | Errors |
+|---|---|---|---|---|---:|---:|---:|---:|
+| Desktop 1280×720 (DPR 1) | `?expose` | `webgpu` | `webgpu` | Q0 | 75.0 | 13.7 | 49 | 0 |
+| Desktop 1280×720 (DPR 1) | `?expose&webgpu` | `webgpu` | `webgpu` | Q0 | 74.9 | 13.7 | 49 | 0 |
+| Desktop 1280×720 (DPR 1) | `?expose&webgl` | `webgl2` | `webgl2` | Q0 | 75.0 | 13.7 | 49 | 0 |
+| Mobile proxy 390×844 (DPR 2, 4× CPU) | `?expose` | `webgl2` | `webgl2` | Q1 | 71.3 | 15.7 | 30 | 0 |
+| Mobile proxy 390×844 (DPR 2, 4× CPU) | `?expose&webgl` | `webgl2` | `webgl2` | Q1 | 69.6 | 15.6 | 30 | 0 |
+| Mobile proxy 390×844 (DPR 2, 4× CPU) | `?expose&webgpu` | `webgpu` | `webgpu` | Q1 | 74.9 | 14.1 | 30 | 0 |
+| Owner real phone (TBD, pending playtest at G1 / D10 / D17) | default | `webgl2` | _pending_ | Q1 | _pending_ | _pending_ | _pending_ | _pending_ |
+| Owner real phone (TBD, pending playtest at G1 / D10 / D17) | `?webgpu` | `webgpu` | _pending_ | Q1 | _pending_ | _pending_ | _pending_ | _pending_ |

@@ -19,8 +19,7 @@ export class Quality
         // `?q=0|1|2` forces a tier (overrides the UA detection); anything else is ignored
         this.forced = Quality.getForcedLevel()
 
-        const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
-        this.level = this.forced !== null ? this.forced : (isMobile ? 1 : 0) // 0 = highest quality
+        this.level = this.forced !== null ? this.forced : (Quality.isMobile() ? 1 : 0) // 0 = highest quality
 
         // Debug
         if(this.game.debug.active)
@@ -49,6 +48,11 @@ export class Quality
                 'change'
             )
         }
+    }
+
+    static isMobile()
+    {
+        return /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || Boolean(navigator.userAgentData?.mobile)
     }
 
     // Value of `?q=` when it is exactly 0, 1 or 2, else null

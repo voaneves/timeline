@@ -4,12 +4,14 @@ import { bloom } from 'three/addons/tsl/display/BloomNode.js'
 import { Game } from './Game.js'
 import { cheapDOF } from './Passes/cheapDOF.js'
 import { PerfProbe } from './PerfProbe.js'
+import { Quality } from './Quality.js'
 
 export class Rendering
 {
     constructor()
     {
         this.game = Game.getInstance()
+        this.backendName = null
 
         if(this.game.debug.active)
         {
@@ -20,10 +22,24 @@ export class Rendering
         }
     }
 
-    // `?webgl` forces the WebGL2 backend (test / mobile default); otherwise WebGPU when available
+    // `?webgl` forces the WebGL2 backend; `?webgpu` overrides the mobile WebGL2 default
     static isWebGLForced()
     {
         return !!location.search.match(/[?&]webgl(?:[=&]|$)/i)
+    }
+
+    static isWebGPUForced()
+    {
+        return !!location.search.match(/[?&]webgpu(?:[=&]|$)/i)
+    }
+
+    static shouldForceWebGL()
+    {
+        if(Rendering.isWebGLForced())
+            return true
+        if(Rendering.isWebGPUForced())
+            return false
+        return Quality.isMobile()
     }
 
     start()
@@ -46,7 +62,7 @@ export class Rendering
         this.renderer = new THREE.WebGPURenderer({
             canvas: this.game.canvasElement,
             powerPreference: 'high-performance',
-            forceWebGL: Rendering.isWebGLForced(),
+            forceWebGL: Rendering.shouldForceWebGL(),
             trackTimestamp: PerfProbe.wantsGpuTimer(), // GPU time for window.__perf (opt-in, see PerfProbe)
             antialias: this.game.viewport.pixelRatio < 2
         })
@@ -75,8 +91,9 @@ export class Rendering
         // Make the renderer control the ticker
         this.renderer.setAnimationLoop((elapsedTime) => { this.game.ticker.update(elapsedTime) })
 
+        await this.renderer.init()
+        this.backendName = this.renderer.backend?.isWebGPUBackend ? 'webgpu' : 'webgl2'
         return this.renderer
-            .init()
     }
 
     setPostprocessing()
