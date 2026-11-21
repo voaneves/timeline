@@ -38,10 +38,12 @@ export class Player
         this.stampLatch = false // same, for the stamp
         this.jumpLatch = false // a press since the last fixed step (a tap shorter than a frame is never lost)
         this.interactCount = 0 // Phase 2 interactive hook counter
+        this.walkTarget = null // WCAG 2.5.7 single-pointer tap-to-walk target { x, y, z }
         this.input = { x: 0, z: 0, speed: 0, jumpPressed: false, jumpHeld: false, stampPressed: false } // world-space wanted direction (unit) and speed, last fixed step
 
         this.setActions()
         this.setBody()
+        this.setWalkTargetVisual()
         this.setDebug()
 
         // Before Physics (3): the KCC move is applied by the physics step of this same fixed step
@@ -66,10 +68,10 @@ export class Player
             { name: 'left', categories, keys: [ 'Keyboard.KeyA', 'Keyboard.ArrowLeft', 'Gamepad.left' ] },
             { name: 'right', categories, keys: [ 'Keyboard.KeyD', 'Keyboard.ArrowRight', 'Gamepad.right' ] },
             { name: 'run', categories, keys: [] }, // forces a run whatever the deflection (no default key: Shift is the stamp; ghosts inject it by name)
-            { name: 'jump', categories, keys: [ 'Keyboard.Space', 'Gamepad.cross' ] }, // press = jump (buffered), in the air = ribbon glide
-            { name: 'stamp', categories, keys: [ 'Keyboard.ShiftLeft', 'Keyboard.ShiftRight', 'Keyboard.KeyC', 'Gamepad.circle' ] }, // in the air: lock, dive, mark the ground
-            { name: 'interact', categories, keys: [ 'Keyboard.KeyE', 'Keyboard.Enter', 'Gamepad.square' ] }, // Phase 2 interactive hook
-            { name: 'moveStick', categories, keys: [ 'Gamepad.joystickLeft' ] }, // analog: value { x, y, radius, active }
+            { name: 'jump', categories, keys: [ 'Keyboard.Space', 'Gamepad.cross', 'Touch.jump' ] }, // press = jump (buffered), in the air = ribbon glide
+            { name: 'stamp', categories, keys: [ 'Keyboard.ShiftLeft', 'Keyboard.ShiftRight', 'Keyboard.KeyC', 'Gamepad.circle', 'Touch.stamp' ] }, // in the air: lock, dive, mark the ground
+            { name: 'interact', categories, keys: [ 'Keyboard.KeyE', 'Keyboard.Enter', 'Gamepad.square', 'Touch.interact' ] }, // Phase 2 interactive hook
+            { name: 'moveStick', categories, keys: [ 'Gamepad.joystickLeft', 'Touch.joystick' ] }, // analog: value { x, y, radius, active }
         ])
 
         this.game.inputs.events.on('jump', (action) =>
@@ -134,6 +136,50 @@ export class Player
         this.model.quaternion.set(0, Math.sin(yaw / 2), 0, Math.cos(yaw / 2))
     }
 
+    // Subtle ground target ring for single-pointer tap-to-walk (visual only)
+    setWalkTargetVisual()
+    {
+        this.walkTargetRing = new THREE.Group()
+        this.walkTargetRing.name = 'walkTargetRing'
+        this.walkTargetRing.visible = false
+
+        const outer = new THREE.Mesh(
+            new THREE.RingGeometry(0.32, 0.42, 32),
+            new THREE.MeshBasicMaterial({ name: 'walkTargetInk', color: '#0a0a0a', transparent: true, opacity: 0.75, depthWrite: false, side: THREE.DoubleSide })
+        )
+        outer.rotation.x = - Math.PI / 2
+
+        const inner = new THREE.Mesh(
+            new THREE.RingGeometry(0.14, 0.22, 24),
+            new THREE.MeshBasicMaterial({ name: 'walkTargetSignal', color: '#f50000', transparent: true, opacity: 0.85, depthWrite: false, side: THREE.DoubleSide })
+        )
+        inner.rotation.x = - Math.PI / 2
+        inner.position.y = 0.005
+
+        this.walkTargetRing.add(outer, inner)
+        this.game.scene.add(this.walkTargetRing)
+    }
+
+    setWalkTarget(x, y, z)
+    {
+        if(this.game.inputs.locked)
+            return
+
+        this.walkTarget = { x, y, z }
+        if(this.walkTargetRing)
+        {
+            this.walkTargetRing.position.set(x, y + 0.03, z)
+            this.walkTargetRing.visible = true
+        }
+    }
+
+    clearWalkTarget()
+    {
+        this.walkTarget = null
+        if(this.walkTargetRing)
+            this.walkTargetRing.visible = false
+    }
+
     // Visual pose between the last two physics steps (what the camera follows)
     get position()
     {
@@ -171,7 +217,39 @@ export class Player
             }
         }
 
-        if(magnitude <= 0)
+        if(magnitude > 0)
+        {
+            // Any manual directional input cancels tap-to-walk
+            this.walkTarget = null
+        }
+        else if(this.walkTarget)
+        {
+            if(this.controller.stamp.active)
+            {
+                this.walkTarget = null
+                this.input.x = this.input.z = this.input.speed = 0
+                return this.input
+            }
+
+            // Deterministic fixed-step steering from simulated rigid body position
+            const pos = this.object.physical.body.translation()
+            const dx = this.walkTarget.x - pos.x
+            const dz = this.walkTarget.z - pos.z
+            const dist = Math.hypot(dx, dz)
+
+            if(dist <= 0.35)
+            {
+                this.walkTarget = null
+                this.input.x = this.input.z = this.input.speed = 0
+                return this.input
+            }
+
+            this.input.x = dx / dist
+            this.input.z = dz / dist
+            this.input.speed = (dist < 0.9 && this.controller.grounded) ? move.walkSpeed : move.runSpeed
+            return this.input
+        }
+        else
         {
             this.input.x = this.input.z = this.input.speed = 0
             return this.input
@@ -198,6 +276,7 @@ export class Player
 
     fixedUpdate()
     {
+        const beforeY = this.object.physical.body.translation().y
         const input = this.readInput()
         input.jumpPressed = this.jumpLatch
         input.jumpHeld = this.game.inputs.actions.get('jump').active
@@ -205,12 +284,35 @@ export class Player
         this.jumpLatch = false
         this.stampLatch = false
         this.controller.step(input, this.game.ticker.fixedDelta)
+
+        if(this.walkTarget)
+        {
+            if(this.controller.stamp.active)
+                this.walkTarget = null
+            else if(beforeY < feel.body.fallLimit + 0.25 && this.controller.next.y > beforeY + 0.5)
+                this.walkTarget = null
+        }
     }
 
     // Per frame, visual only
     update()
     {
         this.mesh.rotation.z = this.controller.lean
+
+        if(this.walkTargetRing)
+        {
+            if(this.walkTarget)
+            {
+                this.walkTargetRing.visible = true
+                this.walkTargetRing.position.set(this.walkTarget.x, this.walkTarget.y + 0.03, this.walkTarget.z)
+                const pulse = 1 + 0.08 * Math.sin(this.game.ticker.elapsed * 6)
+                this.walkTargetRing.scale.set(pulse, 1, pulse)
+            }
+            else
+            {
+                this.walkTargetRing.visible = false
+            }
+        }
 
         // Minimal camera follow (T1.6 replaces it): the view tracks the interpolated visual, not the body
         const tracked = this.game.view.focusPoint.trackedPosition

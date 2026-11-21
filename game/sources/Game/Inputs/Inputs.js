@@ -6,6 +6,7 @@ import Keyboard from './Keyboard.js'
 import { InteractiveButtons } from './InteractiveButtons.js'
 import { Wheel } from './Wheel.js'
 import { Nipple } from './Nipple.js'
+import { TouchControls } from './TouchControls.js'
 import ObservableSet from '../utilities/ObservableSet.js'
 
 export class Inputs
@@ -48,6 +49,7 @@ export class Inputs
         this.setWheel()
         this.setInteractiveButtons()
         this.setNipple()
+        this.setTouchControls()
 
         this.addActions([
             { name: 'menu', categories: [], keys: [ 'Keyboard.Escape', 'Gamepad.start' ] },
@@ -166,6 +168,13 @@ export class Inputs
     setInteractiveButtons()
     {
         this.interactiveButtons = new InteractiveButtons()
+
+        this.interactiveButtons.events.on('interact', () =>
+        {
+            this.updateMode(Inputs.MODE_TOUCH)
+            this.start('Touch.interact')
+            this.end('Touch.interact')
+        })
     }
 
     setNipple()
@@ -182,6 +191,12 @@ export class Inputs
                 
             this.nipple.updateFromPointer(this.pointer, action)
         })
+    }
+
+    setTouchControls()
+    {
+        this.touchControls = new TouchControls(this)
+        this.nipple.enabled = false
     }
 
     addActions(actions)
@@ -403,5 +418,6 @@ export class Inputs
         this.pointer.update()
         this.gamepad.update()
         this.nipple.update()
+        this.touchControls.update()
     }
 }

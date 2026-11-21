@@ -65,6 +65,8 @@ export class Pointer
 
             this.mode = Pointer.MODE_TOUCH
             this.upcomingTouches = [ ..._event.touches ]
+            if(this.upcomingTouches.length === 0)
+                return
             
             // Calculate average
             let x = 0
@@ -118,6 +120,14 @@ export class Pointer
                 this.upcomingDown = false
         })
 
+        this.element.addEventListener('touchcancel', (_event) =>
+        {
+            this.upcomingTouches = [ ..._event.touches ]
+
+            if(this.upcomingTouches.length === 0)
+                this.upcomingDown = false
+        })
+
         this.element.addEventListener('contextmenu', (_event) =>
         {
             _event.preventDefault()
@@ -143,7 +153,7 @@ export class Pointer
                 {
                     const dX = this.upcomingTouches[i].clientX - this.upcomingTouches[j].clientX
                     const dY = this.upcomingTouches[i].clientY - this.upcomingTouches[j].clientY
-                    const distance = Math.sqrt(dX * dX, dY * dY)
+                    const distance = Math.hypot(dX, dY)
 
                     if(distance > maxDistance)
                         maxDistance = distance

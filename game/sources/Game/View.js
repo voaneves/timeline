@@ -565,16 +565,32 @@ export class View
             maxPitch: 8 * DEG,
             yawRate: 50 * DEG,
             pitchRate: 24 * DEG,
+            nudgeAngle: 15 * DEG,
+            nudgeLatch: 0,
             returnDuration: 1.2,
             returnHalfLife: 0.25,
             active: false,
         }
 
         this.game.inputs.addActions([
-            { name: 'cameraOrbitLeft',  categories: [ 'wandering' ], keys: [ 'Keyboard.KeyQ' ] },
-            { name: 'cameraOrbitRight', categories: [ 'wandering' ], keys: [ 'Keyboard.KeyE' ] },
-            { name: 'cameraOrbitStick', categories: [ 'wandering' ], keys: [ 'Gamepad.joystickRight' ] },
+            { name: 'cameraOrbitLeft',       categories: [ 'wandering' ], keys: [ 'Keyboard.KeyQ', 'Touch.cameraOrbitLeft' ] },
+            { name: 'cameraOrbitRight',      categories: [ 'wandering' ], keys: [ 'Keyboard.KeyE', 'Touch.cameraOrbitRight' ] },
+            { name: 'cameraOrbitNudgeLeft',  categories: [ 'wandering' ], keys: [ 'Touch.cameraOrbitNudgeLeft' ] },
+            { name: 'cameraOrbitNudgeRight', categories: [ 'wandering' ], keys: [ 'Touch.cameraOrbitNudgeRight' ] },
+            { name: 'cameraOrbitStick',      categories: [ 'wandering' ], keys: [ 'Gamepad.joystickRight' ] },
         ])
+
+        this.game.inputs.events.on('cameraOrbitNudgeLeft', (action) =>
+        {
+            if(action.trigger === 'start')
+                this.orbit.nudgeLatch -= this.orbit.nudgeAngle
+        })
+
+        this.game.inputs.events.on('cameraOrbitNudgeRight', (action) =>
+        {
+            if(action.trigger === 'start')
+                this.orbit.nudgeLatch += this.orbit.nudgeAngle
+        })
     }
 
     updateManualOrbit(dt)
@@ -597,16 +613,25 @@ export class View
             pitchInput = clamp(stick.y, -1, 1)
         }
 
+        let nudged = false
+        if(orbit.nudgeLatch !== 0)
+        {
+            orbit.yawSpring.x = clamp(orbit.yawSpring.x + orbit.nudgeLatch, -orbit.maxYaw, orbit.maxYaw)
+            orbit.yawSpring.v = 0
+            orbit.nudgeLatch = 0
+            nudged = true
+        }
+
         const hasYawInput = Math.abs(yawInput) > 1e-4
         const hasPitchInput = Math.abs(pitchInput) > 1e-4
-        orbit.active = hasYawInput || hasPitchInput
+        orbit.active = hasYawInput || hasPitchInput || nudged
 
         if(hasYawInput)
         {
             orbit.yawSpring.x = clamp(orbit.yawSpring.x + yawInput * orbit.yawRate * dt, -orbit.maxYaw, orbit.maxYaw)
             orbit.yawSpring.v = 0
         }
-        else if(orbit.yawSpring.x !== 0 || orbit.yawSpring.v !== 0)
+        else if(!nudged && (orbit.yawSpring.x !== 0 || orbit.yawSpring.v !== 0))
         {
             springStep(orbit.yawSpring, 0, orbit.returnHalfLife, dt)
             if(Math.abs(orbit.yawSpring.x) < 1e-4 && Math.abs(orbit.yawSpring.v) < 1e-4)
@@ -875,6 +900,9 @@ export class View
 
         this.game.inputs.events.on('viewMapPointer', (action) =>
         {
+            if(this.game.inputs.mode === Inputs.MODE_TOUCH && this.game.inputs.touchControls?.enabled && this.game.world?.player)
+                return
+
             if(this.mode === View.MODE_DEFAULT)
             {
                 // Focus point

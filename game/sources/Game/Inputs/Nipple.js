@@ -17,6 +17,7 @@ export class Nipple
         this.position = new THREE.Vector3()
         this.raycaster = new THREE.Raycaster()
 
+        this.enabled = true
         this.active = false
         this.animated = false
         this.angle = 0
@@ -129,6 +130,13 @@ export class Nipple
 
     updateFromPointer(pointer, action)
     {
+        if(!this.enabled)
+        {
+            this.active = false
+            this.inRadiusLow = false
+            return
+        }
+
         // Start
         if(action.trigger === 'start')
         {
@@ -230,6 +238,12 @@ export class Nipple
 
     update()
     {
+        if(!this.enabled)
+        {
+            this.group.visible = false
+            return
+        }
+
         if(this.active || this.animated)
         {
             // Smallest angle and forward

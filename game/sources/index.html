@@ -13,10 +13,34 @@
     <div class="game">
         <canvas class="js-canvas" tabindex="0" role="application" aria-label="Linha do Tempo 3D"></canvas>
 
+        <div class="js-touch-controls touch-controls" aria-label="Controles de toque">
+            <div class="js-touch-joystick touch-joystick" aria-hidden="true">
+                <svg class="touch-joystick-svg" viewBox="-72 -72 144 144" width="144" height="144">
+                    <circle class="touch-joystick-ring" cx="0" cy="0" r="64" />
+                    <circle class="touch-joystick-deadzone" cx="0" cy="0" r="10" />
+                    <line class="js-touch-joystick-stick touch-joystick-stick" x1="0" y1="0" x2="0" y2="0" />
+                    <circle class="js-touch-joystick-knob touch-joystick-knob" cx="0" cy="0" r="18" />
+                </svg>
+            </div>
+
+            <div class="touch-camera-controls" role="group" aria-label="Girar câmera">
+                <button type="button" class="js-touch-orbit-left touch-btn touch-camera-btn" aria-label="Girar câmera para a esquerda">&#x27F2;</button>
+                <button type="button" class="js-touch-orbit-right touch-btn touch-camera-btn" aria-label="Girar câmera para a direita">&#x27F3;</button>
+            </div>
+
+            <button type="button" class="js-touch-stamp touch-btn touch-stamp-btn" aria-label="Carimbar">
+                <span class="touch-btn-label">Carimbar</span>
+            </button>
+
+            <button type="button" class="js-touch-jump touch-btn touch-jump-hint" aria-label="Pular">
+                <span class="touch-btn-label">Pular</span>
+            </button>
+        </div>
+
         <div class="js-touch-buttons touch-buttons">
             <div class="js-overlay overlay"></div>
             <div class="buttons">
-                <button data-name="interact" class="js-button interact">Interact</button>
+                <button type="button" data-name="interact" class="js-button touch-btn interact">Interagir</button>
             </div>
         </div>
     </div>

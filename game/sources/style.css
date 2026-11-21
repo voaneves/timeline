@@ -1,3 +1,10 @@
+:root
+{
+    --vn-ink: #0a0a0a;
+    --vn-paper: #f4ead4;
+    --vn-signal: #f50000;
+}
+
 html, body
 {
     margin: 0;
@@ -27,8 +34,182 @@ html, body
 
 .js-canvas:focus-visible
 {
-    outline: 3px solid #f50000;
+    outline: 3px solid var(--vn-signal);
     outline-offset: -3px;
+}
+
+/* One-thumb touch controls & WCAG 2.5.7 single-pointer controls */
+.touch-controls
+{
+    display: none;
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: none;
+    z-index: 10;
+}
+
+html.is-mode-touch .touch-controls
+{
+    display: block;
+}
+
+.touch-joystick
+{
+    display: none;
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 144px;
+    height: 144px;
+    margin-left: -72px;
+    margin-top: -72px;
+    pointer-events: none;
+    will-change: transform;
+}
+
+.touch-joystick.is-active
+{
+    display: block;
+}
+
+.touch-joystick-svg
+{
+    display: block;
+    overflow: visible;
+}
+
+.touch-joystick-ring
+{
+    fill: rgba(244, 234, 212, 0.28);
+    stroke: var(--vn-ink);
+    stroke-width: 3;
+}
+
+.touch-joystick-deadzone
+{
+    fill: none;
+    stroke: var(--vn-ink);
+    stroke-width: 1.5;
+    stroke-dasharray: 3 3;
+    opacity: 0.45;
+}
+
+.touch-joystick-stick
+{
+    stroke: var(--vn-ink);
+    stroke-width: 5;
+    stroke-linecap: round;
+}
+
+.touch-joystick-knob
+{
+    fill: var(--vn-ink);
+    stroke: var(--vn-paper);
+    stroke-width: 2.5;
+}
+
+.touch-joystick-knob.is-running
+{
+    stroke: var(--vn-signal);
+    stroke-width: 3;
+}
+
+.touch-btn
+{
+    box-sizing: border-box;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0;
+    padding: 0;
+    border: 2.5px solid var(--vn-ink);
+    border-radius: 50%;
+    background: var(--vn-paper);
+    color: var(--vn-ink);
+    font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    line-height: 1;
+    cursor: pointer;
+    pointer-events: auto;
+    touch-action: none;
+    -webkit-tap-highlight-color: transparent;
+    box-shadow: 0 3px 0 var(--vn-ink);
+    transition: transform 0.08s ease, opacity 0.35s ease;
+}
+
+.touch-btn:focus-visible
+{
+    outline: 3px solid var(--vn-signal);
+    outline-offset: 2px;
+}
+
+.touch-btn.is-pressed,
+.touch-btn:active
+{
+    transform: translateY(2px) scale(0.96);
+    box-shadow: 0 1px 0 var(--vn-ink);
+}
+
+.touch-camera-controls
+{
+    position: absolute;
+    top: max(16px, env(safe-area-inset-top));
+    right: max(16px, env(safe-area-inset-right));
+    display: flex;
+    gap: 10px;
+    pointer-events: none;
+}
+
+.touch-camera-btn
+{
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
+    font-size: 20px;
+}
+
+.touch-jump-hint
+{
+    position: absolute;
+    right: max(20px, env(safe-area-inset-right));
+    bottom: max(20px, env(safe-area-inset-bottom));
+    width: 76px;
+    height: 76px;
+    min-width: 76px;
+    min-height: 76px;
+    font-size: 14px;
+}
+
+.touch-jump-hint.is-hint-faded
+{
+    opacity: 0;
+    pointer-events: none;
+}
+
+.touch-stamp-btn
+{
+    display: none;
+    position: absolute;
+    right: max(26px, env(safe-area-inset-right));
+    bottom: calc(max(20px, env(safe-area-inset-bottom)) + 92px);
+    width: 64px;
+    height: 64px;
+    min-width: 64px;
+    min-height: 64px;
+    background: var(--vn-ink);
+    color: var(--vn-paper);
+    border: 3px solid var(--vn-signal);
+    font-size: 11px;
+}
+
+.touch-stamp-btn.is-visible
+{
+    display: inline-flex;
 }
 
 .touch-buttons
@@ -37,6 +218,7 @@ html, body
     position: absolute;
     inset: 0;
     pointer-events: none;
+    z-index: 11;
 }
 
 html.is-mode-touch .touch-buttons
@@ -47,17 +229,21 @@ html.is-mode-touch .touch-buttons
 .touch-buttons .buttons
 {
     position: absolute;
-    right: 16px;
-    bottom: 16px;
+    right: max(108px, env(safe-area-inset-right));
+    bottom: max(26px, env(safe-area-inset-bottom));
 }
 
 .touch-buttons .js-button
 {
     display: none;
+    min-width: 64px;
+    min-height: 64px;
+    padding: 0 12px;
+    font-size: 12px;
     pointer-events: auto;
 }
 
 .touch-buttons .js-button.is-visible
 {
-    display: block;
+    display: inline-flex;
 }
