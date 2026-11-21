@@ -9,7 +9,7 @@ export class Objects
         this.game = Game.getInstance()
         this.list = new Map()
         this.key = 0
-        this.roundedViewPosition = { x: 0, z: 0 }
+        this.pendingResets = []
         this.tempPosition = { x: 0, y: 0, z: 0 }
         this.tempRotation = { x: 0, y: 0, z: 0, w: 1 }
 
@@ -24,6 +24,11 @@ export class Objects
             this.capture()
         }, 4)
 
+        this.game.ticker.events.on('fixedTick', () =>
+        {
+            this.fixedUpdate()
+        }, 5)
+
         this.game.ticker.events.on('tick', () =>
         {
             this.update()
@@ -36,7 +41,8 @@ export class Objects
             visual: null,
             physical: null,
             needsUpdate: false,
-            reseting: false
+            reseting: false,
+            managedReset: false,
         }
 
         /**
@@ -238,19 +244,33 @@ export class Objects
         return this.add(...this.getFromModel(_model, _visualDescription, _physicalDescription))
     }
 
+    cancelPendingReset(object)
+    {
+        for(let i = this.pendingResets.length - 1; i >= 0; i--)
+        {
+            if(this.pendingResets[i].object === object)
+                this.pendingResets.splice(i, 1)
+        }
+        object.reseting = false
+    }
+
     resetObject(object)
     {
         if(
             !object.physical ||
+            object.managedReset ||
             (object.physical.type !== 'dynamic' && object.physical.type !== 'kinematicPositionBased') ||
             object.reseting
         )
             return
 
+        const isEnabled = object.physical.body.isEnabled()
+        if(!isEnabled)
+            return
+
         object.reseting = true
         this.snapInterpolation(object)
 
-        const isEnabled = object.physical.body.isEnabled()
         object.physical.body.setEnabled(false)
         object.physical.body.setTranslation(object.physical.initialState.position, false)
         object.physical.body.setRotation(object.physical.initialState.rotation, false)
@@ -259,20 +279,11 @@ export class Objects
         object.physical.body.resetForces()
         object.physical.body.resetTorques()
 
-        // Wait a second and reactivate
-        this.game.ticker.wait(1, () =>
-        {
-            object.physical.body.setEnabled(isEnabled)
-
-            // Sleep
-            if(object.physical.initialState.sleeping)
-                object.physical.body.sleep()
-
-            object.reseting = false
-            this.game.ticker.wait(1, () =>
-            {
-                object.needsUpdate = true
-            })
+        // Reactivate deterministically after 1 fixed step
+        this.pendingResets.push({
+            object,
+            isEnabled,
+            stepsLeft: 1,
         })
         
         if(object.visual)
@@ -385,29 +396,53 @@ export class Objects
         })
     }
 
-    update()
+    // Deterministic physics housekeeping on fixedTick (order 5, after capture at order 4)
+    fixedUpdate()
     {
-        const roundedViewPosition = {
-            x: Math.round(this.game.view.focusPoint.position.x),
-            z: Math.round(this.game.view.focusPoint.position.z)
-        }
-        let objectsNeedDistanceTest = false
-
-        if(roundedViewPosition.x !== this.roundedViewPosition.x || roundedViewPosition.z !== this.roundedViewPosition.z)
+        for(let i = this.pendingResets.length - 1; i >= 0; i--)
         {
-            objectsNeedDistanceTest = true
-            this.roundedViewPosition.x = roundedViewPosition.x
-            this.roundedViewPosition.z = roundedViewPosition.z
+            const entry = this.pendingResets[i]
+            entry.stepsLeft--
+            if(entry.stepsLeft <= 0)
+            {
+                const { object, isEnabled } = entry
+                this.pendingResets.splice(i, 1)
+                object.physical.body.setEnabled(isEnabled)
+
+                if(object.physical.initialState.sleeping)
+                    object.physical.body.sleep()
+
+                object.reseting = false
+                object.needsUpdate = true
+                this.snapInterpolation(object)
+            }
         }
+
         this.list.forEach((_object) =>
         {
-            const position = _object.physical ? _object.physical.body.translation(this.tempPosition) : null
+            if(!_object.physical || _object.managedReset || _object.reseting)
+                return
 
-            // Apply physical to visual
+            const body = _object.physical.body
+            if(!body.isEnabled())
+                return
+
+            const position = body.translation(this.tempPosition)
+            if(position.y < this.game.water.depthElevation)
+                this.resetObject(_object)
+        })
+    }
+
+    update()
+    {
+        this.list.forEach((_object) =>
+        {
+            // Apply physical to visual (visual only: no physics mutations in per-frame tick)
             if(_object.visual && _object.physical)
             {
                 const interpolation = _object.interpolation
                 const body = _object.physical.body
+                const position = body.translation(this.tempPosition)
 
                 if(_object.needsUpdate)
                 {
@@ -440,27 +475,6 @@ export class Objects
                         _object.visual.object3D.position.copy(interpolation.currentPosition)
                         _object.visual.object3D.quaternion.copy(interpolation.currentQuaternion)
                         interpolation.snapped = true
-                    }
-                }
-            }
-
-
-            if(_object.physical)
-            {
-                // Felt in the floor => reset
-                if(position.y < this.game.water.depthElevation)
-                {
-                    this.resetObject(_object)
-                }
-
-                // Far from view => Reset
-                if(objectsNeedDistanceTest)
-                {
-                    const distanceToView = Math.hypot(this.roundedViewPosition.x - position.x, this.roundedViewPosition.z - position.z)
-                
-                    if(_object.physical.body.isEnabled() && !_object.physical.body.isSleeping() && distanceToView > this.game.view.optimalArea.radius)
-                    {
-                        _object.physical.body.sleep()
                     }
                 }
             }

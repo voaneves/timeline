@@ -191,9 +191,15 @@ html.is-mode-touch .touch-controls
     pointer-events: none;
 }
 
+.touch-jump-hint.is-hidden
+{
+    visibility: hidden;
+    opacity: 0;
+    pointer-events: none;
+}
+
 .touch-stamp-btn
 {
-    display: none;
     position: absolute;
     right: max(26px, env(safe-area-inset-right));
     bottom: calc(max(20px, env(safe-area-inset-bottom)) + 92px);
@@ -205,11 +211,16 @@ html.is-mode-touch .touch-controls
     color: var(--vn-paper);
     border: 3px solid var(--vn-signal);
     font-size: 11px;
+    visibility: hidden;
+    opacity: 0;
+    pointer-events: none;
 }
 
 .touch-stamp-btn.is-visible
 {
-    display: inline-flex;
+    visibility: visible;
+    opacity: 1;
+    pointer-events: auto;
 }
 
 .touch-buttons

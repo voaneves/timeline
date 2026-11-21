@@ -342,20 +342,6 @@ export class Materials
             // Transparent
             let transparent = baseMaterial.transparent
 
-            // Premultiplied alpha
-            let premultipliedAlpha = false
-
-            // Exceptions
-            if(
-                baseMaterial.name === 'projectsLabels' ||
-                baseMaterial.name === 'blackboardLabels'
-            )
-            {
-                premultipliedAlpha = true
-                transparent = true
-                alphaNode = texture(baseMaterial.map).r
-            }
-
             // Material
             const material = new MeshDefaultMaterial({
                 colorNode: baseColor,
@@ -364,7 +350,6 @@ export class Materials
                 hasDropShadows: true,
                 transparent: transparent
             })
-            material.premultipliedAlpha = premultipliedAlpha
             material.map = baseMaterial.map
             
             return material

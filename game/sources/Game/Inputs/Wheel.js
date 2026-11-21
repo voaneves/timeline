@@ -7,11 +7,12 @@ const NOTCH = 100
 
 export class Wheel
 {
-    constructor()
+    constructor(element = window)
     {
+        this.element = element
         this.events = new Events()
 
-        addEventListener('wheel', (_event) =>
+        this.element.addEventListener('wheel', (_event) =>
         {
             let delta = _event.shiftKey ? _event.deltaX : _event.deltaY
 

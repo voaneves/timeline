@@ -355,6 +355,7 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 | Package | Version | Licence |
 |---|---|---|
+| linkedom | 0.18.15 | ISC (build-time content extraction, not shipped) |
 | vite | 8.3.8 | MIT (bundles rolldown 1.2.19, MIT; postcss, MIT; lightningcss 1.33.0, **MPL-2.0**, native build-time binary, not redistributed) |
 | vite-plugin-wasm | 3.6.0 | MIT |
 | playwright-core | 1.65.0 | Apache-2.0 (no browser download; uses the system Chrome) |

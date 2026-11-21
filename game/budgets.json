@@ -230,18 +230,19 @@
     },
     "mobile": {
       "expectBackend": "webgl2",
+      "userAgent": "Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36",
       "viewport": [
         390,
         844
       ],
       "dpr": 2,
       "cpuThrottle": 4,
-      "query": "?q=1&webgl",
+      "query": "",
       "minFps": 50,
       "maxP95Ms": 24,
       "maxDrawCalls": 120,
       "maxTriangles": 250000
     },
-    "$notes": "expectBackend is asserted per profile (desktop webgpu; mobile webgl2 forced by the explicit ?webgl query, Rendering.js matches /[?&]webgl(?:[=&]|$)/ so ?webgl=0 would ALSO force WebGL2: the gate only ever passes the bare ?webgl). drawCalls/triangles are the MAX over samples taken every sampleMs across the whole measured window. Console errors, page errors, failed requests and HTTP >=400 fail the profile. Plan 7.4 targets: desktop 60 fps / p99<=16.7 ms / draw<=250 / tris<=800k; mobile >=55 fps / p95<=20 ms / draw<=120 / tris<=250k. Gate floors are looser (55/20 desktop, 50/24 mobile-throttled) because it runs on a shared dev machine with CPU throttle; tighten once the real-device gate (7.5) exists. gpuMs <=6 desktop is recorded, not gated (timer queries opt-in)."
+    "$notes": "expectBackend is asserted per profile (desktop webgpu; mobile webgl2 + Q1 auto-detected from the mobile userAgent with empty query). drawCalls/triangles are the MAX over samples taken every sampleMs across the whole measured window. Console errors, page errors, failed requests and HTTP >=400 fail the profile. Plan 7.4 targets: desktop 60 fps / p99<=16.7 ms / draw<=250 / tris<=800k; mobile >=55 fps / p95<=20 ms / draw<=120 / tris<=250k. Gate floors are looser (55/20 desktop, 50/24 mobile-throttled) because it runs on a shared dev machine with CPU throttle; tighten once the real-device gate (7.5) exists. gpuMs <=6 desktop is recorded, not gated (timer queries opt-in)."
   }
 }

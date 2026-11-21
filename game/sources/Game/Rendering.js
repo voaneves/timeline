@@ -22,15 +22,31 @@ export class Rendering
         }
     }
 
+    static isQueryFlagEnabled(name)
+    {
+        const params = new URLSearchParams(location.search)
+        const target = name.toLowerCase()
+        let enabled = false
+        for(const [ key, rawValue ] of params.entries())
+        {
+            if(key.toLowerCase() === target)
+            {
+                const value = rawValue.trim().toLowerCase()
+                enabled = value === '' || value === '1' || value === 'true'
+            }
+        }
+        return enabled
+    }
+
     // `?webgl` forces the WebGL2 backend; `?webgpu` overrides the mobile WebGL2 default
     static isWebGLForced()
     {
-        return !!location.search.match(/[?&]webgl(?:[=&]|$)/i)
+        return Rendering.isQueryFlagEnabled('webgl')
     }
 
     static isWebGPUForced()
     {
-        return !!location.search.match(/[?&]webgpu(?:[=&]|$)/i)
+        return Rendering.isQueryFlagEnabled('webgpu')
     }
 
     static shouldForceWebGL()
@@ -114,6 +130,8 @@ export class Rendering
         // Quality
         const qualityChange = (level) =>
         {
+            this.bloomPass._nMips = level === 0 ? 5 : 2
+
             if(level === 0)
             {
                 this.postProcessing.outputNode = this.cheapDOFPass.add(this.bloomPass)
@@ -189,6 +207,9 @@ export class Rendering
 
     resize()
     {
+        if(this.game.viewport.width <= 0 || this.game.viewport.height <= 0)
+            return
+
         this.renderer.setSize(this.game.viewport.width, this.game.viewport.height)
         this.renderer.setPixelRatio(this.game.viewport.pixelRatio)
     }

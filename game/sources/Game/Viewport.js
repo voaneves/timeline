@@ -16,11 +16,19 @@ export class Viewport
     {
         const bounding = this.domElement.getBoundingClientRect()
 
-        this.width = bounding.width
-        this.height = bounding.height
+        if(bounding.width > 0 && bounding.height > 0)
+        {
+            this.width = bounding.width
+            this.height = bounding.height
+        }
+        else if(!(this.width > 0) || !(this.height > 0))
+        {
+            this.width = 1
+            this.height = 1
+        }
         this.ratio = this.width / this.height
 
-        this.pixelRatioPure = window.devicePixelRatio
+        this.pixelRatioPure = window.devicePixelRatio || 1
         this.pixelRatioMax = 2
         this.pixelRatio = Math.min(this.pixelRatioPure, this.pixelRatioMax)
     }

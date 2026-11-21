@@ -12,6 +12,17 @@ export class Gamepad
         this.setType()
         this.setButtons()
         this.setJoysticks()
+
+        window.addEventListener('blur', () =>
+        {
+            this.releaseAll()
+        })
+
+        document.addEventListener('visibilitychange', () =>
+        {
+            if(document.hidden)
+                this.releaseAll()
+        })
     }
 
     /**
@@ -131,14 +142,14 @@ export class Gamepad
                         const mapButton = gamepad.buttons?.[map.index]
 
                         if(mapButton)
-                            button.value = typeof mapButton === 'number' ? mapButton : (mapButton.value ?? (mapButton.pressed ? 1 : 0))
+                            button.value = typeof mapButton === 'number' ? mapButton : (mapButton.value || (mapButton.pressed ? 1 : 0))
                     }
 
                     else if(map.action === 'axisToTrigger')
                     {
                         const mapAxes = gamepad.axes?.[map.index]
 
-                        if(mapAxes)
+                        if(typeof mapAxes === 'number')
                             button.value = mapAxes * 0.5 + 0.5
                     }
 
@@ -146,7 +157,7 @@ export class Gamepad
                     {
                         const mapAxes = gamepad.axes?.[map.index]
 
-                        if(mapAxes)
+                        if(typeof mapAxes === 'number')
                         {
                             const arrowAngle = mapAxes
                             let isInAngles = false

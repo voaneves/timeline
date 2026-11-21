@@ -18,7 +18,7 @@ const TAP_MAX_MOVE = 10
 const TAP_MAX_DURATION = 0.35
 const SWIPE_DOWN_STAMP_PX = 48
 const JUMP_HINT_DURATION = 20
-const ORBIT_TAP_MAX_DURATION = 0.25
+const ORBIT_HOLD_DELAY_MS = 180
 
 const UP = new THREE.Vector3(0, 1, 0)
 
@@ -39,6 +39,8 @@ export class TouchControls
         this.joystick = { x: 0, y: 0, radius: 0, active: false }
         this.touchPlayElapsed = 0
         this.jumpHintFaded = false
+        this.jumpHintHiddenByMode = null
+        this.jumpHintFadedApplied = null
         this.canStamp = false
 
         this.raycaster = new THREE.Raycaster()
@@ -72,6 +74,12 @@ export class TouchControls
         this.stampElement = root?.querySelector('.js-touch-stamp') ?? null
         this.orbitLeftElement = root?.querySelector('.js-touch-orbit-left') ?? null
         this.orbitRightElement = root?.querySelector('.js-touch-orbit-right') ?? null
+
+        if(this.stampElement)
+        {
+            this.stampElement.tabIndex = -1
+            this.stampElement.setAttribute('aria-hidden', 'true')
+        }
     }
 
     bindEvents()
@@ -91,6 +99,12 @@ export class TouchControls
         window.addEventListener('touchmove', onMove, { passive: false })
         window.addEventListener('touchend', onEnd, { passive: false })
         window.addEventListener('touchcancel', onCancel, { passive: false })
+        window.addEventListener('blur', () => this.resetActiveTouches())
+        document.addEventListener('visibilitychange', () =>
+        {
+            if(document.hidden)
+                this.resetActiveTouches()
+        })
 
         if(this.jumpHintElement)
         {
@@ -101,7 +115,7 @@ export class TouchControls
 
             this.jumpHintElement.addEventListener('click', (event) =>
             {
-                if(this.wasRecentTouch() || this.inputs.locked)
+                if(!this.enabled || this.wasRecentTouch() || this.inputs.locked)
                     return
                 event.preventDefault()
                 this.inputs.start('Touch.jump')
@@ -115,7 +129,7 @@ export class TouchControls
             {
                 event.preventDefault()
                 event.stopPropagation()
-                if(!this.enabled || this.inputs.locked)
+                if(!this.enabled || !this.canStamp || this.inputs.locked)
                     return
                 this.inputs.updateMode(Inputs.MODE_TOUCH)
                 const touch = event.changedTouches?.[0]
@@ -123,12 +137,13 @@ export class TouchControls
                     this.stampTouchId = touch.identifier
                 this.stampElement.classList.add('is-pressed')
                 this.inputs.start('Touch.stamp')
+                this.inputs.end('Touch.stamp')
             }, { passive: false })
 
             const endStamp = (event) =>
             {
-                event.preventDefault()
-                event.stopPropagation()
+                if(event.cancelable)
+                    event.preventDefault()
                 this.lastTouchEndElapsed = this.game.ticker.elapsed
                 this.stampTouchId = null
                 this.stampElement.classList.remove('is-pressed')
@@ -139,7 +154,7 @@ export class TouchControls
 
             this.stampElement.addEventListener('click', (event) =>
             {
-                if(this.wasRecentTouch() || !this.enabled || this.inputs.locked)
+                if(this.wasRecentTouch() || !this.enabled || !this.canStamp || this.inputs.locked)
                     return
                 event.preventDefault()
                 this.inputs.start('Touch.stamp')
@@ -168,24 +183,37 @@ export class TouchControls
 
             this.inputs.updateMode(Inputs.MODE_TOUCH)
             const changed = event.changedTouches ? [ ...event.changedTouches ] : []
+            if(changed.length === 0)
+                return
+
             for(const touch of changed)
             {
-                this.orbitTouches.set(touch.identifier, {
+                const record = {
                     direction,
                     holdKey,
                     nudgeKey,
                     element,
                     startElapsed: this.game.ticker.elapsed,
-                })
+                    holdStarted: false,
+                    holdTimer: null,
+                }
+                record.holdTimer = setTimeout(() =>
+                {
+                    record.holdTimer = null
+                    if(!this.orbitTouches.has(touch.identifier) || !this.enabled || this.inputs.locked)
+                        return
+                    record.holdStarted = true
+                    this.inputs.start(holdKey)
+                }, ORBIT_HOLD_DELAY_MS)
+                this.orbitTouches.set(touch.identifier, record)
             }
             element.classList.add('is-pressed')
-            this.inputs.start(holdKey)
         }, { passive: false })
 
         const finishOrbit = (event, cancelled) =>
         {
-            event.preventDefault()
-            event.stopPropagation()
+            if(event.cancelable)
+                event.preventDefault()
             this.lastTouchEndElapsed = this.game.ticker.elapsed
             const changed = event.changedTouches ? [ ...event.changedTouches ] : []
             for(const touch of changed)
@@ -194,8 +222,12 @@ export class TouchControls
             }
             if(changed.length === 0)
             {
+                for(const [ id, record ] of [ ...this.orbitTouches ])
+                {
+                    if(record.holdKey === holdKey)
+                        this.releaseOrbitTouch(id, cancelled)
+                }
                 element.classList.remove('is-pressed')
-                this.inputs.end(holdKey)
             }
         }
 
@@ -217,16 +249,32 @@ export class TouchControls
         if(!record)
             return
 
-        this.orbitTouches.delete(touchId)
-        record.element.classList.remove('is-pressed')
-        this.inputs.end(record.holdKey)
-
-        if(!cancelled && !this.inputs.locked)
+        if(record.holdTimer !== null)
         {
-            const duration = this.game.ticker.elapsed - record.startElapsed
-            if(duration < ORBIT_TAP_MAX_DURATION)
-                this.inputs.start(record.nudgeKey, 1, false)
+            clearTimeout(record.holdTimer)
+            record.holdTimer = null
         }
+
+        this.orbitTouches.delete(touchId)
+
+        let otherOnElement = false
+        let otherHoldingKey = false
+        for(const other of this.orbitTouches.values())
+        {
+            if(other.element === record.element)
+                otherOnElement = true
+            if(other.holdKey === record.holdKey && other.holdStarted)
+                otherHoldingKey = true
+        }
+
+        if(!otherOnElement)
+            record.element.classList.remove('is-pressed')
+
+        if(record.holdStarted && !otherHoldingKey)
+            this.inputs.end(record.holdKey)
+
+        if(!cancelled && !record.holdStarted && !this.inputs.locked)
+            this.inputs.start(record.nudgeKey, 1, false)
     }
 
     wasRecentTouch()
@@ -399,6 +447,7 @@ export class TouchControls
             {
                 rt.swipedDown = true
                 this.inputs.start('Touch.stamp')
+                this.inputs.end('Touch.stamp')
             }
         }
     }
@@ -503,10 +552,13 @@ export class TouchControls
 
         const playerBody = player.object?.physical?.body
         const playerCollider = player.controller?.collider
-        const hit = world.castRay(ray, 200, true, undefined, undefined, playerCollider, playerBody)
+        const hit = world.castRayAndGetNormal(ray, 200, true, undefined, undefined, playerCollider, playerBody)
 
         if(hit)
         {
+            if(!hit.normal || hit.normal.y <= 0.5)
+                return false
+
             const t = hit.timeOfImpact
             const x = ro.x + rd.x * t
             const y = ro.y + rd.y * t
@@ -613,18 +665,37 @@ export class TouchControls
             this.resetActiveTouches()
 
         const isTouchMode = this.inputs.mode === Inputs.MODE_TOUCH
+        const player = this.game.world?.player
+        const hasPlayer = Boolean(player)
 
-        if(isTouchMode && !this.jumpHintFaded)
+        if(isTouchMode && hasPlayer && !this.jumpHintFaded)
         {
             this.touchPlayElapsed += this.game.ticker.delta
             if(this.touchPlayElapsed >= JUMP_HINT_DURATION)
-            {
                 this.jumpHintFaded = true
-                this.jumpHintElement?.classList.add('is-hint-faded')
+        }
+
+        const hiddenByMode = !hasPlayer
+        const faded = this.jumpHintFaded
+        if(this.jumpHintElement && (hiddenByMode !== this.jumpHintHiddenByMode || faded !== this.jumpHintFadedApplied))
+        {
+            this.jumpHintHiddenByMode = hiddenByMode
+            this.jumpHintFadedApplied = faded
+            this.jumpHintElement.classList.toggle('is-hidden', hiddenByMode)
+            this.jumpHintElement.classList.toggle('is-hint-faded', faded)
+            const inaccessible = hiddenByMode || faded
+            if(inaccessible)
+            {
+                this.jumpHintElement.tabIndex = -1
+                this.jumpHintElement.setAttribute('aria-hidden', 'true')
+            }
+            else
+            {
+                this.jumpHintElement.tabIndex = 0
+                this.jumpHintElement.removeAttribute('aria-hidden')
             }
         }
 
-        const player = this.game.world?.player
         const controller = player?.controller
         const canStamp = Boolean(
             isTouchMode &&
@@ -637,7 +708,21 @@ export class TouchControls
         if(canStamp !== this.canStamp)
         {
             this.canStamp = canStamp
-            this.stampElement?.classList.toggle('is-visible', canStamp)
+            if(this.stampElement)
+            {
+                this.stampElement.classList.toggle('is-visible', canStamp)
+                this.stampElement.tabIndex = canStamp ? 0 : -1
+                if(canStamp)
+                    this.stampElement.removeAttribute('aria-hidden')
+                else
+                    this.stampElement.setAttribute('aria-hidden', 'true')
+            }
+            if(!canStamp)
+            {
+                this.stampTouchId = null
+                this.stampElement?.classList.remove('is-pressed')
+                this.inputs.end('Touch.stamp')
+            }
         }
     }
 }

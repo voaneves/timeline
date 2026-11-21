@@ -4,7 +4,7 @@ import { Game } from './Game.js'
 
 // Quality tiers: 0 = highest, 1 = reduced (mobile default), 2 = lowest.
 // Everything that reads `level` today branches on `level === 0` (high) vs everything else (reduced), so tier 2 is
-// currently IDENTICAL to tier 1 (shadow map 512 / radius 2, 2 bloom mips, no cheap DOF, fixed camera phi 0.27, no speed zoom).
+// currently IDENTICAL to tier 1 (shadow map 512 / radius 2, 2 bloom mips, no cheap DOF).
 // Tier 2 will diverge in T2.29 (e.g. no bloom, smaller render scale / DPR cap); until then use `level > 0` as "reduced".
 export const QUALITY_LEVELS = 3
 

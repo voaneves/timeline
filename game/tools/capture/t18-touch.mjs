@@ -122,6 +122,7 @@ const readPlayerState = (page) => page.evaluate(() =>
     const c = p.controller
     const pos = p.object.physical.body.translation()
     const half = p.feel.body.halfHeight + p.feel.body.radius
+    const stampAction = g.inputs.actions.get('stamp')
     return {
         x: pos.x,
         y: pos.y,
@@ -136,6 +137,8 @@ const readPlayerState = (page) => page.evaluate(() =>
         stampPhase: c.stamp.phase,
         stamps: c.stamp.count,
         broken: c.stamp.broken,
+        stampActionActive: Boolean(stampAction?.active),
+        stampTouchKeyStuck: Boolean(stampAction?.activeKeys?.has('Touch.stamp')),
         walkTarget: p.walkTarget ? { ...p.walkTarget } : null,
         mode: g.inputs.mode,
         joystick: { ...g.inputs.touchControls.joystick },
@@ -300,6 +303,7 @@ try
 
         // Wait until player is airborne over crate 1 and contextual "Carimbar" button is visible
         let stampedViaButton = false
+        let stampStuckAfterTap = false
         const stampDeadline = Date.now() + 1200
         while(Date.now() < stampDeadline)
         {
@@ -312,6 +316,8 @@ try
                 {
                     await singleTap(box.x + box.width / 2, box.y + box.height / 2, 25, '.js-touch-stamp')
                     stampedViaButton = true
+                    const afterTap = await readPlayerState(page)
+                    stampStuckAfterTap = afterTap.stampActionActive || afterTap.stampTouchKeyStuck
                 }
                 break
             }
@@ -366,16 +372,18 @@ try
             await page.waitForTimeout(30)
         }
 
+        const stampNotStuck = !stampStuckAfterTap && !afterStamp.stampActionActive && !afterStamp.stampTouchKeyStuck
         report.test1ZeroDrag = {
             dragCount,
             tapCount,
             stagePos: { x: +stagePos.x.toFixed(2), z: +stagePos.z.toFixed(2) },
             stampedViaButton,
+            stampNotStuck,
             stamps: afterStamp.stamps,
             broken: afterStamp.broken,
             finalPos: { x: +afterGap.x.toFixed(2), y: +afterGap.feetY.toFixed(2), z: +afterGap.z.toFixed(2) },
             finalGrounded: afterGap.grounded,
-            pass: dragCount === 0 && stampedViaButton && afterStamp.broken >= 1 && afterGap.z <= -30 && afterGap.grounded === true,
+            pass: dragCount === 0 && stampedViaButton && stampNotStuck && afterStamp.broken >= 1 && afterGap.z <= -30 && afterGap.grounded === true,
         }
 
         await context.close()
@@ -457,9 +465,18 @@ try
                 if(!el) return null
                 const r = el.getBoundingClientRect()
                 const cs = getComputedStyle(el)
-                return { width: +r.width.toFixed(1), height: +r.height.toFixed(1), display: cs.display, opacity: +cs.opacity, visible: el.classList.contains('is-visible') }
+                return {
+                    width: +r.width.toFixed(1),
+                    height: +r.height.toFixed(1),
+                    display: cs.display,
+                    visibility: cs.visibility,
+                    pointerEvents: cs.pointerEvents,
+                    opacity: +cs.opacity,
+                    visible: el.classList.contains('is-visible'),
+                }
             }
             return {
+                htmlLang: document.documentElement.lang,
                 isTouchModeClass: document.documentElement.classList.contains('is-mode-touch'),
                 inputsMode: window.game.inputs.mode,
                 nippleEnabled: window.game.inputs.nipple.enabled,
@@ -481,9 +498,12 @@ try
             {
                 const el = document.querySelector('.js-touch-stamp')
                 const r = el.getBoundingClientRect()
+                const cs = getComputedStyle(el)
                 return {
                     visible: el.classList.contains('is-visible'),
-                    display: getComputedStyle(el).display,
+                    display: cs.display,
+                    visibility: cs.visibility,
+                    opacity: +cs.opacity,
                     width: +r.width.toFixed(1),
                     height: +r.height.toFixed(1),
                     grounded: window.game.world.player.controller.grounded,
@@ -543,6 +563,7 @@ try
             orbitReturnedDeg,
             orbitRightDeg,
             pass:
+                groundUi.htmlLang === 'pt-BR' &&
                 groundUi.isTouchModeClass &&
                 groundUi.inputsMode === 3 &&
                 groundUi.nippleEnabled === false &&
@@ -550,8 +571,12 @@ try
                 groundUi.jumpHint.width >= 76 && groundUi.jumpHint.height >= 76 &&
                 groundUi.orbitLeft.width >= 44 && groundUi.orbitLeft.height >= 44 &&
                 groundUi.orbitRight.width >= 44 && groundUi.orbitRight.height >= 44 &&
-                groundUi.stamp.visible === false && groundUi.stamp.display === 'none' &&
-                airStampUi !== null && airStampUi.width >= 64 && airStampUi.height >= 64 &&
+                groundUi.stamp.visible === false &&
+                groundUi.stamp.display !== 'none' &&
+                groundUi.stamp.visibility === 'hidden' &&
+                groundUi.stamp.opacity === 0 &&
+                groundUi.stamp.pointerEvents === 'none' &&
+                airStampUi !== null && airStampUi.display !== 'none' && airStampUi.visibility === 'visible' && airStampUi.width >= 64 && airStampUi.height >= 64 &&
                 stampHiddenAfterLand &&
                 orbitLeftDeg <= -10 &&
                 Math.abs(orbitReturnedDeg) < 1.5 &&

@@ -1,4 +1,4 @@
-// Adapted from folio-2025 by Bruno Simon (MIT) — https://github.com/brunosimon/folio-2025
+// Build config (see LICENSES.md for third-party attributions).
 // Changes: no dotenv / restart / basic-ssl / node-polyfills (server-only), no publicDir
 // (assets will come from scripts/hash-assets.mjs, plan T0.15), no auto-open.
 import wasm from 'vite-plugin-wasm'

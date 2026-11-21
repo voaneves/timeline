@@ -12,6 +12,7 @@ export class MovingPlatform
     {
         this.game = Game.getInstance()
         this.object = object
+        this.object.managedReset = true
         this.body = object.physical.body
         this.bodyHandle = this.body.handle
         this.colliderHandles = new Set(object.physical.colliders.map((collider) => collider.handle))
@@ -91,5 +92,26 @@ export class MovingPlatform
         this.velocity.z = this.delta.z / dt
 
         this.body.setNextKinematicTranslation({ x: target.x, y: target.y, z: target.z })
+    }
+
+    reset()
+    {
+        this.steps = 0
+        this.previousPosition.x = this.start.x
+        this.previousPosition.y = this.start.y
+        this.previousPosition.z = this.start.z
+        this.currentPosition.x = this.start.x
+        this.currentPosition.y = this.start.y
+        this.currentPosition.z = this.start.z
+        this.delta.x = this.delta.y = this.delta.z = 0
+        this.velocity.x = this.velocity.y = this.velocity.z = 0
+
+        const pose = { x: this.start.x, y: this.start.y, z: this.start.z }
+        this.body.setTranslation(pose, true)
+        this.body.setNextKinematicTranslation(pose)
+        if(this.object.visual)
+            this.object.visual.object3D.position.copy(this.start)
+        this.object.needsUpdate = true
+        this.game.objects.snapInterpolation(this.object)
     }
 }

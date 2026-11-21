@@ -69,8 +69,8 @@ export class PhysicsVehicle
             { name: 'backward', categories, keys: [ 'Keyboard.KeyS', 'Keyboard.ArrowDown', 'Gamepad.down' ] },
             { name: 'left', categories, keys: [ 'Keyboard.KeyA', 'Keyboard.ArrowLeft', 'Gamepad.left' ] },
             { name: 'right', categories, keys: [ 'Keyboard.KeyD', 'Keyboard.ArrowRight', 'Gamepad.right' ] },
-            { name: 'run', categories, keys: [ 'Keyboard.ShiftLeft' ] },
-            { name: 'moveStick', categories, keys: [ 'Gamepad.joystickLeft' ] }, // analog: value { x, y, radius, active }
+            { name: 'run', categories, keys: [ 'Keyboard.ShiftLeft', 'Keyboard.ShiftRight' ] },
+            { name: 'moveStick', categories, keys: [ 'Gamepad.joystickLeft', 'Touch.joystick' ] }, // analog: value { x, y, radius, active }
         ])
     }
 
@@ -130,6 +130,8 @@ export class PhysicsVehicle
                 ],
             }
         )
+        this.object.managedReset = true
+        this.chassisObject = this.object
         this.body = this.object.physical.body
         this.spawn = { position, rotation: { x: rotation.x, y: rotation.y, z: rotation.z, w: rotation.w } }
     }
@@ -248,6 +250,14 @@ export class PhysicsVehicle
         this.body.setRotation(rotation, true)
         this.body.setLinvel({ x: 0, y: 0, z: 0 }, true)
         this.body.setAngvel({ x: 0, y: 0, z: 0 }, true)
+        this.body.resetForces()
+        this.body.resetTorques()
+        if(this.object.visual)
+        {
+            this.object.visual.object3D.position.copy(position)
+            this.object.visual.object3D.quaternion.copy(rotation)
+        }
+        this.object.needsUpdate = true
         this.game.objects.snapInterpolation(this.object)
     }
 

@@ -36,6 +36,7 @@ export class World
     async loadGreybox()
     {
         this.breakables = []
+        this.initialBreakables = []
         const resources = await this.game.resourcesLoader.load([ [ 'greybox', 'eras/greybox/greybox.glb', 'gltf' ] ])
         this.greybox = resources.greybox.scene
 
@@ -91,7 +92,10 @@ export class World
 
         // Crates break under the stamp (T1.4): `breakables` is read by Character/Stamp.js
         if(/^crate\d/i.test(node.name))
+        {
             this.breakables.push(object)
+            this.initialBreakables.push(object)
+        }
 
         if(kinematic)
             this.movingPlatform = { object, userData: { ...node.userData } }
@@ -246,5 +250,52 @@ export class World
                 body.applyImpulse({ x: (Math.random() - 0.5) * 0.6, y: 3, z: (Math.random() - 0.5) * 0.6 }, true)
             }
         }, 2)
+    }
+
+    reset()
+    {
+        if(this.initialBreakables)
+        {
+            this.breakables = []
+            for(const crate of this.initialBreakables)
+            {
+                this.game.objects.cancelPendingReset(crate)
+                const body = crate.physical.body
+                const initial = crate.physical.initialState
+                body.setEnabled(true)
+                body.setTranslation(initial.position, false)
+                body.setRotation(initial.rotation, false)
+                body.setLinvel({ x: 0, y: 0, z: 0 }, false)
+                body.setAngvel({ x: 0, y: 0, z: 0 }, false)
+                body.resetForces()
+                body.resetTorques()
+                if(initial.sleeping)
+                    body.sleep()
+                if(crate.visual)
+                {
+                    if(crate.visual.parent && crate.visual.parent !== crate.visual.object3D.parent)
+                        crate.visual.parent.add(crate.visual.object3D)
+                    crate.visual.object3D.position.copy(initial.position)
+                    crate.visual.object3D.quaternion.copy(initial.rotation)
+                }
+                crate.needsUpdate = true
+                this.game.objects.snapInterpolation(crate)
+                this.breakables.push(crate)
+            }
+        }
+
+        for(const platform of this.movingPlatforms)
+            platform.reset()
+
+        if(this.player)
+        {
+            this.player.clearWalkTarget()
+            this.player.controller.respawn()
+        }
+
+        if(this.vehicle)
+            this.vehicle.reset()
+
+        this.game.physics?.world?.propagateModifiedBodyPositionsToColliders()
     }
 }

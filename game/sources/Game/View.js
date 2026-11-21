@@ -1,7 +1,7 @@
 import * as THREE from 'three/webgpu'
 import CameraControls from 'camera-controls'
 import { Game } from './Game.js'
-import { clamp, lerp, remap, smoothstep } from './utilities/maths.js'
+import { clamp, lerp, remap, smallestAngle, smoothstep } from './utilities/maths.js'
 import { mix, uniform, vec4, Fn, positionGeometry, attribute } from 'three/tsl'
 import gsap from 'gsap'
 import { Pointer } from './Inputs/Pointer.js'
@@ -145,6 +145,8 @@ export class View
         // Aspect-reactive framing (T1.7): landscape values at aspect >= 1, portrait values at aspect <= 0.5, interpolated between
         this.framing.apply = (aspect) =>
         {
+            if(!(aspect > 0) || !Number.isFinite(aspect))
+                return
             const portrait = clamp((1 - aspect) / 0.5, 0, 1)
             const vFov = this.framing.computeVFov(aspect)
             const hFovEff = 2 * Math.atan(Math.tan(vFov * DEG / 2) * aspect)
@@ -213,7 +215,8 @@ export class View
         const dx = b.x - a.x
         const dz = b.z - a.z
         const t = clamp(((x - a.x) * dx + (z - a.z) * dz) / (dx * dx + dz * dz || 1), 0, 1)
-        return lerp(a.yaw, b.yaw, t * t * (3 - 2 * t))
+        const s = t * t * (3 - 2 * t)
+        return a.yaw + smallestAngle(a.yaw, b.yaw) * s
     }
 
     // Fixed step: control yaw from the SIMULATED position (rigid body), never from the interpolated visual or the frame delta
@@ -404,6 +407,8 @@ export class View
         // this.optimalArea.quad2Helper.computeLineDistances()
         // this.game.scene.add(this.optimalArea.quad2Helper)
 
+        const OPTIMAL_AREA_MAX_RADIUS = 120
+
         this.optimalArea.update = () =>
         {
             // Save state
@@ -424,27 +429,39 @@ export class View
             this.defaultCamera.updateProjectionMatrix()
             this.defaultCamera.updateWorldMatrix()
 
+            const intersectFloor = (ndcX, ndcY, target) =>
+            {
+                this.optimalArea.raycaster.setFromCamera(new THREE.Vector2(ndcX, ndcY), this.defaultCamera)
+                const hit = this.optimalArea.raycaster.ray.intersectPlane(this.optimalArea.floorPlane, target)
+                if(!hit || !Number.isFinite(target.x) || !Number.isFinite(target.z) || target.length() > OPTIMAL_AREA_MAX_RADIUS)
+                {
+                    const dir = this.optimalArea.raycaster.ray.direction
+                    const horizLen = Math.hypot(dir.x, dir.z)
+                    if(horizLen > 1e-4)
+                        target.set((dir.x / horizLen) * OPTIMAL_AREA_MAX_RADIUS, 0, (dir.z / horizLen) * OPTIMAL_AREA_MAX_RADIUS)
+                    else
+                        target.set(0, 0, 0)
+                }
+                return target
+            }
+
             // First near/far diagonal
-            this.optimalArea.raycaster.setFromCamera(new THREE.Vector2(1, -1), this.defaultCamera)
-            this.optimalArea.raycaster.ray.intersectPlane(this.optimalArea.floorPlane, this.optimalArea.nearPosition)
+            intersectFloor(1, -1, this.optimalArea.nearPosition)
             this.optimalArea.quad2[0].base.x = this.optimalArea.nearPosition.x
             this.optimalArea.quad2[0].base.y = this.optimalArea.nearPosition.z
 
-            this.optimalArea.raycaster.setFromCamera(new THREE.Vector2(-1, 1), this.defaultCamera)
-            this.optimalArea.raycaster.ray.intersectPlane(this.optimalArea.floorPlane, this.optimalArea.farPosition)
+            intersectFloor(-1, 1, this.optimalArea.farPosition)
             this.optimalArea.quad2[2].base.x = this.optimalArea.farPosition.x
             this.optimalArea.quad2[2].base.y = this.optimalArea.farPosition.z
 
             const centerA = this.optimalArea.nearPosition.clone().lerp(this.optimalArea.farPosition, 0.5)
 
             // Second near/far diagonal
-            this.optimalArea.raycaster.setFromCamera(new THREE.Vector2(-1, -1), this.defaultCamera)
-            this.optimalArea.raycaster.ray.intersectPlane(this.optimalArea.floorPlane, this.optimalArea.nearPosition)
+            intersectFloor(-1, -1, this.optimalArea.nearPosition)
             this.optimalArea.quad2[3].base.x = this.optimalArea.nearPosition.x
             this.optimalArea.quad2[3].base.y = this.optimalArea.nearPosition.z
 
-            this.optimalArea.raycaster.setFromCamera(new THREE.Vector2(1, 1), this.defaultCamera)
-            this.optimalArea.raycaster.ray.intersectPlane(this.optimalArea.floorPlane, this.optimalArea.farPosition)
+            intersectFloor(1, 1, this.optimalArea.farPosition)
             this.optimalArea.quad2[1].base.x = this.optimalArea.farPosition.x
             this.optimalArea.quad2[1].base.y = this.optimalArea.farPosition.z
 
@@ -454,14 +471,12 @@ export class View
             this.optimalArea.basePosition = centerA.clone().lerp(centerB, 0.5)
 
             // Radius
-            this.optimalArea.radius = this.optimalArea.basePosition.distanceTo(this.optimalArea.farPosition)
+            const rawRadius = this.optimalArea.basePosition.distanceTo(this.optimalArea.farPosition)
+            this.optimalArea.radius = Number.isFinite(rawRadius) ? clamp(rawRadius, 1, OPTIMAL_AREA_MAX_RADIUS) : OPTIMAL_AREA_MAX_RADIUS
 
             // Distances
-            this.optimalArea.raycaster.setFromCamera(new THREE.Vector2(0, -1), this.defaultCamera)
-            this.optimalArea.raycaster.ray.intersectPlane(this.optimalArea.floorPlane, this.optimalArea.nearPosition)
-
-            this.optimalArea.raycaster.setFromCamera(new THREE.Vector2(0, 1), this.defaultCamera)
-            this.optimalArea.raycaster.ray.intersectPlane(this.optimalArea.floorPlane, this.optimalArea.farPosition)
+            intersectFloor(0, -1, this.optimalArea.nearPosition)
+            intersectFloor(0, 1, this.optimalArea.farPosition)
             
             this.optimalArea.nearDistance = this.defaultCamera.position.distanceTo(this.optimalArea.nearPosition)
             this.optimalArea.farDistance = this.defaultCamera.position.distanceTo(this.optimalArea.farPosition)
@@ -871,11 +886,11 @@ export class View
 
     resize()
     {
-        this.ratioOverflow = Math.max(1, this.idealRatio / this.game.viewport.ratio) - 1
-
         const aspect = this.game.viewport.width / this.game.viewport.height
         if(!(aspect > 0) || !Number.isFinite(aspect))
             return
+
+        this.ratioOverflow = Math.max(1, this.idealRatio / aspect) - 1
         this.framing.apply(aspect)
         this.optimalArea.needsUpdate = true
 
@@ -900,7 +915,7 @@ export class View
 
         this.game.inputs.events.on('viewMapPointer', (action) =>
         {
-            if(this.game.inputs.mode === Inputs.MODE_TOUCH && this.game.inputs.touchControls?.enabled && this.game.world?.player)
+            if(this.game.inputs.mode === Inputs.MODE_TOUCH && this.game.inputs.touchControls?.enabled && this.getSubject())
                 return
 
             if(this.mode === View.MODE_DEFAULT)
@@ -940,7 +955,7 @@ export class View
         this.spherical.radius.current = this.framing.distance
         const orbitYaw = lerp(this.orbit.yawPrevious, this.orbit.yaw, this.game.ticker.alpha)
         const orbitPitch = lerp(this.orbit.pitchPrevious, this.orbit.pitch, this.game.ticker.alpha)
-        const yaw = lerp(this.controlYawPrevious, this.controlYaw, this.game.ticker.alpha) + orbitYaw
+        const yaw = this.controlYawPrevious + smallestAngle(this.controlYawPrevious, this.controlYaw) * this.game.ticker.alpha + orbitYaw
         const phi = clamp(this.spherical.phi + orbitPitch, 0.15, Math.PI * 0.48)
         this.spherical.offset.setFromSphericalCoords(this.spherical.radius.current, phi, yaw)
 

@@ -18,7 +18,7 @@ const PRESET_KEY = 'timeline.feel.preset'
 
 // Tweakpane ranges: [ min, max, step ]
 const RANGES = {
-    move: { walkSpeed: [ 0, 12, 0.01 ], runSpeed: [ 0, 20, 0.01 ], walkThreshold: [ 0, 1, 0.01 ], keyboardMagnitude: [ 0, 1, 0.01 ], accelTime: [ 0.01, 1, 0.001 ], accelHalfTime: [ 0.001, 0.5, 0.001 ], decelTime: [ 0.01, 1, 0.001 ], groundFriction: [ 0, 200, 0.1 ], stopSpeed: [ 0, 0.1, 0.0001 ], slopeCompensation: [ 0, 1, 0.01 ], slopeMaxAngle: [ 0, 60, 0.5 ], slopeMaxFactor: [ 1, 2, 0.01 ] },
+    move: { walkSpeed: [ 0, 12, 0.01 ], runSpeed: [ 0.1, 20, 0.01 ], walkThreshold: [ 0, 1, 0.01 ], keyboardMagnitude: [ 0, 1, 0.01 ], accelTime: [ 0.01, 1, 0.001 ], accelHalfTime: [ 0.001, 0.5, 0.001 ], decelTime: [ 0.01, 1, 0.001 ], groundFriction: [ 0, 200, 0.1 ], stopSpeed: [ 0, 0.1, 0.0001 ], slopeCompensation: [ 0, 1, 0.01 ], slopeMaxAngle: [ 0, 60, 0.5 ], slopeMaxFactor: [ 1, 2, 0.01 ] },
     air: { accel: [ 0, 100, 0.1 ], decel: [ 0, 100, 0.1 ] },
     turn: { yawRate: [ 0, 2000, 1 ], leanMax: [ 0, 45, 0.1 ], leanGain: [ 0, 3, 0.01 ], leanSmoothing: [ 1, 60, 0.1 ] },
     skid: { angle: [ 90, 180, 1 ], minSpeed: [ 0, 15, 0.1 ], duration: [ 0, 1, 0.01 ] },
@@ -39,6 +39,8 @@ export class Player
         this.jumpLatch = false // a press since the last fixed step (a tap shorter than a frame is never lost)
         this.interactCount = 0 // Phase 2 interactive hook counter
         this.walkTarget = null // WCAG 2.5.7 single-pointer tap-to-walk target { x, y, z }
+        this.walkTargetStuckSteps = 0
+        this.walkTargetLastDist = Infinity
         this.input = { x: 0, z: 0, speed: 0, jumpPressed: false, jumpHeld: false, stampPressed: false } // world-space wanted direction (unit) and speed, last fixed step
 
         this.setActions()
@@ -70,7 +72,7 @@ export class Player
             { name: 'run', categories, keys: [] }, // forces a run whatever the deflection (no default key: Shift is the stamp; ghosts inject it by name)
             { name: 'jump', categories, keys: [ 'Keyboard.Space', 'Gamepad.cross', 'Touch.jump' ] }, // press = jump (buffered), in the air = ribbon glide
             { name: 'stamp', categories, keys: [ 'Keyboard.ShiftLeft', 'Keyboard.ShiftRight', 'Keyboard.KeyC', 'Gamepad.circle', 'Touch.stamp' ] }, // in the air: lock, dive, mark the ground
-            { name: 'interact', categories, keys: [ 'Keyboard.KeyE', 'Keyboard.Enter', 'Gamepad.square', 'Touch.interact' ] }, // Phase 2 interactive hook
+            { name: 'interact', categories, keys: [ 'Keyboard.KeyF', 'Keyboard.Enter', 'Gamepad.square', 'Touch.interact' ] }, // Phase 2 interactive hook
             { name: 'moveStick', categories, keys: [ 'Gamepad.joystickLeft', 'Touch.joystick' ] }, // analog: value { x, y, radius, active }
         ])
 
@@ -128,7 +130,9 @@ export class Player
                 colliders: [], // the capsule is created by the controller (Physics.getPhysical has no capsule shape)
             }
         )
+        this.object.managedReset = true
         this.controller = new CharacterController(this.object, yaw)
+        this.controller.events.on('teleport', () => this.clearWalkTarget())
         this.controller.stamp.attachVisual(this.mesh)
 
         // The first capture() (order 4) records this pose as previous and current: no interpolation from the origin
@@ -166,6 +170,8 @@ export class Player
             return
 
         this.walkTarget = { x, y, z }
+        this.walkTargetStuckSteps = 0
+        this.walkTargetLastDist = Infinity
         if(this.walkTargetRing)
         {
             this.walkTargetRing.position.set(x, y + 0.03, z)
@@ -176,6 +182,8 @@ export class Player
     clearWalkTarget()
     {
         this.walkTarget = null
+        this.walkTargetStuckSteps = 0
+        this.walkTargetLastDist = Infinity
         if(this.walkTargetRing)
             this.walkTargetRing.visible = false
     }
@@ -220,13 +228,13 @@ export class Player
         if(magnitude > 0)
         {
             // Any manual directional input cancels tap-to-walk
-            this.walkTarget = null
+            this.clearWalkTarget()
         }
         else if(this.walkTarget)
         {
             if(this.controller.stamp.active)
             {
-                this.walkTarget = null
+                this.clearWalkTarget()
                 this.input.x = this.input.z = this.input.speed = 0
                 return this.input
             }
@@ -239,7 +247,7 @@ export class Player
 
             if(dist <= 0.35)
             {
-                this.walkTarget = null
+                this.clearWalkTarget()
                 this.input.x = this.input.z = this.input.speed = 0
                 return this.input
             }
@@ -276,7 +284,6 @@ export class Player
 
     fixedUpdate()
     {
-        const beforeY = this.object.physical.body.translation().y
         const input = this.readInput()
         input.jumpPressed = this.jumpLatch
         input.jumpHeld = this.game.inputs.actions.get('jump').active
@@ -288,9 +295,24 @@ export class Player
         if(this.walkTarget)
         {
             if(this.controller.stamp.active)
-                this.walkTarget = null
-            else if(beforeY < feel.body.fallLimit + 0.25 && this.controller.next.y > beforeY + 0.5)
-                this.walkTarget = null
+            {
+                this.clearWalkTarget()
+            }
+            else
+            {
+                const pos = this.controller.next
+                const dist = Math.hypot(this.walkTarget.x - pos.x, this.walkTarget.z - pos.z)
+                const progress = this.walkTargetLastDist - dist
+                this.walkTargetLastDist = dist
+
+                if(this.controller.movedSpeed < 0.25 || progress <= 0.002)
+                    this.walkTargetStuckSteps++
+                else
+                    this.walkTargetStuckSteps = 0
+
+                if(this.walkTargetStuckSteps >= 30)
+                    this.clearWalkTarget()
+            }
         }
     }
 

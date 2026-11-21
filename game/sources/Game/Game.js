@@ -120,5 +120,6 @@ export class Game
     reset()
     {
         this.objects.resetAll()
+        this.world?.reset?.()
     }
 }

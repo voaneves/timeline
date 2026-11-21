@@ -32,7 +32,7 @@ export class CharacterController
     constructor(object, yaw = 0)
     {
         this.game = Game.getInstance()
-        this.events = new Events() // 'skid', 'jump', 'glide', 'land', 'bump', 'stampStart', 'stamp', 'break'
+        this.events = new Events() // 'skid', 'jump', 'glide', 'land', 'bump', 'stampStart', 'stamp', 'break', 'teleport'
         this.object = object
         this.body = object.physical.body
 
@@ -127,6 +127,7 @@ export class CharacterController
         this.next.y = y
         this.next.z = z
         this.game.objects.snapInterpolation(this.object)
+        this.events.trigger('teleport', [ { x, y, z } ])
     }
 
     respawn()
@@ -139,8 +140,10 @@ export class CharacterController
     advanceCurve(speed, dt)
     {
         const move = feel.move
-        const exponent = accelExponent(move)
         const top = move.runSpeed
+        if(top <= 1e-6)
+            return 0
+        const exponent = accelExponent(move)
         const ratio = Math.min(Math.max(speed / top, 0), 1)
         const progress = 1 - Math.pow(1 - ratio, 1 / exponent)
         const advanced = Math.min(progress + dt / move.accelTime, 1)
@@ -163,7 +166,7 @@ export class CharacterController
         const origin = this.body.translation()
         const half = feel.body.halfHeight + feel.body.radius
         const ray = new this.game.RAPIER.Ray(origin, { x: 0, y: - 1, z: 0 })
-        const hit = this.game.physics.world.castRay(ray, max + half, true, undefined, undefined, undefined, this.body)
+        const hit = this.game.physics.world.castRay(ray, max + half, true, undefined, this.game.physics.categories.floor, this.collider, this.body)
         return hit ? hit.timeOfImpact - half : Infinity
     }
 
@@ -280,6 +283,7 @@ export class CharacterController
         {
             this.bufferTimer = 0
             this.coyoteTimer = 0
+            this.skidTimer = 0
             this.grounded = false
             this.jumping = true
             this.gliding = false
@@ -447,43 +451,102 @@ export class CharacterController
         if(startedGrounded && this.grounded && this.slopeAngle > 0.01 && this.slopeAngle <= move.slopeMaxAngle * DEG)
             slopeFactor = 1 + (Math.min(1 / Math.cos(this.slopeAngle), move.slopeMaxFactor) - 1) * move.slopeCompensation
 
-        const carryPlatform = this.grounded ? this.groundPlatform : null
+        const ridingPlatform = startedGrounded && this.grounded && this.groundPlatform && !this.jumping && !stamping
+        const carryPlatform = ridingPlatform ? this.groundPlatform : null
         const carryX = carryPlatform ? carryPlatform.delta.x : 0
         const carryY = carryPlatform ? carryPlatform.delta.y : 0
         const carryZ = carryPlatform ? carryPlatform.delta.z : 0
+        const carryHorizontal = Math.hypot(carryX, carryZ)
 
         const playerDesired = { x: velocity.x * dt * slopeFactor, y: verticalStep, z: velocity.z * dt * slopeFactor }
         const desired = { x: playerDesired.x + carryX, y: playerDesired.y + carryY, z: playerDesired.z + carryZ }
 
-        // Snap-to-ground would glue the character to the floor on takeoff, during a stamp lock, or when a platform rises
-        if(velocity.y > 0 || this.stamp.phase === Stamp.LOCK || carryY > 1e-6)
+        // Snap-to-ground would glue the character to the floor on takeoff, during a stamp lock, or while riding a moving
+        // platform (whose Rapier collider still sits at the previous step until world.step() runs at order 3)
+        if(velocity.y > 0 || this.stamp.phase === Stamp.LOCK || (carryPlatform && (Math.abs(carryY) > 1e-6 || carryHorizontal > 1e-6)))
             this.controller.disableSnapToGround()
         else
             this.controller.enableSnapToGround(feel.kcc.snapToGround)
 
         this.controller.computeColliderMovement(this.collider, desired)
         const movement = this.controller.computedMovement()
+        let movementY = movement.y
         const wasAirborne = !this.grounded
         const fallSpeed = - velocity.y
         this.grounded = this.controller.computedGrounded() && velocity.y <= 0
 
         const current = this.body.translation()
         this.next.x = current.x + movement.x
-        this.next.y = current.y + movement.y
+        this.next.y = current.y + movementY
         this.next.z = current.z + movement.z
 
-        // Rising platform with snapToGround disabled: stay grounded if the player rose with the platform and is still over it
-        if(carryY > 1e-6 && !this.grounded && velocity.y <= 0 && movement.y >= carryY - 1e-4)
+        // Moving platform 1-step collider lag compensation (order 2 runs before world.step() at order 3)
+        if(carryPlatform && velocity.y <= 0)
         {
-            const relativeProbe = { x: this.next.x - carryX, y: this.next.y - carryY, z: this.next.z - carryZ }
-            if(this.detectGroundPlatform(relativeProbe) === carryPlatform)
-                this.grounded = true
+            // Descending platform: KCC sees the platform's previous-step top and blocks the downward carry.
+            // Verify the player is still over the platform and no other collider blocks the descent.
+            if(carryY < - 1e-6 && movementY > carryY + 1e-4)
+            {
+                const relativeAtPrevY = { x: this.next.x - carryX, y: current.y, z: this.next.z - carryZ }
+                if(this.detectGroundPlatform(relativeAtPrevY) === carryPlatform)
+                {
+                    const blockedBelow = this.game.physics.world.castShape(
+                        { x: this.next.x, y: current.y, z: this.next.z },
+                        IDENTITY_QUAT,
+                        DOWN,
+                        this.groundProbeShape,
+                        0,
+                        Math.abs(carryY) + feel.kcc.offset,
+                        true,
+                        undefined,
+                        this.game.physics.categories.floor,
+                        this.collider,
+                        carryPlatform.body
+                    )
+                    if(!blockedBelow)
+                    {
+                        movementY = carryY
+                        this.next.y = current.y + carryY
+                        this.grounded = true
+                    }
+                }
+            }
+
+            // Rising or horizontal moving platform with snapToGround disabled: probe at the relative position
+            // (undoing this step's carry) so standing near the leading edge never falsely drops grounded.
+            if(!this.grounded && (carryHorizontal > 1e-6 || (carryY > 1e-6 && movementY >= carryY - 1e-4)))
+            {
+                const relativeProbe = { x: this.next.x - carryX, y: this.next.y - carryY, z: this.next.z - carryZ }
+                if(this.detectGroundPlatform(relativeProbe) === carryPlatform)
+                {
+                    this.grounded = true
+                }
+                else if(Math.abs(carryY) <= 1e-6)
+                {
+                    // Stepped off a horizontal platform onto a flush surface at the same elevation
+                    const flushHit = this.game.physics.world.castShape(
+                        this.next,
+                        IDENTITY_QUAT,
+                        DOWN,
+                        this.groundProbeShape,
+                        0,
+                        feel.kcc.offset + 0.02,
+                        false,
+                        undefined,
+                        this.game.physics.categories.floor,
+                        this.collider,
+                        this.body
+                    )
+                    if(flushHit?.collider && (flushHit.normal1.y > 0.5 || flushHit.normal2.y > 0.5))
+                        this.grounded = true
+                }
+            }
         }
 
         // Blocked (wall, corner): compare only the player's own movement (excluding platform carry) so platform motion
         // never leaks into player velocity or triggers false wall blocks.
         const playerMoveX = movement.x - carryX
-        const playerMoveY = movement.y - carryY
+        const playerMoveY = movementY - carryY
         const playerMoveZ = movement.z - carryZ
         const playerDesiredLength = Math.hypot(playerDesired.x, playerDesired.z)
         const playerMovedLength = Math.hypot(playerMoveX, playerMoveZ)
@@ -492,18 +555,20 @@ export class CharacterController
         {
             velocity.x = playerMoveX / dt
             velocity.z = playerMoveZ / dt
+            if(!startedGrounded)
+                this.inheritedAirVelocity.x = this.inheritedAirVelocity.z = 0
         }
         this.slopeAngle = 0
-        if(startedGrounded && this.grounded && playerMovedLength > 1e-6)
+        if(startedGrounded && this.grounded && playerMovedLength > 1e-6 && carryY >= - 1e-6)
             this.slopeAngle = Math.atan2(playerMoveY, playerMovedLength)
 
         // Head hit (ceiling): rising stops
-        if(desired.y > 0 && movement.y < desired.y - 1e-4)
+        if(desired.y > 0 && movementY < desired.y - 1e-4)
         {
             velocity.y = 0
             this.jumping = false
             this.bumps++
-            this.events.trigger('bump', [ { y: current.y + movement.y } ])
+            this.events.trigger('bump', [ { y: current.y + movementY } ])
         }
 
         // Landing

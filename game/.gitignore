@@ -1,5 +1,6 @@
 tools/capture/out/
 tools/capture/baseline/
+tools/capture/runs/
 blender/*.glb
 dist/
 dist-debug/

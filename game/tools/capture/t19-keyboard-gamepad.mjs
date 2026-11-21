@@ -406,12 +406,24 @@ async function runTest2CanvasKeyboard()
     await page.waitForTimeout(1400)
     const orbitReturnDeg = await page.evaluate(() => window.game.view.orbit.yaw * 180 / Math.PI)
 
-    // Test KeyM (map), Escape (menu), KeyE (interact + cameraOrbitRight), Enter (interact)
+    // Test KeyM (map), Escape (menu), KeyE (cameraOrbitRight ONLY — must NOT increment interactCount)
     await page.keyboard.press('KeyM')
     await page.waitForTimeout(60)
     await page.keyboard.press('Escape')
     await page.waitForTimeout(60)
-    await page.keyboard.press('KeyE')
+
+    const interactBeforeE = await page.evaluate(() => window.game.world.player.interactCount)
+    await page.keyboard.down('KeyE')
+    await page.waitForTimeout(250)
+    const afterE = await page.evaluate(() => ({
+        orbitYawDeg: window.game.view.orbit.yaw * 180 / Math.PI,
+        interactCount: window.game.world.player.interactCount,
+    }))
+    await page.keyboard.up('KeyE')
+    await page.waitForTimeout(60)
+
+    // Test KeyF (interact) and Enter (interact)
+    await page.keyboard.press('KeyF')
     await page.waitForTimeout(60)
     await page.keyboard.press('Enter')
     await page.waitForTimeout(100)
@@ -424,6 +436,7 @@ async function runTest2CanvasKeyboard()
 
     const movedDist = Math.hypot(moveCheck.pos[0] - focusInfo.startPos[0], moveCheck.pos[2] - focusInfo.startPos[2])
     const actionsSet = new Set(actionSummary.actions)
+    const keyEOrbitsWithoutInteract = afterE.orbitYawDeg > 2 && afterE.interactCount === interactBeforeE
     const pass =
         errors.length === 0 &&
         focusInfo.focused &&
@@ -439,6 +452,7 @@ async function runTest2CanvasKeyboard()
         orbitHeldDeg < -10 &&
         Math.abs(orbitHeldDeg) <= 25.05 &&
         Math.abs(orbitReturnDeg) < 0.5 &&
+        keyEOrbitsWithoutInteract &&
         actionsSet.has('forward') &&
         actionsSet.has('jump') &&
         actionsSet.has('cameraOrbitLeft') &&
@@ -446,7 +460,7 @@ async function runTest2CanvasKeyboard()
         actionsSet.has('map') &&
         actionsSet.has('menu') &&
         actionsSet.has('interact') &&
-        actionSummary.interactCount >= 2
+        actionSummary.interactCount >= interactBeforeE + 2
 
     return {
         pass,
@@ -458,6 +472,8 @@ async function runTest2CanvasKeyboard()
         jumpHeightM: +jumpHeight.toFixed(3),
         orbitHeldDeg: +orbitHeldDeg.toFixed(2),
         orbitReturnDeg: +orbitReturnDeg.toFixed(3),
+        orbitRightAfterEDeg: +afterE.orbitYawDeg.toFixed(2),
+        keyEOrbitsWithoutInteract,
         interactCount: actionSummary.interactCount,
         actions: actionSummary.actions,
         errors,

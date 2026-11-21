@@ -48,8 +48,8 @@ export class Inputs
         this.setPointer()
         this.setWheel()
         this.setInteractiveButtons()
-        this.setNipple()
         this.setTouchControls()
+        this.setNipple()
 
         this.addActions([
             { name: 'menu', categories: [], keys: [ 'Keyboard.Escape', 'Gamepad.start' ] },
@@ -156,7 +156,7 @@ export class Inputs
 
     setWheel()
     {
-        this.wheel = new Wheel()
+        this.wheel = new Wheel(this.game.canvasElement)
 
         this.wheel.events.on('roll', (value) =>
         {
@@ -180,6 +180,12 @@ export class Inputs
     setNipple()
     {
         this.nipple = new Nipple()
+        if(this.touchControls?.enabled)
+            this.nipple.enabled = false
+
+        if(!this.nipple.enabled)
+            return
+
         this.addActions([
             { name: 'nipplePointer', categories: [ 'wandering', 'racing' ], keys: [ 'Pointer.any' ] },
         ])
@@ -196,7 +202,6 @@ export class Inputs
     setTouchControls()
     {
         this.touchControls = new TouchControls(this)
-        this.nipple.enabled = false
     }
 
     addActions(actions)
@@ -252,12 +257,13 @@ export class Inputs
         if(action && this.checkCategory(action))
         {
             action.value = value
-            action.activeKeys.add(key)
             action.trigger = 'start'
 
             // Can be active or inactive => trigger event only on change
             if(isToggle)
             {
+                action.activeKeys.add(key)
+
                 if(!action.active)
                 {
                     action.active = true
@@ -394,6 +400,9 @@ export class Inputs
 
         const oldMode = this.mode
         this.mode = mode
+
+        if(oldMode === Inputs.MODE_TOUCH && this.mode !== Inputs.MODE_TOUCH)
+            this.touchControls?.resetActiveTouches()
         
         if(this.mode === Inputs.MODE_TOUCH)
             this.interactiveButtons.activate()

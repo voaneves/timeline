@@ -87,7 +87,7 @@ export class Stamp
             }
         }
 
-        if(this.phase === Stamp.LOCK)
+        else if(this.phase === Stamp.LOCK)
         {
             if(controller.grounded)
             {
@@ -121,6 +121,8 @@ export class Stamp
         const crates = this.game.world?.breakables ?? []
         for(const crate of [ ...crates ])
         {
+            if(!crate.physical?.body?.isEnabled())
+                continue
             const at = crate.physical.body.translation()
             const dy = at.y - feetY
             if(Math.hypot(at.x - position.x, at.z - position.z) <= settings.breakRadius && dy >= - settings.breakDepth && dy <= settings.breakHeight)
@@ -129,7 +131,9 @@ export class Stamp
         for(const { crate, x, y, z } of broken)
         {
             this.game.objects.disable(crate) // removes the body from the simulation and the visual from the scene
-            crates.splice(crates.indexOf(crate), 1)
+            const idx = crates.indexOf(crate)
+            if(idx !== - 1)
+                crates.splice(idx, 1)
             this.broken++
             this.controller.events.trigger('break', [ { object: crate, x, y, z } ])
         }

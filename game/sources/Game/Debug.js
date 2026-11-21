@@ -43,6 +43,9 @@ export class Debug
 
             addEventListener('keydown', (event) =>
             {
+                const target = event.target
+                if(target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable))
+                    return
                 if(event.code === 'KeyH')
                     this.panel.hidden = !this.panel.hidden
             })

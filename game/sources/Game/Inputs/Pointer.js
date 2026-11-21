@@ -52,10 +52,8 @@ export class Pointer
             this.upcoming.y = _event.clientY
         })
 
-        addEventListener('mouseup', (_event) =>
+        addEventListener('mouseup', () =>
         {
-            _event.preventDefault()
-
             this.upcomingDown = false
         })
 
@@ -91,6 +89,8 @@ export class Pointer
             this.mode = Pointer.MODE_TOUCH
             this.upcomingDown = true
             this.upcomingTouches = [ ..._event.touches ]
+            if(this.upcomingTouches.length === 0)
+                return
 
             // Calculate average
             let x = 0

@@ -40,14 +40,22 @@ async function waitServer()
     throw new Error(`vite preview did not start:\n${serverLog}`)
 }
 
+const DEFAULT_MOBILE_UA = 'Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36'
+
 async function runProfile(browser, name, p)
 {
-    const context = await browser.newContext({
+    const contextOptions = {
         viewport: { width: p.viewport[0], height: p.viewport[1] },
         deviceScaleFactor: p.dpr ?? 1,
         isMobile: name === 'mobile',
         hasTouch: name === 'mobile',
-    })
+    }
+    if(p.userAgent)
+        contextOptions.userAgent = p.userAgent
+    else if(name === 'mobile')
+        contextOptions.userAgent = DEFAULT_MOBILE_UA
+
+    const context = await browser.newContext(contextOptions)
     const page = await context.newPage()
     const errors = []
     page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`))

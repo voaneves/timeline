@@ -15,7 +15,7 @@ Third-party tools and licences used by the game toolchain.
 - Licence: GPL-3.0-or-later (the tool only; exported assets are ours).
 
 ## Engine scaffold: dependencies and supply chain (T0.5)
-- Source: folio-2025 @ `70764a9` (read-only clone `D:\GitHub\_vendor\folio-2025`), MIT per its `license.md` (its package.json says ISC). Only code copied; no `static/` or `resources/` file. See `LICENSES.md`.
+- Base engine scaffold: source-only adaptation (no upstream assets copied). See `LICENSES.md` for full attribution and licence terms.
 - Exact pins (no ranges), each at least 7 days old on 2026-11-20 (cutoff 2026-11-13): three 0.187.0 (2026-10-30, as upstream and the 2D page), @dimforge/rapier3d 0.19.3 (as upstream; upstream skipped 0.20/0.21 because of a sleep bug, T0.7 tests 0.21.0 from 2026-09-25), gsap 3.15.1 (2026-11-04), camera-controls 3.1.2, seedrandom 3.0.5, tweakpane 4.0.5, @tweakpane/plugin-essentials 0.2.1, @tweakpane/plugin-camerakit 0.3.0, vite 8.3.8 (2026-11-11), vite-plugin-wasm 3.6.0, playwright-core 1.65.0 (2026-11-05; 1.65.1 is from 2026-11-13, under the 7-day cooldown). Dropped from upstream: stylus, msgpack-lite, uuid, emoji-regex, normalize-wheel, dotenv, vite-plugin-node-polyfills, vite-plugin-restart, @vitejs/plugin-basic-ssl, sharp, glob, howler (no audio yet), stats-gl, the @gltf-transform packages.
 - Install: `npm ci --ignore-scripts` (also used for `npm install`). 25 packages in the tree.
 - Install scripts: none are needed. The only package in the lockfile with an install script is `fsevents` 2.3.3 (macOS only, optional, not installed on Windows). `--ignore-scripts` therefore changes nothing today; keep it anyway.

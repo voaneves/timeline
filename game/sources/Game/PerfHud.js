@@ -14,6 +14,9 @@ export class PerfHud
         this.timer = setInterval(() => this.update(), 250)
         addEventListener('keydown', (event) =>
         {
+            const target = event.target
+            if(target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable))
+                return
             if(event.code === 'KeyH')
                 this.element.hidden = !this.element.hidden
         })
