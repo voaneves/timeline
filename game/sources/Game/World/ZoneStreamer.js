@@ -1,18 +1,22 @@
 import { Game } from '../Game.js'
+import { EraSection } from './Eras/EraSection.js'
 import { OrigensEra } from './Eras/OrigensEra.js'
 
 const ZONE_DEFINITIONS = [
     { name: 'origens', index: 0, center: { x: 0, y: 0, z: -18 }, radius: 45, create: (world) => new OrigensEra(world) },
-    { name: 'unicamp', index: 1, center: { x: 0, y: 0, z: -90 }, radius: 45, create: null },
-    { name: 'industria', index: 2, center: { x: 0, y: 0, z: -165 }, radius: 45, create: null },
-    { name: 'dados', index: 3, center: { x: 0, y: 0, z: -240 }, radius: 45, create: null },
-    { name: 'ia', index: 4, center: { x: 0, y: 0, z: -315 }, radius: 45, create: null },
+    { name: 'unicamp', index: 1, center: { x: 0, y: 0, z: -90 }, radius: 45, create: (world) => new EraSection(world, 'unicamp') },
+    { name: 'industria', index: 2, center: { x: 0, y: 0, z: -165 }, radius: 42, create: (world) => new EraSection(world, 'industria') },
+    { name: 'alemanha', index: 3, center: { x: 0, y: 0, z: -240 }, radius: 36, create: (world) => new EraSection(world, 'alemanha') },
+    { name: 'dados', index: 4, center: { x: 0, y: 0, z: -315 }, radius: 42, create: (world) => new EraSection(world, 'dados') },
+    { name: 'transformacao', index: 5, center: { x: 0, y: 0, z: -390 }, radius: 38, create: (world) => new EraSection(world, 'transformacao') },
+    { name: 'hub', index: 6, center: { x: 0, y: 0, z: -465 }, radius: 40, create: (world) => new EraSection(world, 'hub') },
 ]
 
 /**
- * Era zone streamer (T2.28):
- * Keeps the active era + immediate neighbor (`|deltaIndex| <= 1`) loaded,
- * disposes eras `>= 2` zones away, and exposes `window.__streamer` for deterministic cycle/leak verification.
+ * Full-ring era zone streamer (T2.28 + T3.X2):
+ * Registers all 7 zones (`origens`, `unicamp`, `industria`, `alemanha`, `dados`, `transformacao`, `hub`),
+ * preloads the active era's next neighbor in `requestIdleCallback`, disposes eras `>= 2` away,
+ * and exposes `window.__streamer` + `window.__ring` for deterministic verification.
  */
 export class ZoneStreamer
 {
@@ -21,12 +25,15 @@ export class ZoneStreamer
         this.game = Game.getInstance()
         this.world = world || this.game?.world || null
         this.zones = new Map(ZONE_DEFINITIONS.map((z) => [ z.name, z ]))
+        this.zoneOrder = ZONE_DEFINITIONS.map((z) => z.name)
         this.loaded = new Map()
         this.loading = new Map()
         this.cycleCount = 0
         this.activeZone = 'origens'
         this.autoStream = Boolean(options.autoStream)
         this._tickCounter = 0
+        this._idleHandle = null
+        this._idleUsesTimeout = false
 
         this._onTick = () => this.update()
         this.game?.ticker?.events?.on('tick', this._onTick, 9)
@@ -37,6 +44,63 @@ export class ZoneStreamer
     normalizeName(name)
     {
         return String(name || '').trim().toLowerCase()
+    }
+
+    ringDistance(nameA, nameB)
+    {
+        const a = this.zones.get(this.normalizeName(nameA))
+        const b = this.zones.get(this.normalizeName(nameB))
+        if(!a || !b)
+            return Infinity
+        const total = this.zoneOrder.length
+        const diff = Math.abs(a.index - b.index)
+        return Math.min(diff, total - diff)
+    }
+
+    getNextEraName(name)
+    {
+        const def = this.zones.get(this.normalizeName(name))
+        if(!def)
+            return null
+        const nextIdx = (def.index + 1) % this.zoneOrder.length
+        return this.zoneOrder[nextIdx]
+    }
+
+    _cancelIdlePreload()
+    {
+        if(this._idleHandle === null)
+            return
+        if(this._idleUsesTimeout)
+            clearTimeout(this._idleHandle)
+        else if(typeof cancelIdleCallback === 'function')
+            cancelIdleCallback(this._idleHandle)
+        this._idleHandle = null
+    }
+
+    scheduleNeighborPreload(activeName = this.activeZone)
+    {
+        this._cancelIdlePreload()
+        const nextName = this.getNextEraName(activeName)
+        if(!nextName || this.loaded.has(nextName) || this.loading.has(nextName))
+            return
+
+        const run = () =>
+        {
+            this._idleHandle = null
+            if(this.activeZone === activeName && !this.loaded.has(nextName) && !this.loading.has(nextName))
+                this.loadEra(nextName)
+        }
+
+        if(typeof requestIdleCallback === 'function')
+        {
+            this._idleUsesTimeout = false
+            this._idleHandle = requestIdleCallback(run, { timeout: 1200 })
+        }
+        else
+        {
+            this._idleUsesTimeout = true
+            this._idleHandle = setTimeout(run, 150)
+        }
     }
 
     async loadEra(name)
@@ -99,6 +163,49 @@ export class ZoneStreamer
 
         this.cycleCount++
         return true
+    }
+
+    unloadDistant(centerName)
+    {
+        for(const loadedName of Array.from(this.loaded.keys()))
+        {
+            if(this.ringDistance(loadedName, centerName) >= 2)
+                this.unloadEra(loadedName)
+        }
+    }
+
+    async goToEra(name, options = {})
+    {
+        const key = this.normalizeName(name)
+        if(!this.zones.has(key))
+            return null
+
+        this._cancelIdlePreload()
+
+        // Dispose eras >= 2 zones away first so Rapier/GPU stay bounded
+        this.unloadDistant(key)
+
+        const era = await this.loadEra(key)
+        this.activeZone = key
+
+        // Re-apply target era's respawn, shadow, line, and lighting preset
+        era?.setRespawn?.()
+        if(era?.line && this.world)
+            this.world.line = era.line
+        this.game?.eraCycles?.setPreset?.(key)
+        this.world?.autoWalk?.buildGraph?.()
+
+        if(this.world?.player?.controller)
+        {
+            this.world.player.clearWalkTarget?.()
+            this.world.player.controller.respawn?.()
+        }
+        this.game?.physics?.world?.propagateModifiedBodyPositionsToColliders?.()
+
+        if(options.preloadNeighbor !== false)
+            this.scheduleNeighborPreload(key)
+
+        return era
     }
 
     _suspendPlayerController()
@@ -171,7 +278,7 @@ export class ZoneStreamer
 
         for(const zone of this.zones.values())
         {
-            const zoneDist = Math.abs(zone.index - active.index)
+            const zoneDist = this.ringDistance(zone.name, active.name)
             if(zoneDist <= 1)
             {
                 if(zone.create && !this.loaded.has(zone.name) && !this.loading.has(zone.name))
@@ -214,21 +321,50 @@ export class ZoneStreamer
         window.__streamer = {
             loadEra: (name) => self.loadEra(name),
             unloadEra: (name) => self.unloadEra(name),
+            goToEra: (name, options) => self.goToEra(name, options),
             get loadedEras() { return Array.from(self.loaded.keys()) },
             get cycleCount() { return self.cycleCount },
+            stats: () => self.stats(),
+        }
+
+        window.__ring = {
+            get eras() { return [ ...self.zoneOrder ] },
+            get currentEra() { return self.activeZone },
+            goToEra: (name, options = {}) =>
+            {
+                if(options.transition && self.world?.transitions)
+                    return self.world.transitions.transitionTo(name, options)
+                return self.goToEra(name, options)
+            },
+            triggerSetPiece: (action, arg = null) =>
+            {
+                const era = self.loaded.get(self.activeZone)
+                if(!era)
+                    return false
+                if(typeof era.triggerSetPiece === 'function')
+                    return era.triggerSetPiece(action, arg)
+                return false
+            },
             stats: () => self.stats(),
         }
     }
 
     dispose()
     {
+        this._cancelIdlePreload()
+
         if(this._onTick)
             this.game?.ticker?.events?.off('tick', this._onTick)
 
         for(const key of Array.from(this.loaded.keys()))
             this.unloadEra(key)
 
-        if(typeof window !== 'undefined' && window.__streamer)
-            delete window.__streamer
+        if(typeof window !== 'undefined')
+        {
+            if(window.__streamer)
+                delete window.__streamer
+            if(window.__ring)
+                delete window.__ring
+        }
     }
 }

@@ -11,6 +11,9 @@ import { resolveAsset } from '../assetManifest.js'
 import { MovingPlatform } from './MovingPlatform.js'
 import { EraCycles } from '../Cycles/EraCycles.js'
 import { ZoneStreamer } from './ZoneStreamer.js'
+import { Transitions } from './Transitions.js'
+
+const RING_ERAS = new Set([ 'origens', 'unicamp', 'industria', 'alemanha', 'dados', 'transformacao', 'hub' ])
 
 // Name of a glTF root node -> how the engine reads it (docs/PLAN-3D.md 5.3, Objects.getFromModel):
 //   `...Physical<Fixed|Dynamic|KinematicPositionBased>`  one rigid body; children cuboid*/tube*/hull*/trimesh*/ball* are its colliders
@@ -39,10 +42,11 @@ export class World
             this.setDemoControls()
             this.ready = Promise.resolve()
         }
-        else if((Debug.getParam('era') || '').trim().toLowerCase() === 'origens')
+        else if(RING_ERAS.has((Debug.getParam('era') || '').trim().toLowerCase()))
         {
             // Awaited by Game.init before `game.ready`
-            this.ready = this.loadOrigens()
+            const initialEra = (Debug.getParam('era') || 'origens').trim().toLowerCase()
+            this.ready = this.loadEraWorld(initialEra)
         }
         else
         {
@@ -51,17 +55,29 @@ export class World
         }
     }
 
-    async loadOrigens()
+    async loadEraWorld(initialEra = 'origens')
     {
         if(Debug.getParam('loco') === 'vehicle')
             this.vehicleModule = await import('../Physics/PhysicsVehicle.js')
 
-        this.game.eraCycles = new EraCycles('origens')
+        this.game.eraCycles = new EraCycles(initialEra)
         this.zoneStreamer = new ZoneStreamer(this)
-        this.origensEra = await this.zoneStreamer.loadEra('origens')
+        this.zoneStreamer.activeZone = initialEra
+        this.transitions = new Transitions(this)
+        this.game.transitions = this.transitions
+
+        const era = await this.zoneStreamer.loadEra(initialEra)
+        if(initialEra === 'origens')
+            this.origensEra = era
+
         this.setPlayer()
-        this.origensEra?.attachPlayer?.(this.player)
+        era?.attachPlayer?.(this.player)
         this.autoWalk = new AutoWalk(this)
+    }
+
+    async loadOrigens()
+    {
+        return this.loadEraWorld('origens')
     }
 
     async loadGreybox()

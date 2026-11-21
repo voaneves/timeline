@@ -142,6 +142,62 @@
         }
       },
       {
+        "name": "eraUnicamp",
+        "match": "(^|/)unicamp[^/]*\\.(glb|bin|png|ktx2|json)$",
+        "budget": {
+          "maxKB": 850,
+          "failKB": 1000
+        }
+      },
+      {
+        "name": "eraIndustria",
+        "match": "(^|/)industria[^/]*\\.(glb|bin|png|ktx2|json)$",
+        "budget": {
+          "maxKB": 850,
+          "failKB": 1000
+        }
+      },
+      {
+        "name": "eraAlemanha",
+        "match": "(^|/)alemanha[^/]*\\.(glb|bin|png|ktx2|json)$",
+        "budget": {
+          "maxKB": 850,
+          "failKB": 1000
+        }
+      },
+      {
+        "name": "eraDados",
+        "match": "(^|/)dados[^/]*\\.(glb|bin|png|ktx2|json)$",
+        "budget": {
+          "maxKB": 850,
+          "failKB": 1000
+        }
+      },
+      {
+        "name": "eraTransformacao",
+        "match": "(^|/)transformacao[^/]*\\.(glb|bin|png|ktx2|json)$",
+        "budget": {
+          "maxKB": 850,
+          "failKB": 1000
+        }
+      },
+      {
+        "name": "projectImages",
+        "match": "eras/transformacao/projects/.*\\.webp$",
+        "budget": {
+          "maxKB": 250,
+          "failKB": 400
+        }
+      },
+      {
+        "name": "eraHub",
+        "match": "(^|/)hub[^/]*\\.(glb|bin|png|ktx2|json)$",
+        "budget": {
+          "maxKB": 850,
+          "failKB": 1000
+        }
+      },
+      {
         "name": "audio",
         "match": "\\.(ogg|mp3|m4a|opus|wav)$",
         "budget": {
