@@ -28,6 +28,8 @@ import { Quality } from './Quality.js'
 import { PerfProbe } from './PerfProbe.js'
 import { Cards } from './UI/Cards.js'
 import { Hud } from './UI/Hud.js'
+import { MapDialog } from './UI/Map.js'
+import { Achievements } from './Achievements.js'
 import { Audio } from './Audio.js'
 
 export class Game
@@ -93,12 +95,18 @@ export class Game
         this.viewport = new Viewport(this.domElement)
         this.cards = new Cards()
         this.hud = new Hud(this.cards)
+        this.map = new MapDialog(this.cards)
+        this.achievements = new Achievements(this.cards)
+        this.hud.setMap(this.map)
+        this.hud.setAchievements(this.achievements)
         if(this.hud.options.quality !== 'auto')
             this.quality.setManualLevel(Number(this.hud.options.quality))
         this.installPauseControl()
         this.ui = {
             cards: this.cards,
             hud: this.hud,
+            map: this.map,
+            achievements: this.achievements,
             announcer: this.cards.announcer,
             openMilestone: (id) => this.cards.openMilestone(id),
             openProject: (id) => this.cards.openProject(id),
@@ -106,6 +114,7 @@ export class Game
             openContact: () => this.cards.openContact(),
             openList: () => this.cards.openList(),
             openMenu: () => this.hud.openMenu(),
+            openMap: () => this.map.open(),
             closeCard: (byPointer) => this.cards.close(byPointer),
             setEraProgress: (eraName, visited, total) => this.hud.setEraProgress(eraName, visited, total),
             setSignalsCount: (count, total) => this.hud.setSignalsCount(count, total),

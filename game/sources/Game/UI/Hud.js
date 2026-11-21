@@ -36,6 +36,8 @@ export class Hud
 
         this._restoreByPointer = false
         this._skipRestoreOnClose = false
+        this.achievements = null
+        this.map = null
 
         this.buildHud()
         this.buildMenuDialog()
@@ -82,6 +84,7 @@ export class Hud
             </div>
             <nav class="vn-hud-actions" aria-label="Ações rápidas">
                 <button type="button" class="vn-hud-btn js-hud-menu" aria-haspopup="dialog">Menu</button>
+                <button type="button" class="vn-hud-btn js-hud-map" aria-haspopup="dialog">Mapa</button>
                 <button type="button" class="vn-hud-btn js-hud-sound" aria-pressed="true">Som: Ligado</button>
                 <button type="button" class="vn-hud-btn js-hud-list" aria-haspopup="dialog">Lista de marcos</button>
                 <a class="vn-hud-btn vn-hud-link js-hud-accessible" href="../#carreira">Versão acessível</a>
@@ -92,6 +95,7 @@ export class Hud
         this.eraEl = this.header.querySelector('.js-hud-era')
         this.signalsEl = this.header.querySelector('.js-hud-signals')
         this.menuBtn = this.header.querySelector('.js-hud-menu')
+        this.mapBtn = this.header.querySelector('.js-hud-map')
         this.soundBtn = this.header.querySelector('.js-hud-sound')
         this.listBtn = this.header.querySelector('.js-hud-list')
     }
@@ -114,6 +118,7 @@ export class Hud
                 <div class="vn-menu-body">
                     <div class="vn-menu-cta-row">
                         <button type="button" class="vn-btn vn-btn-signal js-menu-contact">Contato</button>
+                        <button type="button" class="vn-btn vn-btn-secondary js-menu-map">Mapa</button>
                         <button type="button" class="vn-btn vn-btn-secondary js-menu-list">Lista de marcos</button>
                     </div>
 
@@ -158,6 +163,14 @@ export class Hud
                         </span>
                         <input type="checkbox" class="vn-toggle-input js-opt-vibration">
                     </label>
+
+                    <section class="vn-menu-achievements js-menu-achievements" aria-labelledby="vn-achievements-title">
+                        <div class="vn-menu-achievements-header">
+                            <h3 id="vn-achievements-title" class="vn-menu-achievements-title">Conquistas</h3>
+                            <span class="vn-menu-achievements-count js-achievements-count">0/8</span>
+                        </div>
+                        <ul class="vn-achievements-list js-achievements-list"></ul>
+                    </section>
                 </div>
                 <footer class="vn-card-footer">
                     <span class="vn-card-hint">Esc para voltar ao mundo 3D</span>
@@ -171,17 +184,21 @@ export class Hud
         this.menuCloseBtn = this.menuDialog.querySelector('.js-menu-close')
         this.menuDoneBtn = this.menuDialog.querySelector('.js-menu-done')
         this.menuContactBtn = this.menuDialog.querySelector('.js-menu-contact')
+        this.menuMapBtn = this.menuDialog.querySelector('.js-menu-map')
         this.menuListBtn = this.menuDialog.querySelector('.js-menu-list')
         this.qualitySelect = this.menuDialog.querySelector('.js-menu-quality')
         this.reducedMotionInput = this.menuDialog.querySelector('.js-opt-reduced-motion')
         this.assistInput = this.menuDialog.querySelector('.js-opt-assist')
         this.soundInput = this.menuDialog.querySelector('.js-opt-sound')
         this.vibrationInput = this.menuDialog.querySelector('.js-opt-vibration')
+        this.achievementsCountEl = this.menuDialog.querySelector('.js-achievements-count')
+        this.achievementsListEl = this.menuDialog.querySelector('.js-achievements-list')
     }
 
     bindEvents()
     {
         this.menuBtn.addEventListener('click', () => this.openMenu())
+        this.mapBtn.addEventListener('click', () => (this.map || this.game?.ui?.map)?.open?.())
         this.listBtn.addEventListener('click', () => this.cards?.openList())
         this.soundBtn.addEventListener('click', () =>
         {
@@ -231,6 +248,14 @@ export class Hud
             this.cards?.openList()
         })
 
+        this.menuMapBtn.addEventListener('click', () =>
+        {
+            this._skipRestoreOnClose = true
+            if(this.menuDialog.open)
+                this.menuDialog.close()
+            ;(this.map || this.game?.ui?.map)?.open?.()
+        })
+
         this.qualitySelect.addEventListener('change', () =>
         {
             this.setOption('quality', this.qualitySelect.value)
@@ -273,6 +298,7 @@ export class Hud
         this.cards?.closeOtherDialogs(this.menuDialog)
         this.cards?.releaseGameInputs()
         this.syncMenuControls()
+        this.renderAchievements()
 
         if(!this.menuDialog.open)
             this.menuDialog.showModal()
@@ -348,6 +374,55 @@ export class Hud
         this.state.signalsCount = count
         this.state.signalsTotal = total
         this.renderProgress()
+    }
+
+    setMap(map)
+    {
+        this.map = map || null
+    }
+
+    setAchievements(achievements)
+    {
+        this.achievements = achievements || null
+        this.achievements?.events?.on('change', () => this.renderAchievements())
+        this.renderAchievements()
+    }
+
+    renderAchievements()
+    {
+        if(!this.achievementsListEl || !this.achievementsCountEl)
+            return
+
+        const state = this.achievements?.getState?.()
+        if(!state)
+            return
+
+        this.achievementsCountEl.textContent = `${state.count}/${state.total}`
+        this.achievementsListEl.replaceChildren()
+
+        for(const item of state.items)
+        {
+            const li = document.createElement('li')
+            li.className = `vn-achievement-item${item.unlocked ? ' is-unlocked' : ''}`
+
+            const text = document.createElement('div')
+            text.className = 'vn-achievement-text'
+
+            const title = document.createElement('strong')
+            title.textContent = item.title
+
+            const desc = document.createElement('small')
+            desc.textContent = item.description
+
+            text.append(title, desc)
+
+            const status = document.createElement('span')
+            status.className = 'vn-achievement-status'
+            status.textContent = item.unlocked ? 'Desbloqueada' : 'Bloqueada'
+
+            li.append(text, status)
+            this.achievementsListEl.appendChild(li)
+        }
     }
 
     renderProgress()

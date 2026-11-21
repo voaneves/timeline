@@ -490,7 +490,7 @@ export class AutoWalk
 
         this._onKeyDown = (event) =>
         {
-            if(this.game?.ui?.cards?.isOpen?.())
+            if(this.game?.ui?.cards?.isOpen?.() || document.querySelector('dialog[open]'))
                 return
             if(event.ctrlKey || event.metaKey || event.altKey)
                 return

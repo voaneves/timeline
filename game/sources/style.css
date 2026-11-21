@@ -914,3 +914,279 @@ html.is-reduced-motion .vn-loader-dot
 {
     transition-duration: 0.01s !important;
 }
+
+/* Achievements toast & Menu section (T4.1) */
+.vn-achievement-toast
+{
+    position: fixed;
+    left: 16px;
+    bottom: 16px;
+    z-index: 45;
+    max-width: min(320px, calc(100vw - 32px));
+    padding: 12px 14px;
+    border: 2px solid var(--vn-ink, #0a0a0a);
+    border-radius: 10px;
+    background: var(--vn-paper, #f4ead4);
+    color: var(--vn-ink, #0a0a0a);
+    box-shadow: 0 6px 0 var(--vn-ink, #0a0a0a);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+    pointer-events: none;
+    opacity: 0;
+    transform: translateY(12px);
+    transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.vn-achievement-toast.is-visible
+{
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.vn-achievement-toast-badge
+{
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--vn-link, #b80000);
+}
+
+.vn-achievement-toast-title
+{
+    font-size: 14px;
+    font-weight: 800;
+}
+
+.vn-achievement-toast-desc
+{
+    font-size: 12px;
+    color: var(--vn-muted, #5c5446);
+}
+
+.vn-menu-achievements
+{
+    margin-top: 16px;
+    padding-top: 14px;
+    border-top: 2px solid var(--vn-ink, #0a0a0a);
+}
+
+.vn-menu-achievements-header
+{
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+}
+
+.vn-menu-achievements-title
+{
+    margin: 0;
+    font-size: 15px;
+    font-weight: 800;
+    color: var(--vn-ink, #0a0a0a);
+}
+
+.vn-menu-achievements-count
+{
+    font-size: 13px;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    color: var(--vn-link, #b80000);
+}
+
+.vn-achievements-list
+{
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.vn-achievement-item
+{
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 8px 10px;
+    border: 1.5px solid var(--vn-ink, #0a0a0a);
+    border-radius: 8px;
+    background: var(--vn-surface, #efe4c5);
+    opacity: 0.78;
+}
+
+.vn-achievement-item.is-unlocked
+{
+    background: var(--vn-paper, #f4ead4);
+    opacity: 1;
+}
+
+.vn-achievement-text
+{
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    font-size: 13px;
+}
+
+.vn-achievement-text small
+{
+    font-size: 11px;
+    color: var(--vn-muted, #5c5446);
+}
+
+.vn-achievement-status
+{
+    flex-shrink: 0;
+    padding: 3px 8px;
+    border-radius: 999px;
+    border: 1.5px solid var(--vn-ink, #0a0a0a);
+    background: var(--vn-tag-bg, #e6d8b5);
+    color: var(--vn-ink, #0a0a0a);
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.vn-achievement-item.is-unlocked .vn-achievement-status
+{
+    background: var(--vn-signal, #f50000);
+    color: var(--vn-ink, #0a0a0a);
+}
+
+/* Cordel Ring Teleport Map <dialog> (T4.2) */
+.vn-map-dialog
+{
+    width: min(720px, calc(100vw - 24px));
+}
+
+.vn-map-body
+{
+    padding: 14px 18px;
+    overflow-y: auto;
+}
+
+.vn-map-stage
+{
+    position: relative;
+    width: 100%;
+    aspect-ratio: 4 / 3;
+    border: 2px solid var(--vn-ink, #0a0a0a);
+    border-radius: 10px;
+    overflow: hidden;
+    background: var(--vn-paper, #f4ead4);
+}
+
+.vn-map-art,
+.vn-map-svg
+{
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+.vn-map-zones
+{
+    position: absolute;
+    inset: 0;
+}
+
+.vn-map-zone-btn
+{
+    position: absolute;
+    left: var(--map-x, 50%);
+    top: var(--map-y, 50%);
+    transform: translate(-50%, -50%);
+    min-width: 44px;
+    min-height: 44px;
+    padding: 6px 10px;
+    border: 2px solid var(--vn-ink, #0a0a0a);
+    border-radius: 8px;
+    background: var(--vn-paper, #f4ead4);
+    color: var(--vn-ink, #0a0a0a);
+    box-shadow: 0 3px 0 var(--vn-ink, #0a0a0a);
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1px;
+    text-align: center;
+    cursor: pointer;
+    font-family: inherit;
+}
+
+.vn-map-zone-btn:hover
+{
+    background: var(--vn-surface, #efe4c5);
+}
+
+.vn-map-zone-btn:focus-visible
+{
+    outline: 3px solid var(--vn-focus, #b80000);
+    outline-offset: 2px;
+}
+
+.vn-map-zone-btn.is-active
+{
+    background: var(--vn-signal, #f50000);
+    color: var(--vn-ink, #0a0a0a);
+}
+
+.vn-map-zone-name
+{
+    font-size: 12px;
+    font-weight: 800;
+    line-height: 1.15;
+    white-space: nowrap;
+}
+
+.vn-map-zone-years
+{
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--vn-ink, #0a0a0a);
+    opacity: 0.85;
+}
+
+@media (max-width: 560px)
+{
+    .vn-map-stage
+    {
+        aspect-ratio: auto;
+    }
+
+    .vn-map-zones
+    {
+        position: static;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+        padding: 10px;
+        background: var(--vn-surface, #efe4c5);
+        border-top: 2px solid var(--vn-ink, #0a0a0a);
+    }
+
+    .vn-map-zone-btn
+    {
+        position: static;
+        transform: none;
+        width: 100%;
+    }
+}
+
+@media (prefers-reduced-motion: reduce)
+{
+    .vn-achievement-toast
+    {
+        transition-duration: 0.01s !important;
+    }
+}
+
+html.is-reduced-motion .vn-achievement-toast
+{
+    transition-duration: 0.01s !important;
+}
