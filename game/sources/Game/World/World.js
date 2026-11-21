@@ -8,6 +8,8 @@ import { Player } from '../Character/Player.js'
 import { MeshDefaultMaterial } from '../Materials/MeshDefaultMaterial.js'
 import { resolveAsset } from '../assetManifest.js'
 import { MovingPlatform } from './MovingPlatform.js'
+import { EraCycles } from '../Cycles/EraCycles.js'
+import { OrigensEra } from './Eras/OrigensEra.js'
 
 // Name of a glTF root node -> how the engine reads it (docs/PLAN-3D.md 5.3, Objects.getFromModel):
 //   `...Physical<Fixed|Dynamic|KinematicPositionBased>`  one rigid body; children cuboid*/tube*/hull*/trimesh*/ball* are its colliders
@@ -36,11 +38,27 @@ export class World
             this.setDemoControls()
             this.ready = Promise.resolve()
         }
+        else if((Debug.getParam('era') || '').trim().toLowerCase() === 'origens')
+        {
+            // Awaited by Game.init before `game.ready`
+            this.ready = this.loadOrigens()
+        }
         else
         {
             // Awaited by Game.init before `game.ready`
             this.ready = this.loadGreybox()
         }
+    }
+
+    async loadOrigens()
+    {
+        if(Debug.getParam('loco') === 'vehicle')
+            this.vehicleModule = await import('../Physics/PhysicsVehicle.js')
+
+        this.game.eraCycles = new EraCycles('origens')
+        this.origensEra = new OrigensEra(this)
+        await this.origensEra.load()
+        this.setPlayer()
     }
 
     async loadGreybox()
@@ -142,7 +160,7 @@ export class World
         }
     }
 
-    addPhysicalNode(node)
+    addPhysicalNode(node, visualDescription = {})
     {
         const dynamic = /dynamic/i.test(node.name)
         const kinematic = /kinematicPositionBased/i.test(node.name)
@@ -159,7 +177,7 @@ export class World
         if(kinematic)
             physicalDescription.canSleep = false // driven by setNextKinematicTranslation
 
-        const object = this.game.objects.addFromModel(node, {}, physicalDescription)
+        const object = this.game.objects.addFromModel(node, visualDescription, physicalDescription)
 
         // Crates break under the stamp (T1.4): `breakables` is read by Character/Stamp.js
         if(/^crate\d/i.test(node.name))

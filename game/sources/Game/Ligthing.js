@@ -265,8 +265,10 @@ export class Lighting
         this.directionHelper.position.copy(this.direction).multiplyScalar(5).add(this.game.view.focusPoint.position)
         this.directionHelper.lookAt(this.game.view.focusPoint.position)
 
-        // Apply day cycles values
-        this.colorUniform.value.copy(this.game.dayCycles.properties.lightColor.value)
-        this.intensityUniform.value = this.game.dayCycles.properties.lightIntensity.value
+        // Apply day cycles or era cycles values
+        const cycleSource = this.game.eraCycles?.active ? this.game.eraCycles : this.game.dayCycles
+        this.colorUniform.value.copy(cycleSource.properties.lightColor.value)
+        this.intensityUniform.value = cycleSource.properties.lightIntensity.value
+        this.shadowColor.value.copy(cycleSource.properties.shadowColor.value)
     }
 }
