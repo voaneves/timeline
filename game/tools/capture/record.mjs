@@ -1,8 +1,8 @@
-// Capture tool (PLAN-3D 7.2 / T0.8): Playwright HEADED system Chrome + ffmpeg ddagrab screen recording
+// Capture tool (PLAN-3D 7.2 / T0.8): Playwright HEADED system Chrome + ffmpeg ddagrab/gdigrab/cdp screen recording
 // + rAF frame-time sampler + window.__perf (optional) -> mp4 (60 fps) + metrics.json + contact sheet.
 //
 // Usage: node record.mjs --profile desktop|mobile --seconds 10 --url <url> [--start] [--name x] [--out dir]
-//                        [--encoder h264_amf|libx264] [--no-sheet] [--script file.mjs]
+//                        [--capture ddagrab|gdigrab|cdp] [--encoder h264_amf|libx264] [--no-sheet] [--script file.mjs]
 // --script: ES module, default export async ({ page, cdp, P, seconds, mark, sleep, remaining }) => {}; runs right after
 //   recording starts (replaces --start). mark(name) stores ms since navigation + bytes transferred so far in metrics.marks.
 // Always collected: CDP Network transfer (sum encodedDataLength) and draw calls (WebGL + WebGPU prototype hooks).
@@ -46,11 +46,34 @@ const PROFILES = {
 const P = PROFILES[profileName];
 if (!P) { console.error('unknown profile ' + profileName); process.exit(1); }
 
+const captureMode = opt('capture', 'ddagrab');
+if (captureMode !== 'ddagrab' && captureMode !== 'gdigrab' && captureMode !== 'cdp') { console.error('unknown capture mode ' + captureMode); process.exit(1); }
 const encoder = opt('encoder', 'h264_amf');
 const encArgs = encoder === 'h264_amf'
   ? ['-c:v', 'h264_amf', '-quality', 'quality', '-rc', 'cqp', '-qp_i', '18', '-qp_p', '20']
   : ['-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '18'];
 const vfPre = encoder === 'h264_amf' ? 'hwdownload,format=bgra,format=nv12' : 'hwdownload,format=bgra,format=yuv420p';
+const cdpPixFmt = encoder === 'h264_amf' ? 'format=nv12' : 'format=yuv420p';
+const ffArgs = captureMode === 'cdp'
+  ? [
+      '-y', '-hide_banner', '-loglevel', 'warning',
+      '-use_wallclock_as_timestamps', '1',
+      '-f', 'image2pipe', '-vcodec', 'mjpeg', '-i', 'pipe:0',
+      '-vf', `scale=${P.w}:${P.h}:force_original_aspect_ratio=decrease,pad=${P.w}:${P.h}:(ow-iw)/2:(oh-ih)/2,${cdpPixFmt}`,
+      '-fps_mode', 'cfr', '-r', '60', ...encArgs, '-t', String(seconds + 1), mp4,
+    ]
+  : captureMode === 'gdigrab'
+    ? [
+        '-y', '-hide_banner', '-loglevel', 'warning',
+        '-f', 'gdigrab', '-framerate', '60', '-offset_x', '0', '-offset_y', '0', '-video_size', `${P.w}x${P.h}`, '-i', 'desktop',
+        '-vf', encoder === 'h264_amf' ? 'format=nv12' : 'format=yuv420p',
+        '-fps_mode', 'cfr', '-r', '60', ...encArgs, '-t', String(seconds + 1), mp4,
+      ]
+    : [
+        '-y', '-hide_banner', '-loglevel', 'warning',
+        '-f', 'lavfi', '-i', `ddagrab=output_idx=0:framerate=60:video_size=${P.w}x${P.h}:offset_x=0:offset_y=0`,
+        '-vf', vfPre, '-fps_mode', 'cfr', '-r', '60', ...encArgs, '-t', String(seconds + 1), mp4,
+      ];
 
 const browser = await chromium.launch({
   headless: false,
@@ -66,8 +89,10 @@ const browser = await chromium.launch({
 const ctx = await browser.newContext({ viewport: null });
 const page = await ctx.newPage();
 const cdp = await ctx.newCDPSession(page);
+if (P.mobile || captureMode === 'cdp') {
+  await cdp.send('Emulation.setDeviceMetricsOverride', { width: P.w, height: P.h, deviceScaleFactor: P.dpr, mobile: P.mobile, screenWidth: P.w, screenHeight: P.h });
+}
 if (P.mobile) {
-  await cdp.send('Emulation.setDeviceMetricsOverride', { width: P.w, height: P.h, deviceScaleFactor: P.dpr, mobile: true, screenWidth: P.w, screenHeight: P.h });
   await cdp.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
 }
 if (P.cpu > 1) await cdp.send('Emulation.setCPUThrottlingRate', { rate: P.cpu });
@@ -99,26 +124,37 @@ await page.addInitScript(() => {
   requestAnimationFrame(tick);
 });
 
-// Real fullscreen via CDP so the page owns the whole screen (no tab strip / URL bar in the capture).
-try {
-  const { windowId } = await cdp.send('Browser.getWindowForTarget');
-  await cdp.send('Browser.setWindowBounds', { windowId, bounds: { windowState: 'fullscreen' } });
-} catch (e) { console.warn('[record] fullscreen failed:', e.message); }
-await page.waitForTimeout(800);
+// Real fullscreen via CDP for screen-grab modes so the page owns the whole screen (no tab strip / URL bar in the capture).
+if (captureMode !== 'cdp') {
+  try {
+    const { windowId } = await cdp.send('Browser.getWindowForTarget');
+    await cdp.send('Browser.setWindowBounds', { windowId, bounds: { windowState: 'fullscreen' } });
+  } catch (e) { console.warn('[record] fullscreen failed:', e.message); }
+  await page.waitForTimeout(800);
+}
 
 const navStart = Date.now();
 await page.goto(url, { waitUntil: 'load' });
 await page.waitForTimeout(1500); // let the loader settle before recording
-await page.bringToFront();
-console.log(`[record] profile=${profileName} ${P.w}x${P.h} cpu x${P.cpu} loaded in ${Date.now() - navStart} ms`);
+if (captureMode !== 'cdp') await page.bringToFront();
+console.log(`[record] profile=${profileName} ${P.w}x${P.h} cpu x${P.cpu} capture=${captureMode}/${encoder} loaded in ${Date.now() - navStart} ms`);
 
-// ffmpeg screen capture (Desktop Duplication). Crop = page region at the screen origin.
-const ff = spawn(FFMPEG, [
-  '-y', '-hide_banner', '-loglevel', 'warning',
-  '-f', 'lavfi', '-i', `ddagrab=output_idx=0:framerate=60:video_size=${P.w}x${P.h}:offset_x=0:offset_y=0`,
-  '-vf', vfPre, '-fps_mode', 'cfr', '-r', '60', ...encArgs, '-t', String(seconds + 1), mp4,
-], { stdio: ['pipe', 'inherit', 'inherit'] });
+// ffmpeg capture (ddagrab, gdigrab, or CDP Page.startScreencast).
+const ff = spawn(FFMPEG, ffArgs, { stdio: ['pipe', 'inherit', 'inherit'] });
+ff.stdin.on('error', () => {});
 const ffDone = new Promise((res) => ff.on('close', res));
+let cdpActive = false;
+let cdpFrames = 0;
+if (captureMode === 'cdp') {
+  cdpActive = true;
+  cdp.on('Page.screencastFrame', ({ data, sessionId }) => {
+    cdp.send('Page.screencastFrameAck', { sessionId }).catch(() => {});
+    if (!cdpActive || !ff.stdin.writable || ff.stdin.writableLength > 4 * 1024 * 1024) return;
+    ff.stdin.write(Buffer.from(data, 'base64'));
+    cdpFrames++;
+  });
+  await cdp.send('Page.startScreencast', { format: 'jpeg', quality: 85, maxWidth: P.w, maxHeight: P.h, everyNthFrame: 1 });
+}
 await page.waitForTimeout(1000); // encoder warm-up
 
 await page.evaluate(() => { window.__cap.t.length = 0; window.__cap.dpf.length = 0; window.__cap.total = 0; window.__cap.on = true; });
@@ -144,9 +180,16 @@ const cap = capAll.t;
 const dpf = capAll.dpf;
 const perf = await page.evaluate(() => { try { return window.__perf ? JSON.parse(JSON.stringify(window.__perf)) : null; } catch { return { error: 'unserializable' }; } });
 
-try { ff.stdin.write('q'); } catch {}
-await Promise.race([ffDone, new Promise((r) => setTimeout(r, 8000))]);
+if (captureMode === 'cdp') {
+  cdpActive = false;
+  await cdp.send('Page.stopScreencast').catch(() => {});
+  try { ff.stdin.end(); } catch {}
+} else {
+  try { ff.stdin.write('q'); } catch {}
+}
+const ffExit = await Promise.race([ffDone, new Promise((r) => setTimeout(() => r(null), 8000))]);
 if (ff.exitCode === null) ff.kill();
+const ffCode = ff.exitCode ?? ffExit;
 await browser.close();
 
 const dts = [];
@@ -156,7 +199,8 @@ const pct = (p) => (sorted.length ? sorted[Math.min(sorted.length - 1, Math.floo
 const span = cap.length > 1 ? (cap[cap.length - 1] - cap[0]) / 1000 : 0;
 const r2 = (v) => (v == null ? null : +v.toFixed(2));
 const metrics = {
-  profile: profileName, url, capture: { w: P.w, h: P.h, cpuThrottle: P.cpu, mobileEmulation: P.mobile },
+  profile: profileName, url, captureMode, encoder,
+  capture: { w: P.w, h: P.h, cpuThrottle: P.cpu, mobileEmulation: P.mobile, mode: captureMode, encoder, ...(captureMode === 'cdp' ? { cdpFrames } : {}) },
   durationSec: r2(elapsed), frames: cap.length,
   avgFps: span ? r2((cap.length - 1) / span) : null,
   frameTimeMs: { p50: r2(pct(0.5)), p95: r2(pct(0.95)), p99: r2(pct(0.99)), max: r2(sorted[sorted.length - 1] ?? null) },
@@ -170,6 +214,12 @@ const metrics = {
 };
 fs.writeFileSync(path.join(outDir, 'metrics.json'), JSON.stringify(metrics, null, 2));
 
+const mp4Size = fs.existsSync(mp4) ? fs.statSync(mp4).size : 0;
+if (ffCode !== 0 || mp4Size === 0) {
+  console.error(`[record] capture failed: captureMode=${captureMode} encoder=${encoder} ffmpegExitCode=${ffCode} mp4Size=${mp4Size}`);
+  process.exit(1);
+}
+
 let sheet = null;
-if (fs.existsSync(mp4) && !flag('no-sheet')) sheet = makeSheet(mp4, { out: path.join(outDir, 'sheet.png') });
-console.log(JSON.stringify({ outDir, mp4, metrics: path.join(outDir, 'metrics.json'), sheet, avgFps: metrics.avgFps, p95: metrics.frameTimeMs.p95 }, null, 2));
+if (!flag('no-sheet')) sheet = makeSheet(mp4, { out: path.join(outDir, 'sheet.png') });
+console.log(JSON.stringify({ outDir, mp4, metrics: path.join(outDir, 'metrics.json'), sheet, captureMode, encoder, avgFps: metrics.avgFps, p95: metrics.frameTimeMs.p95 }, null, 2));
