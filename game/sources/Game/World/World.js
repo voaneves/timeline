@@ -19,7 +19,15 @@ export class World
         this.references = new Map()
         this.movingPlatforms = []
 
-        if(Debug.getParam('demo') !== null)
+        if(__DEV_TOOLS__ && Debug.getParam('debug') === 'palette')
+        {
+            this.ready = import('./PaletteCalibration.js').then(({ PaletteCalibration }) =>
+            {
+                this.paletteCalibration = new PaletteCalibration()
+                return this.paletteCalibration.ready
+            })
+        }
+        else if(Debug.getParam('demo') !== null)
         {
             this.setGround()
             this.setCube()
