@@ -198,7 +198,7 @@ export class Grass
     {
         const oliveBase = color('#5a7a2c')
         const goldTip = color('#c4ae42')
-        const grassColor = mix(oliveBase, goldTip, uv().y.pow(0.85))
+        const grassColor = mix(oliveBase, goldTip, uv().y.clamp(0.0, 1.0))
 
         const material = new MeshDefaultMaterial({
             colorNode: grassColor,
@@ -216,40 +216,46 @@ export class Grass
         const bladeAngle = attribute('aBladeAngle', 'float')
         const bladeTier = attribute('aBladeTier', 'float')
 
-        const camDist = length(this.uCamPos.xz.sub(rootPos.xz))
+        const camDiff = this.uCamPos.xz.sub(rootPos.xz)
+        const camDist = camDiff.x.mul(camDiff.x).add(camDiff.y.mul(camDiff.y)).add(0.001).sqrt()
         // 3-tier Tidewater LOD taper: T2 fades [16..24], T1 fades [28..40], T0 fades [50..68]
         const fadeT2 = float(1).sub(smoothstep(float(16.0), float(24.0), camDist))
         const fadeT1 = float(1).sub(smoothstep(float(28.0), float(40.0), camDist))
         const fadeT0 = float(1).sub(smoothstep(float(50.0), float(68.0), camDist))
         const isT0 = float(1).sub(smoothstep(float(0.0), float(0.5), bladeTier))
         const isT2 = smoothstep(float(1.5), float(2.0), bladeTier)
-        const isT1 = float(1).sub(isT0).sub(isT2)
-        const lodScale = fadeT0.mul(isT0).add(fadeT1.mul(isT1)).add(fadeT2.mul(isT2))
+        const isT1 = float(1).sub(isT0).sub(isT2).clamp(0, 1)
+        const lodScale = fadeT0.mul(isT0).add(fadeT1.mul(isT1)).add(fadeT2.mul(isT2)).clamp(0, 1)
         const widthComp = float(1).add(smoothstep(float(16.0), float(48.0), camDist).mul(0.45))
+
+        // Avoid degenerate zero-area triangles (WGSL NaN in derivatives/bloom): sink faded blades underground
+        const safeScale = lodScale.max(0.05)
+        const sinkY = float(1).sub(smoothstep(float(0.02), float(0.08), lodScale)).mul(2.5)
 
         const ca = cos(bladeAngle)
         const sa = sin(bladeAngle)
-        const px = positionLocal.x.mul(widthComp).mul(lodScale)
-        const pz = positionLocal.z.mul(widthComp).mul(lodScale)
+        const px = positionLocal.x.mul(widthComp).mul(safeScale)
+        const pz = positionLocal.z.mul(widthComp).mul(safeScale)
         const rotX = px.mul(ca).sub(pz.mul(sa))
         const rotZ = px.mul(sa).add(pz.mul(ca))
 
-        const tipWeight = uv().y.pow(1.5)
+        const tipWeight = uv().y.clamp(0, 1)
         const toBlade = rootPos.xz.sub(this.uPlayerPos.xz)
-        const dist = toBlade.length().max(0.001)
+        const dist = toBlade.x.mul(toBlade.x).add(toBlade.y.mul(toBlade.y)).add(0.001).sqrt()
         const pushDir = toBlade.div(dist)
-        const bendFactor = float(1).sub(dist.div(this.uBendRadius).clamp(0, 1)).pow(2)
+        const bendFactor = float(1).sub(dist.div(this.uBendRadius).clamp(0, 1))
+        const bendSq = bendFactor.mul(bendFactor)
 
         const windX = sin(this.uTime.mul(0.95).add(rootPos.x.mul(0.35)).add(rootPos.z.mul(0.25))).mul(0.05).mul(tipWeight)
         const windZ = cos(this.uTime.mul(0.8).add(rootPos.z.mul(0.32))).mul(0.04).mul(tipWeight)
 
-        const bendXZ = pushDir.mul(bendFactor.mul(this.uBendStrength).mul(tipWeight))
-        const bendY = bendFactor.mul(0.20).mul(tipWeight)
+        const bendXZ = pushDir.mul(bendSq.mul(this.uBendStrength).mul(tipWeight))
+        const bendY = bendSq.mul(0.20).mul(tipWeight)
 
         material.positionNode = vec3(
-            rotX.add(windX).add(bendXZ.x).mul(lodScale),
-            positionLocal.y.sub(bendY).mul(lodScale),
-            rotZ.add(windZ).add(bendXZ.y).mul(lodScale)
+            rotX.add(windX).add(bendXZ.x),
+            positionLocal.y.mul(safeScale).sub(bendY).sub(sinkY),
+            rotZ.add(windZ).add(bendXZ.y)
         )
 
         return material

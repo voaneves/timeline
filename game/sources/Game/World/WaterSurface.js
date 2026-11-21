@@ -79,8 +79,6 @@ export class WaterSurface
             {
                 const fftUv = positionWorld.xz.div(float(46.0))
                 const fftSample = texture(this.fft.displacementTexture, fftUv)
-                const fftDy = fftSample.y.sub(0.5).mul(0.24)
-                waveDispY = analyticalHeight.mul(0.55).add(fftDy)
                 fftFoam = fftSample.w
             }
 
