@@ -210,9 +210,9 @@ export class AmbientLife
             side: THREE.DoubleSide,
         })
 
-        // Wing flap in TSL: hinge along X = 0
+        // Wing flap in TSL: hinge along X = 0 (smooth ~0.87 Hz wave, no rapid flicker)
         const phase = attribute('aPhase', 'float')
-        const flap = sin(this.uTime.mul(14.0).add(phase)).mul(0.65)
+        const flap = sin(this.uTime.mul(5.5).add(phase)).mul(0.55)
         const wingSign = sign(positionLocal.x)
         const wingDist = positionLocal.x.abs()
         material.positionNode = vec3(

@@ -332,30 +332,23 @@ def build_diorama_terrain_and_water(
     stats: dict[str, Any],
 ) -> dict[str, bpy.types.Object]:
     """Build the 70 x 55 m Origens diorama paper-cut island, stepped terraces, street curb, and Rio Tocantins."""
+    # 1. Submerged sandbar rim (replaces harsh dark cliff box so island slopes into stylized ocean)
     bm_borders = bmesh.new()
-
-    # 1. Outer paper-cut diorama trim base (70 x 55 m footprint: X in [-35, +35], Y in [-12, +47])
     _add_box(
         bm_borders,
-        size=(70.0, 56.0, 0.90),
-        center=(0.0, 17.0, -0.95),
-        swatch_name="paperWarm",
-        top_swatch="paper",
-        side_swatch="paperShadow",
-        bottom_swatch="ink",
-    )
-    _add_box(
-        bm_borders,
-        size=(70.6, 56.6, 0.18),
-        center=(0.0, 17.0, -0.52),
-        swatch_name="ink",
+        size=(76.0, 62.0, 0.35),
+        center=(0.0, 17.0, -0.78),
+        swatch_name="lateriteDark",
+        top_swatch="paperWarm",
+        side_swatch="lateriteDark",
+        bottom_swatch="lateriteDark",
     )
     borders_vis = _finalize_bmesh(
         bm_borders,
         name="OrigensPaperBorders",
         location=(0.0, 0.0, 0.0),
         collection=collection,
-        bevel_width=0.015,
+        bevel_width=0.04,
         bevel_segments=1,
     )
 
@@ -374,11 +367,11 @@ def build_diorama_terrain_and_water(
     )
 
     # 3. O1 Laterite Street & Sidewalk Curb ("meio-fio da rua de laterita", Y in [-9.5, +4.5], Z top = 0.0 m)
-    # Recessed laterite roadway strip south of spawn (Y in [-5.8, -1.8], top at Z = -0.06 m)
+    # Raised slightly above lowland Z=0.0 (top at Z = +0.016 m) to prevent coplanar z-fighting.
     _add_box(
         bm_terr,
         size=(36.0, 4.0, 0.12),
-        center=(-1.0, -3.8, -0.06),
+        center=(-1.0, -3.8, -0.044),
         swatch_name="laterite",
         top_swatch="laterite",
         side_swatch="lateriteDark",
@@ -500,6 +493,91 @@ def build_diorama_terrain_and_water(
             top_swatch="laterite",
             side_swatch="lateriteDark",
         )
+
+    # 7. Sculpted Tidewater-tech organic shoreline & undulating cerrado outer rim
+    # Terrain noise helpers adapted from dgreenheck/tidewater (MIT, (c) 2026 DRG Software Solutions LLC)
+    def _tw_hash2(ix: int, iz: int, s: int) -> float:
+        h = (ix * 374761393 + iz * 668265263 + s * 1274126177) & 0xFFFFFFFF
+        h = ((h ^ (h >> 13)) * 1274126177) & 0xFFFFFFFF
+        h ^= h >> 16
+        return (h & 0xFFFFFFFF) / 4294967296.0
+
+    def _tw_erosion_relief(x: float, y: float) -> float:
+        total = 0.0
+        amp = 0.48
+        cell = 11.5
+        gx, gy = 0.35, -0.25
+        for o in range(4):
+            sl = math.hypot(gx, gy) or 1.0
+            dx, dy = (gy / sl) * 0.9, (-gx / sl) * 0.9
+            px, py = x / cell, y / cell
+            ix, iy = math.floor(px), math.floor(py)
+            fx, fy = px - ix, py - iy
+            v = 0.0
+            wt = 0.0
+            for jj in (-1, 0, 1):
+                for ii in (-1, 0, 1):
+                    cx, cy = ix + ii, iy + jj
+                    ox = fx - ii - 0.25 - _tw_hash2(cx, cy, 11 + o) * 0.5
+                    oy = fy - jj - 0.25 - _tw_hash2(cx, cy, 57 + o) * 0.5
+                    d2 = ox * ox + oy * oy
+                    if d2 >= 1.5625:
+                        continue
+                    q = 1.0 - d2 / 1.5625
+                    w = q * q * q
+                    v += math.cos((ox * dx + oy * dy) * math.tau) * w
+                    wt += w
+            if wt > 1e-6:
+                v /= wt
+            total += amp * v
+            amp *= 0.5
+            cell *= 0.5
+        return total
+
+    nx_grid, ny_grid = 44, 40
+    gx_min, gx_max = -42.0, 42.0
+    gy_min, gy_max = -17.0, 52.0
+    grid_verts: list[list[bmesh.types.BMVert]] = []
+    for iy in range(ny_grid + 1):
+        vy = gy_min + (gy_max - gy_min) * (iy / ny_grid)
+        row_verts: list[bmesh.types.BMVert] = []
+        for ix in range(nx_grid + 1):
+            vx = gx_min + (gx_max - gx_min) * (ix / nx_grid)
+            # Signed distance outside the walkable 66x54 island core
+            dx_out = max(0.0, abs(vx) - 31.5)
+            dy_out = max(0.0, (-8.0 - vy) if vy < 18.0 else (vy - 44.5))
+            edge_dist = math.hypot(dx_out, dy_out)
+            relief = _tw_erosion_relief(vx, vy)
+            if edge_dist <= 0.01:
+                # Subtle depression under walkable flats so it never fights flat collider tops
+                vz = -0.06
+            else:
+                t_drop = min(1.0, edge_dist / 8.5)
+                smooth_drop = t_drop * t_drop * (3.0 - 2.0 * t_drop)
+                mound = max(0.0, relief) * (1.0 - smooth_drop) * 1.15
+                vz = -0.04 - smooth_drop * 0.92 + mound * 0.65 + relief * 0.14
+            row_verts.append(bm_terr.verts.new((vx, vy, vz)))
+        grid_verts.append(row_verts)
+
+    skirt_faces: list[bmesh.types.BMFace] = []
+    for iy in range(ny_grid):
+        for ix in range(nx_grid):
+            v00 = grid_verts[iy][ix]
+            v10 = grid_verts[iy][ix + 1]
+            v11 = grid_verts[iy + 1][ix + 1]
+            v01 = grid_verts[iy + 1][ix]
+            avg_z = (v00.co.z + v10.co.z + v11.co.z + v01.co.z) * 0.25
+            # Skip interior flat cells already covered by walkable slabs
+            if v00.co.z <= -0.059 and v10.co.z <= -0.059 and v11.co.z <= -0.059 and v01.co.z <= -0.059:
+                continue
+            try:
+                f = bm_terr.faces.new((v00, v10, v11, v01))
+                f.smooth = True
+                swatch = "paperWarm" if avg_z < -0.22 else ("laterite" if avg_z < -0.02 else "dryGrass")
+                cerrado_kit._tag_faces_swatch(bm_terr, [f], swatch)
+                skirt_faces.append(f)
+            except ValueError:
+                pass
 
     terrain_vis = _finalize_bmesh(
         bm_terr,

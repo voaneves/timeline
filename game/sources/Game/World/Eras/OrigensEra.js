@@ -173,7 +173,13 @@ export class OrigensEra
         // Sub-modules (listeners captured for deterministic disposal)
         this._captureListenersSync(() =>
         {
-            this.waterSurface = new WaterSurface({ waterMesh, foliageMesh })
+            this.waterSurface = new WaterSurface({
+                waterMesh,
+                foliageMesh,
+                terrainTexture: resources.origensTerrain,
+                bounds: this.world.bakedShadowMeta || ORIGENS_BOUNDS,
+                qualityTier: this.game.quality?.tier || 'Q0',
+            })
             this.grass = new Grass({
                 terrainTexture: resources.origensTerrain,
                 bounds: this.world.bakedShadowMeta || ORIGENS_BOUNDS,
@@ -187,8 +193,41 @@ export class OrigensEra
             this.gameplay = new OrigensGameplay(this)
         })
 
+        this._setupIslandPerimeterWalls()
+
         if(this.world?.player)
             this.attachPlayer(this.world.player)
+    }
+
+    _setupIslandPerimeterWalls()
+    {
+        this._perimeterPhysicals = []
+        if(!this.game?.physics)
+            return
+
+        // Soft invisible containment around Origens island shoreline so Victor never falls into the ocean void
+        const walls = [
+            { x: -33.6, y: 2.0, z: -18.0, hx: 0.5, hy: 4.0, hz: 32.0 }, // West shore
+            { x:  33.6, y: 2.0, z: -18.0, hx: 0.5, hy: 4.0, hz: 32.0 }, // East shore
+            { x:   0.0, y: 2.0, z:   9.2, hx: 34.5, hy: 4.0, hz: 0.5 }, // South shore (Rio Tocantins bank)
+            { x:   0.0, y: 2.0, z: -46.8, hx: 34.5, hy: 4.0, hz: 0.5 }, // North plateau rim
+        ]
+        for(const w of walls)
+        {
+            const phys = this.game.physics.getPhysical({
+                type: 'fixed',
+                position: { x: w.x, y: w.y, z: w.z },
+                colliders: [
+                    {
+                        shape: 'cuboid',
+                        parameters: [ w.hx, w.hy, w.hz ],
+                        position: { x: 0, y: 0, z: 0 },
+                    },
+                ],
+            })
+            if(phys)
+                this._perimeterPhysicals.push(phys)
+        }
     }
 
     attachPlayer(player)
@@ -380,8 +419,18 @@ export class OrigensEra
             }
         }
 
-        const ownedPhysicals = new Set()
+        const ownedPhysicals = new Set(this._perimeterPhysicals || [])
         const physicsWorld = this.game?.physics?.world
+
+        for(const phys of (this._perimeterPhysicals || []))
+        {
+            if(phys?.body)
+            {
+                phys.body.userData = null
+                physicsWorld?.removeRigidBody(phys.body)
+            }
+        }
+        this._perimeterPhysicals = []
 
         for(const obj of this.ownedObjects)
         {

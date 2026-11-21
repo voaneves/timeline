@@ -215,16 +215,16 @@ export class OrigensGameplay
 
         if(this.endDotIslandRef)
         {
-            // Arrival terrace pad on Provisional End-Dot Island (Three.js Y-up offset from island root)
+            // Clear of tubeOrigensEndDotArrivalPipe (-25.15, 5.87, -17.65): land on Step1 / terrace edge
             this.endDotArrivalPos = new THREE.Vector3(
-                this.endDotIslandRef.position.x - 3.15,
-                this.endDotIslandRef.position.y + 1.45,
-                this.endDotIslandRef.position.z + 2.35
+                this.endDotIslandRef.position.x - 1.45,
+                this.endDotIslandRef.position.y + 1.65,
+                this.endDotIslandRef.position.z + 3.15
             )
         }
         else
         {
-            this.endDotArrivalPos = new THREE.Vector3(-25.15, 5.45, -17.65)
+            this.endDotArrivalPos = new THREE.Vector3(-23.45, 5.65, -16.85)
         }
 
         ensureStampStyles()
