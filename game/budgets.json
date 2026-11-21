@@ -135,7 +135,7 @@
       },
       {
         "name": "eraOrigens",
-        "match": "(^|/)origens[^/]*\\.(glb|bin|png|ktx2|json)$",
+        "match": "(^|/)(origens[^/]*\\.(glb|bin|png|ktx2|json)|ponto_interativo\\.png)$",
         "budget": {
           "maxKB": 850,
           "failKB": 1000

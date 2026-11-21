@@ -5,11 +5,12 @@ import * as THREE from 'three/webgpu'
 import { Debug } from '../Debug.js'
 import { Game } from '../Game.js'
 import { Player } from '../Character/Player.js'
+import { AutoWalk } from '../Character/AutoWalk.js'
 import { MeshDefaultMaterial } from '../Materials/MeshDefaultMaterial.js'
 import { resolveAsset } from '../assetManifest.js'
 import { MovingPlatform } from './MovingPlatform.js'
 import { EraCycles } from '../Cycles/EraCycles.js'
-import { OrigensEra } from './Eras/OrigensEra.js'
+import { ZoneStreamer } from './ZoneStreamer.js'
 
 // Name of a glTF root node -> how the engine reads it (docs/PLAN-3D.md 5.3, Objects.getFromModel):
 //   `...Physical<Fixed|Dynamic|KinematicPositionBased>`  one rigid body; children cuboid*/tube*/hull*/trimesh*/ball* are its colliders
@@ -56,9 +57,11 @@ export class World
             this.vehicleModule = await import('../Physics/PhysicsVehicle.js')
 
         this.game.eraCycles = new EraCycles('origens')
-        this.origensEra = new OrigensEra(this)
-        await this.origensEra.load()
+        this.zoneStreamer = new ZoneStreamer(this)
+        this.origensEra = await this.zoneStreamer.loadEra('origens')
         this.setPlayer()
+        this.origensEra?.attachPlayer?.(this.player)
+        this.autoWalk = new AutoWalk(this)
     }
 
     async loadGreybox()
