@@ -28,6 +28,7 @@ import { Quality } from './Quality.js'
 import { PerfProbe } from './PerfProbe.js'
 import { Cards } from './UI/Cards.js'
 import { Hud } from './UI/Hud.js'
+import { Audio } from './Audio.js'
 
 export class Game
 {
@@ -135,6 +136,8 @@ export class Game
         this.world = new World()
         await this.world.ready // greybox glb (the `?demo` world is synchronous)
 
+        this.audio = new Audio(this)
+
         // `?debug=physics`: Rapier smoke test (T0.7), separate chunk, results in window.__physicsSmoke
         if(__DEV_TOOLS__ && Debug.getParam('debug') === 'physics')
             this.physicsSmoke = import('./Physics/PhysicsSmoke.js').then(({ runPhysicsSmoke }) => runPhysicsSmoke(this.RAPIER))
@@ -144,8 +147,9 @@ export class Game
 
         this.ready = true
 
-        // Lazy-load extra animation clips post-reveal
+        // Lazy-load extra animation clips & audio bank post-reveal
         this.world?.player?.visual?.loadExtras()
+        this.audio?.loadBank()
     }
 
     reset()
