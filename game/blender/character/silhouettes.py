@@ -79,7 +79,8 @@ def make_flat_ink_material(name: str = "VN_FlatInk", hex_color: str = INK_HEX) -
     mat = bpy.data.materials.get(name)
     if mat is None:
         mat = bpy.data.materials.new(name)
-    mat.use_nodes = True
+    if mat.node_tree is None and hasattr(mat, "use_nodes"):
+        mat.use_nodes = True
     nt = mat.node_tree
     nt.nodes.clear()
 
@@ -151,8 +152,8 @@ def make_ellipsoid(
     radii: tuple[float, float, float],
     location: tuple[float, float, float] = (0.0, 0.0, 0.0),
     rotation_deg: tuple[float, float, float] = (0.0, 0.0, 0.0),
-    segments: int = 24,
-    rings: int = 16,
+    segments: int = 12,
+    rings: int = 8,
     collection: bpy.types.Collection | str | None = None,
 ) -> bpy.types.Object:
     """Create a smooth ellipsoid mesh baked at `location` and `rotation_deg`."""
@@ -189,7 +190,7 @@ def make_tapered_limb(
     p_end: tuple[float, float, float],
     r_start: tuple[float, float],
     r_end: tuple[float, float],
-    segments: int = 16,
+    segments: int = 8,
     cap_roundness: float = 0.25,
     collection: bpy.types.Collection | str | None = None,
 ) -> bpy.types.Object:
@@ -268,7 +269,7 @@ def make_oriented_box(
     location: tuple[float, float, float],
     rotation_deg: tuple[float, float, float] = (0.0, 0.0, 0.0),
     bevel_width: float = 0.008,
-    segments: int = 2,
+    segments: int = 1,
     pivot: str = "CENTER",
     collection: bpy.types.Collection | str | None = None,
 ) -> bpy.types.Object:
@@ -416,7 +417,7 @@ def make_open_jacket_shell(
         # Angle runs from (-pi/2 + gap_half) around the back (+pi/2) to (3*pi/2 - gap_half)
         ang_start = -math.pi * 0.5 + gap_half
         ang_end = 1.5 * math.pi - gap_half
-        n_arc = 22
+        n_arc = 16
 
         z_levels = [
             (0.00, 1.00 + hem_flare, 1.00 + hem_flare * 0.85),
@@ -443,7 +444,7 @@ def make_open_jacket_shell(
                 z_local = z_base + (-sa) * tilt_front_z * (1.0 - t_z * 0.5)
 
                 # Slight lapel outward kick near the front opening edges
-                edge_ proximity = max(0.0, 1.0 - min(u, 1.0 - u) * 5.5)
+                edge_proximity = max(0.0, 1.0 - min(u, 1.0 - u) * 5.5)
                 lapel_out = edge_proximity * 0.018 * (0.4 + 0.6 * t_z)
 
                 ox = (rx + thickness + lapel_out) * ca
@@ -519,7 +520,7 @@ def make_open_jacket_shell(
         if collar_height > 0.005:
             c_ang_start = -math.pi * 0.5 + gap_half * 1.15
             c_ang_end = 1.5 * math.pi - gap_half * 1.15
-            n_col = 16
+            n_col = 12
             col_rx_base = chest_rx * 0.58
             col_ry_base = chest_ry * 0.58
             col_thick = thickness * 0.85
@@ -560,10 +561,11 @@ def make_open_jacket_shell(
     obj = bpy.data.objects.new(name, mesh)
     vn_scene.link_object(obj, collection)
     vn_shapes._ensure_mesh_uvs(obj)
-    vn_bevel.finalize_toy_mesh(
+    vn_bevel.apply_weighted_normals(
         obj,
-        bevel_width=0.004,
-        bevel_segments=2,
+        weight=50,
+        keep_sharp=True,
+        face_influence=False,
         apply=True,
     )
     return obj
@@ -754,14 +756,16 @@ def build_option_a(collection: bpy.types.Collection, x_offset: float = 0.0) -> t
         p_end=(0.0, 0.000, 0.680),
         r_start=(0.105, 0.078),
         r_end=(0.128, 0.088),
+        segments=12,
         collection=collection,
     )
     neck = make_tapered_limb(
         "OptA_Neck",
-        p_start=(0.0, -0.004, 0.670),
-        p_end=(0.0, -0.008, 0.760),
-        r_start=(0.045, 0.045),
-        r_end=(0.042, 0.042),
+        p_start=(0.0, -0.004, 0.665),
+        p_end=(0.0, -0.008, 0.785),
+        r_start=(0.048, 0.048),
+        r_end=(0.045, 0.045),
+        segments=10,
         collection=collection,
     )
     all_objs.extend([torso, neck])
@@ -836,7 +840,7 @@ def build_option_a(collection: bpy.types.Collection, x_offset: float = 0.0) -> t
         location=(0.0, 0.145, 0.555),
         rotation_deg=(-6.0, 0.0, 0.0),
         bevel_width=0.018,
-        segments=3,
+        segments=2,
         collection=collection,
     )
     pack_pocket = make_oriented_box(
@@ -845,7 +849,7 @@ def build_option_a(collection: bpy.types.Collection, x_offset: float = 0.0) -> t
         location=(0.0, 0.205, 0.515),
         rotation_deg=(-6.0, 0.0, 0.0),
         bevel_width=0.012,
-        segments=2,
+        segments=1,
         collection=collection,
     )
     all_objs.extend([pack_main, pack_pocket])
@@ -860,19 +864,19 @@ def build_option_a(collection: bpy.types.Collection, x_offset: float = 0.0) -> t
         collection=collection,
     )
     scarf_tail_pts = [
-        (0.02, 0.065, 0.695),
-        (0.08, 0.175, 0.680),
-        (0.16, 0.305, 0.615),
-        (0.24, 0.435, 0.585),
-        (0.31, 0.555, 0.640),
-        (0.36, 0.650, 0.615),
+        (0.02, 0.060, 0.695),
+        (0.11, 0.135, 0.680),
+        (0.19, 0.215, 0.625),
+        (0.25, 0.285, 0.595),
+        (0.30, 0.345, 0.642),
+        (0.33, 0.385, 0.625),
     ]
     scarf_tail = vn_shapes.make_ribbon(
         "OptA_ScarfTail",
         points=scarf_tail_pts,
-        width=0.082,
+        width=0.080,
         thickness=0.016,
-        step=0.04,
+        step=0.075,
         elevation=0.0,
         bevel_width=0.004,
         collection=collection,
@@ -932,10 +936,10 @@ def build_option_a(collection: bpy.types.Collection, x_offset: float = 0.0) -> t
         "OptA_HairQuiffMain",
         stations=[
             ((0.000, 0.105, 1.015), 0.125, 0.055, 0.0),
-            ((0.000, 0.010, 1.075), 0.132, 0.078, 4.0),
-            ((-0.006, -0.095, 1.125), 0.115, 0.086, 8.0),
-            ((-0.016, -0.195, 1.158), 0.082, 0.068, 13.0),
-            ((-0.026, -0.268, 1.182), 0.036, 0.032, 18.0),
+            ((-0.010, 0.010, 1.075), 0.130, 0.078, 6.0),
+            ((-0.032, -0.095, 1.125), 0.112, 0.086, 12.0),
+            ((-0.064, -0.195, 1.160), 0.078, 0.066, 18.0),
+            ((-0.098, -0.268, 1.182), 0.034, 0.030, 24.0),
         ],
         collection=collection,
     )
@@ -943,8 +947,8 @@ def build_option_a(collection: bpy.types.Collection, x_offset: float = 0.0) -> t
         "OptA_HairQuiffSideCrest",
         stations=[
             ((0.045, 0.025, 1.045), 0.075, 0.042, -12.0),
-            ((0.058, -0.075, 1.092), 0.068, 0.048, -16.0),
-            ((0.052, -0.168, 1.128), 0.034, 0.028, -20.0),
+            ((0.068, -0.075, 1.095), 0.066, 0.048, -16.0),
+            ((0.088, -0.168, 1.132), 0.032, 0.026, -22.0),
         ],
         collection=collection,
     )
@@ -1031,17 +1035,19 @@ def build_option_b(collection: bpy.types.Collection, x_offset: float = 0.0) -> t
     torso = make_tapered_limb(
         "OptB_TorsoTee",
         p_start=(0.0, 0.002, 0.340),
-        p_end=(0.0, 0.000, 0.640),
+        p_end=(0.0, 0.000, 0.650),
         r_start=(0.128, 0.098),
         r_end=(0.148, 0.108),
+        segments=12,
         collection=collection,
     )
     neck = make_tapered_limb(
         "OptB_Neck",
-        p_start=(0.0, -0.004, 0.625),
-        p_end=(0.0, -0.006, 0.715),
-        r_start=(0.052, 0.052),
-        r_end=(0.048, 0.048),
+        p_start=(0.0, -0.004, 0.620),
+        p_end=(0.0, -0.006, 0.775),
+        r_start=(0.058, 0.058),
+        r_end=(0.055, 0.055),
+        segments=10,
         collection=collection,
     )
     bomber = make_open_jacket_shell(
@@ -1135,14 +1141,14 @@ def build_option_b(collection: bpy.types.Collection, x_offset: float = 0.0) -> t
     tail_main = vn_shapes.make_ribbon(
         "OptB_ScarfTailA",
         points=[
-            (0.04, 0.075, 0.650),
-            (0.14, 0.210, 0.625),
-            (0.24, 0.355, 0.545),
-            (0.32, 0.485, 0.565),
+            (0.05, 0.070, 0.650),
+            (0.15, 0.165, 0.628),
+            (0.23, 0.265, 0.560),
+            (0.29, 0.350, 0.580),
         ],
-        width=0.105,
+        width=0.102,
         thickness=0.020,
-        step=0.04,
+        step=0.075,
         elevation=0.0,
         bevel_width=0.005,
         collection=collection,
@@ -1150,14 +1156,14 @@ def build_option_b(collection: bpy.types.Collection, x_offset: float = 0.0) -> t
     tail_second = vn_shapes.make_ribbon(
         "OptB_ScarfTailB",
         points=[
-            (-0.04, 0.075, 0.645),
-            (-0.14, 0.195, 0.585),
-            (-0.23, 0.325, 0.475),
-            (-0.28, 0.430, 0.445),
+            (-0.05, 0.070, 0.645),
+            (-0.15, 0.155, 0.590),
+            (-0.22, 0.245, 0.495),
+            (-0.26, 0.320, 0.468),
         ],
-        width=0.092,
+        width=0.090,
         thickness=0.018,
-        step=0.04,
+        step=0.075,
         elevation=0.0,
         bevel_width=0.005,
         collection=collection,
@@ -1209,10 +1215,10 @@ def build_option_b(collection: bpy.types.Collection, x_offset: float = 0.0) -> t
         "OptB_HairWaveQuiff",
         stations=[
             ((0.000, 0.115, 0.990), 0.148, 0.068, 0.0),
-            ((0.000, 0.005, 1.068), 0.158, 0.096, 6.0),
-            ((0.012, -0.105, 1.135), 0.140, 0.104, 12.0),
-            ((0.024, -0.205, 1.175), 0.102, 0.082, 18.0),
-            ((0.032, -0.258, 1.148), 0.052, 0.045, 24.0),
+            ((0.015, 0.005, 1.068), 0.158, 0.096, 8.0),
+            ((0.042, -0.105, 1.138), 0.138, 0.104, 16.0),
+            ((0.075, -0.205, 1.178), 0.098, 0.082, 22.0),
+            ((0.108, -0.258, 1.152), 0.048, 0.042, 28.0),
         ],
         collection=collection,
     )
@@ -1415,16 +1421,16 @@ def build_option_c(collection: bpy.types.Collection, x_offset: float = 0.0) -> t
     scarf_arc = vn_shapes.make_ribbon(
         "OptC_ScarfLongArc",
         points=[
-            (0.02, 0.058, 0.742),
-            (0.10, 0.185, 0.765),
-            (0.20, 0.345, 0.735),
-            (0.30, 0.515, 0.665),
-            (0.38, 0.685, 0.695),
-            (0.43, 0.815, 0.745),
+            (0.02, 0.055, 0.742),
+            (0.11, 0.135, 0.765),
+            (0.20, 0.220, 0.738),
+            (0.26, 0.300, 0.678),
+            (0.31, 0.365, 0.705),
+            (0.34, 0.410, 0.742),
         ],
         width=0.072,
         thickness=0.014,
-        step=0.04,
+        step=0.075,
         elevation=0.0,
         bevel_width=0.004,
         collection=collection,
@@ -1477,10 +1483,10 @@ def build_option_c(collection: bpy.types.Collection, x_offset: float = 0.0) -> t
         "OptC_HairAngularQuiff",
         stations=[
             ((0.000, 0.095, 1.028), 0.108, 0.048, 0.0),
-            ((-0.004, 0.000, 1.088), 0.112, 0.068, -6.0),
-            ((-0.015, -0.105, 1.142), 0.092, 0.072, -12.0),
-            ((-0.028, -0.215, 1.178), 0.056, 0.048, -18.0),
-            ((-0.038, -0.295, 1.198), 0.018, 0.018, -22.0),
+            ((-0.015, 0.000, 1.088), 0.110, 0.068, -8.0),
+            ((-0.042, -0.105, 1.142), 0.090, 0.072, -14.0),
+            ((-0.076, -0.215, 1.178), 0.054, 0.048, -20.0),
+            ((-0.112, -0.295, 1.198), 0.018, 0.018, -25.0),
         ],
         collection=collection,
     )
@@ -1488,8 +1494,8 @@ def build_option_c(collection: bpy.types.Collection, x_offset: float = 0.0) -> t
         "OptC_HairUpperSpike",
         stations=[
             ((0.022, 0.065, 1.045), 0.068, 0.038, 10.0),
-            ((0.036, -0.035, 1.115), 0.058, 0.045, 15.0),
-            ((0.045, -0.135, 1.168), 0.022, 0.022, 20.0),
+            ((0.052, -0.035, 1.115), 0.058, 0.045, 16.0),
+            ((0.086, -0.135, 1.172), 0.022, 0.022, 22.0),
         ],
         collection=collection,
     )
@@ -1687,7 +1693,7 @@ def render_silhouette_comparison_sheet(
     _draw_rect(canvas, 24, sheet_h - 56, sheet_w - 24, sheet_h - 53, ink_srgb)
     _draw_text(
         canvas,
-        "T2.A1 - VICTOR SILHOUETTES (1.20 M / FLAT INK FRONT + PROFILE)",
+        "T2.A1 - VICTOR SILHOUETTES (1.20 M / FLAT INK FRONT - PROFILE)",
         32,
         sheet_h - 18,
         ink_srgb,
@@ -1713,29 +1719,18 @@ def render_silhouette_comparison_sheet(
                 # Draw head-chin proportion guide line for this option (1 head below 1.20 m)
                 chin_z = metrics["chin_z_m"]
                 y_chin = _z_to_y(chin_z)
-                _draw_dashed_hline(
-                    canvas,
-                    y_chin,
-                    col_x0 + 18,
-                    col_x1 - 18,
-                    accent_srgb,
-                    dash=6,
-                    gap=6,
-                    thickness=1,
-                )
-                ratio_str = f"1/{metrics['head_to_body_ratio']:.1f}H ({metrics['head_height_m']:.2f}M)"
-                _draw_text(canvas, ratio_str, col_x0 + 24, y_chin - 6, accent_srgb, scale=2)
 
                 # Render Front (looking from -Y toward +Y) and Right Profile (looking from +X toward -X)
-                tgt = Vector((x_off, 0.0, z_center_m))
+                tgt_front = Vector((x_off, 0.0, z_center_m))
+                tgt_profile = Vector((x_off, 0.04, z_center_m))
                 views = (
-                    ("FRENTE", tgt + Vector((0.0, -3.5, 0.0))),
-                    ("PERFIL", tgt + Vector((3.5, 0.08, 0.0))),
+                    ("FRENTE", tgt_front + Vector((0.0, -3.5, 0.0)), tgt_front),
+                    ("PERFIL", tgt_profile + Vector((3.5, 0.0, 0.0)), tgt_profile),
                 )
 
-                for v_idx, (v_label, cam_pos) in enumerate(views):
+                for v_idx, (v_label, cam_pos, v_tgt) in enumerate(views):
                     cam_obj.location = cam_pos
-                    vn_scene._look_at(cam_obj, tgt)
+                    vn_scene._look_at(cam_obj, v_tgt)
 
                     tile_path = os.path.join(tmpdir, f"{opt_code}_{v_label}.png")
                     scene.render.filepath = tile_path
@@ -1757,7 +1752,6 @@ def render_silhouette_comparison_sheet(
                     ty1 = ty0 + tile_h
 
                     alpha = tile_rgba[:, :, 3:4]
-                    # Threshold/sharpen silhouette alpha slightly while keeping clean AA edge
                     ink_rgb = np.empty_like(tile_rgba[:, :, :3])
                     ink_rgb[:, :] = ink_srgb[:3]
                     region = canvas[ty0:ty1, tx0:tx1, :3]
@@ -1773,6 +1767,20 @@ def render_silhouette_comparison_sheet(
                         guide_srgb,
                         scale=2,
                     )
+
+                # Overlay dashed chin line and proportion label AFTER compositing silhouette
+                _draw_dashed_hline(
+                    canvas,
+                    y_chin,
+                    col_x0 + 16,
+                    col_x1 - 16,
+                    accent_srgb,
+                    dash=6,
+                    gap=6,
+                    thickness=1,
+                )
+                ratio_str = f"1/{metrics['head_to_body_ratio']:.1f}H"
+                _draw_text(canvas, ratio_str, col_x0 + 18, y_chin + 18, accent_srgb, scale=2)
 
                 # Column header & border separator
                 _draw_text(
