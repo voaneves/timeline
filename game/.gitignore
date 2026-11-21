@@ -2,5 +2,7 @@ tools/capture/out/
 tools/capture/baseline/
 tools/capture/runs/
 blender/*.glb
+blender/out/
+blender/**/__pycache__/
 dist/
 dist-debug/
