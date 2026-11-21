@@ -570,7 +570,7 @@ def make_copper_pipe(
         collection=collection,
         bevel_width=0.012,
         bevel_segments=1,
-        angle_deg=40.0,
+        angle_deg=55.0,
     )
     vn_scene.set_custom_props(
         obj,
@@ -863,32 +863,32 @@ def make_pequi_crate(
         swatch_name="woodDark",
     )
 
-    # 2. Horizontal exterior `wood` slats (3 per side face + 2 on top)
-    slat_z_levels = (0.17, 0.41, 0.65)
+    # 2. Horizontal exterior `wood` slats (2 wide planks per side face + 2 on top)
+    slat_z_levels = (0.23, 0.59)
     for z_lvl in slat_z_levels:
         # Front (-Y) and Back (+Y) slats
         _add_prism_to_bmesh(
             bm,
-            size=(0.82, 0.06, 0.18),
+            size=(0.82, 0.06, 0.26),
             center=(0.0, -0.39, z_lvl),
             swatch_name="wood",
         )
         _add_prism_to_bmesh(
             bm,
-            size=(0.82, 0.06, 0.18),
+            size=(0.82, 0.06, 0.26),
             center=(0.0, 0.39, z_lvl),
             swatch_name="wood",
         )
         # Left (-X) and Right (+X) slats
         _add_prism_to_bmesh(
             bm,
-            size=(0.06, 0.82, 0.18),
+            size=(0.06, 0.82, 0.26),
             center=(-0.39, 0.0, z_lvl),
             swatch_name="wood",
         )
         _add_prism_to_bmesh(
             bm,
-            size=(0.06, 0.82, 0.18),
+            size=(0.06, 0.82, 0.26),
             center=(0.39, 0.0, z_lvl),
             swatch_name="wood",
         )
@@ -1179,7 +1179,6 @@ def verify_trade_dress_and_budgets(pieces: dict[str, bpy.types.Object]) -> dict[
     for name, obj in pieces.items():
         integrity = inspect_mesh_integrity(obj)
         swatches = inspect_object_swatches(obj)
-        print(f"DEBUG_STAT {name}: tris={integrity['triangles']} non_manifold={integrity['non_manifold_edges']} zero_area={integrity['zero_area_faces']} swatches={swatches}")
         report["pieces"][name] = {
             **integrity,
             "swatches": swatches,
