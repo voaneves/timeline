@@ -271,12 +271,9 @@ def _finalize_kit_object(
     obj.location = tuple(float(v) for v in location)
     vn_scene.link_object(obj, collection)
 
-    # Bind the single shared 'palette' material while preserving per-face swatch UVs.
-    pal_mat = vn_palette.ensure_palette_material()
-    mesh.materials.clear()
-    mesh.materials.append(pal_mat)
-    for poly in mesh.polygons:
-        poly.material_index = 0
+    # Bind the single shared 'palette' material via `vn_palette.assign` using a
+    # callable selector (`poly -> None`) so per-face palette UVs are preserved.
+    vn_palette.assign(obj, lambda _poly: None)
 
     if bevel_width > 0.0 and bevel_segments > 0:
         vn_bevel.apply_bevel(
@@ -527,54 +524,54 @@ def make_ipe(
                 (
                     "ipeGold",
                     [
-                        ((0.15, -0.10, 4.25), 0.82),
-                        ((0.68, 0.35, 4.05), 0.65),
-                        ((-0.55, 0.38, 4.10), 0.64),
-                        ((0.05, -0.68, 3.98), 0.60),
+                        ((0.15, -0.10, 4.25), 0.85),
+                        ((0.72, 0.35, 4.05), 0.68),
+                        ((-0.58, 0.38, 4.10), 0.66),
+                        ((0.05, -0.72, 3.98), 0.62),
                     ],
-                    0.16,
-                    0.34,
+                    0.24,
+                    0.22,
                 ),
                 # NE blossom cluster
                 (
                     "ipeGold",
                     [
-                        ((1.45, 0.98, 3.78), 0.72),
-                        ((1.88, 0.65, 3.58), 0.56),
-                        ((1.10, 1.35, 3.62), 0.54),
+                        ((1.45, 0.98, 3.78), 0.74),
+                        ((1.88, 0.65, 3.58), 0.58),
+                        ((1.10, 1.35, 3.62), 0.56),
                     ],
-                    0.16,
-                    0.34,
+                    0.24,
+                    0.22,
                 ),
                 # NW blossom cluster
                 (
                     "ipeGold",
                     [
-                        ((-1.38, 1.05, 3.85), 0.70),
-                        ((-1.80, 0.70, 3.65), 0.55),
-                        ((-1.02, 1.42, 3.68), 0.52),
+                        ((-1.38, 1.05, 3.85), 0.72),
+                        ((-1.80, 0.70, 3.65), 0.56),
+                        ((-1.02, 1.42, 3.68), 0.54),
                     ],
-                    0.16,
-                    0.34,
+                    0.24,
+                    0.22,
                 ),
                 # SE & SW lower golden blossom clusters
                 (
                     "ipeGold",
                     [
-                        ((1.42, -1.08, 3.62), 0.68),
-                        ((1.02, -1.42, 3.48), 0.52),
+                        ((1.42, -1.08, 3.62), 0.70),
+                        ((1.02, -1.42, 3.48), 0.54),
                     ],
-                    0.16,
-                    0.36,
+                    0.24,
+                    0.24,
                 ),
                 (
                     "ipeGold",
                     [
-                        ((-1.22, -1.15, 3.90), 0.68),
-                        ((-1.62, -0.82, 3.70), 0.54),
+                        ((-1.22, -1.15, 3.90), 0.70),
+                        ((-1.62, -0.82, 3.70), 0.56),
                     ],
-                    0.16,
-                    0.36,
+                    0.24,
+                    0.24,
                 ),
             ]
             for idx, (sw, lobes, res, dec) in enumerate(crown_blob_specs):
@@ -740,8 +737,8 @@ def make_pequizeiro(
                     ((0.85, 0.42, 2.92), 0.76),
                     ((-0.78, 0.48, 2.98), 0.74),
                 ],
-                0.18,
-                0.35,
+                0.24,
+                0.24,
             ),
             # East spreading canopy (`pequi`)
             (
@@ -750,8 +747,8 @@ def make_pequizeiro(
                     ((1.85, 0.58, 2.85), 0.82),
                     ((1.32, 0.88, 3.02), 0.66),
                 ],
-                0.18,
-                0.35,
+                0.24,
+                0.24,
             ),
             # West spreading canopy (`cerradoGreen`)
             (
@@ -760,8 +757,8 @@ def make_pequizeiro(
                     ((-1.72, 0.52, 2.98), 0.80),
                     ((-1.20, 0.15, 3.12), 0.64),
                 ],
-                0.18,
-                0.35,
+                0.24,
+                0.24,
             ),
             # South canopy (`cerradoDeep`)
             (
@@ -770,8 +767,8 @@ def make_pequizeiro(
                     ((-0.48, -1.58, 2.98), 0.82),
                     ((0.22, -1.12, 2.88), 0.66),
                 ],
-                0.18,
-                0.35,
+                0.24,
+                0.24,
             ),
         ]
         for idx, (sw, lobes, res, dec) in enumerate(canopy_blobs):
@@ -969,29 +966,7 @@ def make_termite_mound(
 
         bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
 
-        # Assign earth swatches by height/normal: base skirt `lateriteDark`, body `termite`, warm highlights `laterite`
-        uv_layer = bm.loops.layers.uv.verify()
-        uv_termite = _swatch_uv("termite")
-        uv_laterite = _swatch_uv("laterite")
-        uv_dark = _swatch_uv("lateriteDark")
-        uv_ink = _swatch_uv("ink")
-
-        for face in bm.faces:
-            c = face.calc_center_median()
-            zn = (c.z - min_z) / span_z
-            r_xy = math.hypot(c.x, c.y)
-            if hollow and zn > 0.60 and r_xy < 0.19 and face.normal.z > 0.15:
-                uv = uv_ink
-            elif zn < 0.22:
-                uv = uv_dark
-            elif face.normal.z > 0.55 or zn > 0.74:
-                uv = uv_laterite
-            else:
-                uv = uv_termite
-            for loop in face.loops:
-                loop[uv_layer].uv = uv
-
-        return _finalize_kit_object(
+        obj = _finalize_kit_object(
             name=name,
             bm=bm,
             location=location,
@@ -1001,6 +976,22 @@ def make_termite_mound(
         )
     finally:
         bm.free()
+
+    def _mound_swatch(poly: bpy.types.MeshPolygon) -> str:
+        c = poly.center
+        zn = c.z / max(0.1, span_z)
+        r_xy = math.hypot(c.x, c.y)
+        if hollow and zn > 0.60 and r_xy < 0.19 and poly.normal.z > 0.15:
+            return "ink"
+        if zn < 0.22:
+            return "lateriteDark"
+        if poly.normal.z > 0.55 or zn > 0.74:
+            return "laterite"
+        return "termite"
+
+    vn_palette.assign(obj, _mound_swatch)
+    vn_manual.apply_manual_overrides(KIT_NAME, objects=[obj], preserve_transform=True)
+    return obj
 
 
 # --------------------------------------------------------- 6. Rocha Laterita (Laterite Rock)
@@ -1057,27 +1048,7 @@ def make_laterite_rock(
 
         bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
 
-        uv_layer = bm.loops.layers.uv.verify()
-        uv_rock = _swatch_uv("rock")
-        uv_rock_dark = _swatch_uv("rockDark")
-        uv_lat_dark = _swatch_uv("lateriteDark")
-        uv_lat = _swatch_uv("laterite")
-
-        for face in bm.faces:
-            c = face.calc_center_median()
-            zn = (c.z - min_z) / span_z
-            if zn < 0.22:
-                uv = uv_lat_dark
-            elif face.normal.z > 0.62:
-                uv = uv_rock
-            elif face.normal.x + face.normal.y > 0.45:
-                uv = uv_lat
-            else:
-                uv = uv_rock_dark
-            for loop in face.loops:
-                loop[uv_layer].uv = uv
-
-        return _finalize_kit_object(
+        obj = _finalize_kit_object(
             name=name,
             bm=bm,
             location=location,
@@ -1087,6 +1058,21 @@ def make_laterite_rock(
         )
     finally:
         bm.free()
+
+    def _rock_swatch(poly: bpy.types.MeshPolygon) -> str:
+        c = poly.center
+        zn = c.z / max(0.1, span_z * 0.78)
+        if zn < 0.22:
+            return "lateriteDark"
+        if poly.normal.z > 0.62:
+            return "rock"
+        if poly.normal.x + poly.normal.y > 0.45:
+            return "laterite"
+        return "rockDark"
+
+    vn_palette.assign(obj, _rock_swatch)
+    vn_manual.apply_manual_overrides(KIT_NAME, objects=[obj], preserve_transform=True)
+    return obj
 
 
 # --------------------------------------------------------- 7. Flores do Cerrado (Wildflowers)
