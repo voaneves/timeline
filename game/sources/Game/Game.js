@@ -26,6 +26,8 @@ import { Water } from './Water.js'
 import { Reveal } from './Reveal.js'
 import { Quality } from './Quality.js'
 import { PerfProbe } from './PerfProbe.js'
+import { Cards } from './UI/Cards.js'
+import { Hud } from './UI/Hud.js'
 
 export class Game
 {
@@ -77,6 +79,23 @@ export class Game
         }
 
         this.viewport = new Viewport(this.domElement)
+        this.cards = new Cards()
+        this.hud = new Hud(this.cards)
+        this.ui = {
+            cards: this.cards,
+            hud: this.hud,
+            announcer: this.cards.announcer,
+            openMilestone: (id) => this.cards.openMilestone(id),
+            openProject: (id) => this.cards.openProject(id),
+            openProjects: () => this.cards.openProjects(),
+            openContact: () => this.cards.openContact(),
+            openList: () => this.cards.openList(),
+            openMenu: () => this.hud.openMenu(),
+            closeCard: (byPointer) => this.cards.close(byPointer),
+            setEraProgress: (eraName, visited, total) => this.hud.setEraProgress(eraName, visited, total),
+            setSignalsCount: (count, total) => this.hud.setSignalsCount(count, total),
+            options: this.hud.options,
+        }
         this.rendering = new Rendering()
         await this.rendering.setRenderer()
 

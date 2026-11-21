@@ -2,7 +2,12 @@
 {
     --vn-ink: #0a0a0a;
     --vn-paper: #f4ead4;
+    --vn-surface: #efe4c5;
+    --vn-muted: #5c5446;
+    --vn-link: #b80000;
+    --vn-focus: #b80000;
     --vn-signal: #f50000;
+    --vn-tag-bg: #e6d8b5;
 }
 
 html, body
@@ -168,7 +173,7 @@ html.is-mode-touch .touch-controls
 .touch-camera-controls
 {
     position: absolute;
-    top: max(16px, env(safe-area-inset-top));
+    top: calc(max(16px, env(safe-area-inset-top)) + 68px);
     right: max(16px, env(safe-area-inset-right));
     display: flex;
     gap: 10px;
@@ -268,4 +273,539 @@ html.is-mode-touch .touch-buttons
 .touch-buttons .js-button.is-visible
 {
     display: inline-flex;
+}
+
+/* Screen-reader only live region */
+.sr-only
+{
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+/* Minimal branded HUD */
+.vn-hud
+{
+    position: absolute;
+    top: max(12px, env(safe-area-inset-top));
+    left: max(12px, env(safe-area-inset-left));
+    right: max(12px, env(safe-area-inset-right));
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+    pointer-events: none;
+    z-index: 20;
+    font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+
+.vn-hud-chip
+{
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 44px;
+    padding: 0 14px;
+    background: var(--vn-paper);
+    color: var(--vn-ink);
+    border: 2px solid var(--vn-ink);
+    border-radius: 999px;
+    box-shadow: 0 3px 0 var(--vn-ink);
+    font-size: 13px;
+    font-weight: 700;
+    line-height: 1.2;
+    white-space: nowrap;
+}
+
+.vn-hud-dot
+{
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--vn-signal);
+    border: 1.5px solid var(--vn-ink);
+    flex-shrink: 0;
+}
+
+.vn-hud-sep
+{
+    color: var(--vn-muted);
+}
+
+.vn-hud-signals
+{
+    color: var(--vn-muted);
+    font-variant-numeric: tabular-nums;
+}
+
+.vn-hud-actions
+{
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 8px;
+    pointer-events: auto;
+}
+
+.vn-hud-btn,
+.vn-btn
+{
+    box-sizing: border-box;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 44px;
+    min-height: 44px;
+    padding: 8px 14px;
+    border: 2px solid var(--vn-ink);
+    border-radius: 10px;
+    background: var(--vn-paper);
+    color: var(--vn-ink);
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 700;
+    line-height: 1.2;
+    text-decoration: none;
+    cursor: pointer;
+    box-shadow: 0 3px 0 var(--vn-ink);
+    transition: transform 0.08s ease;
+}
+
+.vn-hud-btn:hover,
+.vn-btn:hover
+{
+    background: var(--vn-surface);
+}
+
+.vn-hud-btn:active,
+.vn-btn:active
+{
+    transform: translateY(2px);
+    box-shadow: 0 1px 0 var(--vn-ink);
+}
+
+.vn-hud-btn:focus-visible,
+.vn-btn:focus-visible,
+.vn-select:focus-visible,
+.vn-toggle-input:focus-visible,
+.vn-card-link:focus-visible
+{
+    outline: 2px solid var(--vn-focus);
+    outline-offset: 2px;
+}
+
+.vn-hud-btn.is-muted
+{
+    color: var(--vn-link);
+}
+
+.vn-btn-primary
+{
+    background: var(--vn-ink);
+    color: var(--vn-paper);
+}
+
+.vn-btn-primary:hover
+{
+    background: #23201b;
+}
+
+.vn-btn-signal
+{
+    background: var(--vn-signal);
+    color: var(--vn-ink);
+}
+
+.vn-btn-signal:hover
+{
+    background: #ff2626;
+}
+
+.vn-btn-secondary
+{
+    background: var(--vn-surface);
+    color: var(--vn-ink);
+}
+
+.vn-icon-btn
+{
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    font-size: 22px;
+    line-height: 1;
+}
+
+/* Accessible <dialog> cards, list & menu */
+.vn-dialog
+{
+    box-sizing: border-box;
+    width: min(560px, calc(100vw - 24px));
+    max-width: calc(100vw - 24px);
+    max-height: calc(100dvh - 24px);
+    margin: auto;
+    padding: 0;
+    border: 2.5px solid var(--vn-ink);
+    border-radius: 14px;
+    background: var(--vn-paper);
+    color: var(--vn-ink);
+    box-shadow: 6px 6px 0 var(--vn-ink);
+    font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    overflow: hidden;
+}
+
+.vn-dialog::backdrop
+{
+    background: rgba(10, 10, 10, 0.56);
+    backdrop-filter: blur(2px);
+}
+
+.vn-card
+{
+    display: flex;
+    flex-direction: column;
+    max-height: calc(100dvh - 28px);
+}
+
+.vn-card-header
+{
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 16px 18px 12px;
+    border-bottom: 2px solid var(--vn-ink);
+    background: var(--vn-surface);
+}
+
+.vn-card-badge
+{
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--vn-link);
+}
+
+.vn-card-content,
+.vn-list-body,
+.vn-menu-body
+{
+    padding: 18px;
+    overflow-y: auto;
+}
+
+.vn-card-time
+{
+    display: inline-block;
+    margin-bottom: 6px;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--vn-muted);
+}
+
+.vn-card-title
+{
+    margin: 0 0 10px;
+    font-size: 22px;
+    line-height: 1.25;
+    color: var(--vn-ink);
+}
+
+.vn-card-title:focus
+{
+    outline: 2px solid var(--vn-focus);
+    outline-offset: 4px;
+    border-radius: 4px;
+}
+
+.vn-card-header .vn-card-title
+{
+    margin: 0;
+    font-size: 18px;
+}
+
+.vn-card-body
+{
+    margin: 0 0 14px;
+    font-size: 15px;
+    line-height: 1.5;
+    color: var(--vn-ink);
+}
+
+.vn-card-stack
+{
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 0 0 14px;
+    padding: 0;
+    list-style: none;
+}
+
+.vn-card-tag
+{
+    padding: 4px 10px;
+    border-radius: 999px;
+    border: 1.5px solid var(--vn-ink);
+    background: var(--vn-tag-bg);
+    color: var(--vn-ink);
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.vn-card-links
+{
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.vn-card-link
+{
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    padding: 0 14px;
+    border: 2px solid var(--vn-ink);
+    border-radius: 8px;
+    background: var(--vn-surface);
+    color: var(--vn-link);
+    font-size: 14px;
+    font-weight: 700;
+    text-decoration: none;
+}
+
+.vn-card-link:hover
+{
+    text-decoration: underline;
+}
+
+.vn-card-footer
+{
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 18px 16px;
+    border-top: 2px solid var(--vn-ink);
+    background: var(--vn-surface);
+}
+
+.vn-card-hint
+{
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--vn-muted);
+}
+
+/* Lista de marcos */
+.vn-list-dialog
+{
+    width: min(640px, calc(100vw - 24px));
+}
+
+.vn-list-section + .vn-list-section
+{
+    margin-top: 18px;
+    padding-top: 14px;
+    border-top: 1.5px solid var(--vn-ink);
+}
+
+.vn-list-era-title
+{
+    margin: 0 0 10px;
+    font-size: 14px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--vn-link);
+}
+
+.vn-list-items,
+.vn-projects-summary
+{
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.vn-list-item
+{
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 12px;
+    border: 1.5px solid var(--vn-ink);
+    border-radius: 10px;
+    background: var(--vn-surface);
+}
+
+.vn-list-item.is-visited
+{
+    border-left: 5px solid var(--vn-signal);
+}
+
+.vn-list-item-info
+{
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.vn-list-item-time
+{
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--vn-muted);
+}
+
+.vn-list-item-title
+{
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--vn-ink);
+}
+
+.vn-list-item-actions
+{
+    display: flex;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+/* Menu & options */
+.vn-menu-body
+{
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.vn-menu-cta-row
+{
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.vn-menu-field
+{
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 12px;
+    border: 1.5px solid var(--vn-ink);
+    border-radius: 10px;
+    background: var(--vn-surface);
+}
+
+.vn-menu-label
+{
+    font-size: 14px;
+    font-weight: 700;
+}
+
+.vn-select
+{
+    min-height: 44px;
+    padding: 0 12px;
+    border: 2px solid var(--vn-ink);
+    border-radius: 8px;
+    background: var(--vn-paper);
+    color: var(--vn-ink);
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 700;
+}
+
+.vn-toggle-row
+{
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-height: 44px;
+    padding: 10px 12px;
+    border: 1.5px solid var(--vn-ink);
+    border-radius: 10px;
+    background: var(--vn-surface);
+    cursor: pointer;
+}
+
+.vn-toggle-text
+{
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    font-size: 14px;
+}
+
+.vn-toggle-text small
+{
+    font-size: 12px;
+    color: var(--vn-muted);
+}
+
+.vn-toggle-input
+{
+    width: 24px;
+    height: 24px;
+    accent-color: var(--vn-signal);
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+@media (max-width: 640px)
+{
+    .vn-hud
+    {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 8px;
+    }
+
+    .vn-hud-chip
+    {
+        align-self: flex-start;
+        font-size: 12px;
+        padding: 0 12px;
+    }
+
+    .vn-hud-actions
+    {
+        justify-content: flex-start;
+    }
+
+    .vn-hud-btn
+    {
+        padding: 8px 10px;
+        font-size: 12px;
+    }
+
+    .vn-list-item
+    {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .vn-list-item-actions
+    {
+        justify-content: flex-end;
+    }
 }

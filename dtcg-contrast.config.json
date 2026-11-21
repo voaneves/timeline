@@ -122,6 +122,24 @@
       "name": "HUD muted text on its surface"
     },
     {
+      "fg": "color.hud.accent",
+      "bg": "color.hud.surface",
+      "level": "AA",
+      "name": "HUD accent text on its surface"
+    },
+    {
+      "fg": "color.hud.border",
+      "bg": "color.hud.surface",
+      "level": "UI",
+      "name": "HUD border on its surface"
+    },
+    {
+      "fg": "color.card.tag-text",
+      "bg": "color.card.tag-bg",
+      "level": "AA",
+      "name": "card stack tag text on tag background"
+    },
+    {
       "fg": "color.toast.text",
       "bg": "color.toast.surface",
       "level": "AA",

@@ -144,6 +144,44 @@
             "dark": "#a69c86"
           }
         }
+      },
+      "accent": {
+        "$value": "#b80000",
+        "$description": "HUD accent label / active indicator on HUD surface.",
+        "$extensions": {
+          "vn": {
+            "dark": "#ff5a5a"
+          }
+        }
+      },
+      "border": {
+        "$value": "#0a0a0a",
+        "$description": "HUD chip and button border.",
+        "$extensions": {
+          "vn": {
+            "dark": "#8a816f"
+          }
+        }
+      }
+    },
+    "card": {
+      "tag-bg": {
+        "$value": "#e6d8b5",
+        "$description": "Project stack tag background inside milestone/project cards.",
+        "$extensions": {
+          "vn": {
+            "dark": "#2b2722"
+          }
+        }
+      },
+      "tag-text": {
+        "$value": "#0a0a0a",
+        "$description": "Project stack tag text inside milestone/project cards.",
+        "$extensions": {
+          "vn": {
+            "dark": "#f4ead4"
+          }
+        }
       }
     },
     "toast": {

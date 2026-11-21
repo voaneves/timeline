@@ -158,6 +158,9 @@ export default class Keyboard
         if(this.canvasBlurred)
             return false
 
+        if(document.querySelector('dialog[open]'))
+            return false
+
         const active = document.activeElement
         if(this.isInteractiveElement(active))
             return false
