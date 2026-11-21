@@ -19,13 +19,17 @@ import hashlib
 import json
 import math
 import os
+import struct
 import sys
+import zlib
 from pathlib import Path
 from typing import Any, Iterable, Sequence
 
 import bmesh
 import bpy
+import numpy as np
 from mathutils import Euler, Matrix, Vector
+from mathutils.bvhtree import BVHTree
 
 HERE = Path(__file__).resolve().parent
 BLENDER_DIR = HERE.parent
@@ -42,6 +46,8 @@ from kits import (  # noqa: E402
     platform_kit,
 )
 from lib import (  # noqa: E402
+    vn_bake_ao,
+    vn_bake_shadow,
     vn_bevel,
     vn_collide,
     vn_export,
@@ -55,8 +61,10 @@ from lib import (  # noqa: E402
 OUT_DIR = BLENDER_DIR / "out"
 PREVIEWS_DIR = OUT_DIR / "previews"
 DEFAULT_GLB_OUT = OUT_DIR / "origens_blockout.glb"
+DEFAULT_FINAL_OUT_DIR = OUT_DIR / "eras" / "origens"
 DEFAULT_SPLINE_JSON_OUT = OUT_DIR / "origens_line_spline.json"
 DEFAULT_PREVIEW_OUT = PREVIEWS_DIR / "t210_origens_blockout.png"
+DEFAULT_FINAL_PREVIEW_OUT = PREVIEWS_DIR / "t214_origens_final.png"
 
 
 # ------------------------------------------------------------------ CLI parsing
@@ -65,9 +73,10 @@ DEFAULT_PREVIEW_OUT = PREVIEWS_DIR / "t210_origens_blockout.png"
 def parse_cli_args() -> dict[str, Any]:
     """Parse arguments after `--` on the Blender command line."""
     mode = "blockout"
-    out_glb = DEFAULT_GLB_OUT
-    out_spline = DEFAULT_SPLINE_JSON_OUT
-    out_preview = DEFAULT_PREVIEW_OUT
+    out_glb: Path | None = None
+    out_dir: Path | None = None
+    out_spline: Path | None = None
+    out_preview: Path | None = None
     render_preview = True
 
     if "--" in sys.argv:
@@ -81,6 +90,9 @@ def parse_cli_args() -> dict[str, Any]:
             elif arg == "--out" and i + 1 < len(args):
                 out_glb = Path(os.path.abspath(args[i + 1]))
                 i += 2
+            elif arg == "--out-dir" and i + 1 < len(args):
+                out_dir = Path(os.path.abspath(args[i + 1]))
+                i += 2
             elif arg == "--spline-out" and i + 1 < len(args):
                 out_spline = Path(os.path.abspath(args[i + 1]))
                 i += 2
@@ -93,11 +105,23 @@ def parse_cli_args() -> dict[str, Any]:
             else:
                 i += 1
 
+    if mode == "final":
+        resolved_out_dir = out_dir or DEFAULT_FINAL_OUT_DIR
+        resolved_spline = out_spline or (resolved_out_dir / "origens_line_spline.json")
+        resolved_preview = out_preview or DEFAULT_FINAL_PREVIEW_OUT
+        resolved_out_glb = out_glb or (resolved_out_dir / "origensVisual.glb")
+    else:
+        resolved_out_dir = out_dir or OUT_DIR
+        resolved_spline = out_spline or DEFAULT_SPLINE_JSON_OUT
+        resolved_preview = out_preview or DEFAULT_PREVIEW_OUT
+        resolved_out_glb = out_glb or DEFAULT_GLB_OUT
+
     return {
         "mode": mode,
-        "out_glb": out_glb,
-        "out_spline": out_spline,
-        "out_preview": out_preview,
+        "out_glb": resolved_out_glb,
+        "out_dir": resolved_out_dir,
+        "out_spline": resolved_spline,
+        "out_preview": resolved_preview,
         "render_preview": render_preview,
     }
 
@@ -308,11 +332,11 @@ def build_diorama_terrain_and_water(
     stats: dict[str, Any],
 ) -> dict[str, bpy.types.Object]:
     """Build the 70 x 55 m Origens diorama paper-cut island, stepped terraces, street curb, and Rio Tocantins."""
-    bm_terr = bmesh.new()
+    bm_borders = bmesh.new()
 
     # 1. Outer paper-cut diorama trim base (70 x 55 m footprint: X in [-35, +35], Y in [-12, +47])
     _add_box(
-        bm_terr,
+        bm_borders,
         size=(70.0, 56.0, 0.90),
         center=(0.0, 17.0, -0.95),
         swatch_name="paperWarm",
@@ -321,11 +345,21 @@ def build_diorama_terrain_and_water(
         bottom_swatch="ink",
     )
     _add_box(
-        bm_terr,
+        bm_borders,
         size=(70.6, 56.6, 0.18),
         center=(0.0, 17.0, -0.52),
         swatch_name="ink",
     )
+    borders_vis = _finalize_bmesh(
+        bm_borders,
+        name="OrigensPaperBorders",
+        location=(0.0, 0.0, 0.0),
+        collection=collection,
+        bevel_width=0.015,
+        bevel_segments=1,
+    )
+
+    bm_terr = bmesh.new()
 
     # 2. Main Lowland Ground Slab (X in [-34, +34], Y in [-10, +46], top at Z = 0.0 m)
     # Walkable across O1 (Spawn), O2 (1994 block + Casa Natal), O3 (Contact Pipe), and approach corridors.
@@ -639,7 +673,7 @@ def build_diorama_terrain_and_water(
         },
     )
 
-    return {"terrain_root": terrain_root, "water": water_vis}
+    return {"terrain_root": terrain_root, "water": water_vis, "borders": borders_vis}
 
 
 # ------------------------------------------------------------------ 2. Beats O1, O2, O3
@@ -2063,6 +2097,530 @@ def verify_origens_glb(glb_path: Path, stats: dict[str, Any]) -> dict[str, Any]:
     return report
 
 
+# ------------------------------------------------------------------ Final Assembly (T2.14a / T2.14b / T2.14c)
+
+
+INTERACTIVE_LANDMARK_MESHES = frozenset(
+    {
+        "OrigensHouseBody",
+        "OrigensHousePorch",
+        "OrigensHouseRoof",
+        "OrigensIpeBloom",
+        "screen",
+        "OrigensCrtPowerButton",
+        "OrigensCapelo",
+        "OrigensEndDotSphere",
+        "OrigensSignalBaseVisual",
+    }
+)
+
+FOLIAGE_STATIC_PREFIXES = (
+    "OrigensSecretBuriti",
+    "OrigensPequizeiro",
+    "OrigensIpeTrunk",
+    "OrigensCerradoFlowers",
+    "OrigensCerradoGrass",
+)
+
+
+def _png_chunk(chunk_type: bytes, data: bytes) -> bytes:
+    crc = zlib.crc32(chunk_type)
+    crc = zlib.crc32(data, crc) & 0xFFFFFFFF
+    return struct.pack(">I", len(data)) + chunk_type + data + struct.pack(">I", crc)
+
+
+def _encode_rgba_png(rgba_u8: np.ndarray) -> bytes:
+    """Encode a `(height, width, 4)` uint8 array as a lossless 8-bit RGBA PNG."""
+    arr = np.asarray(rgba_u8, dtype=np.uint8)
+    if arr.ndim != 3 or arr.shape[2] != 4:
+        raise ValueError(f"Expected (H, W, 4) uint8 array for RGBA PNG, got {arr.shape}")
+
+    height, width, _ = arr.shape
+    row_bytes = width * 4
+    stride = row_bytes + 1
+
+    raw_none = bytearray(stride * height)
+    raw_up = bytearray(stride * height)
+    flat_rows = arr.reshape(height, row_bytes)
+
+    for y in range(height):
+        off = y * stride
+        row_b = flat_rows[y].tobytes()
+        raw_none[off] = 0
+        raw_none[off + 1 : off + stride] = row_b
+
+        raw_up[off] = 2
+        if y == 0:
+            raw_up[off + 1 : off + stride] = row_b
+        else:
+            diff = (flat_rows[y].astype(np.int16) - flat_rows[y - 1].astype(np.int16)) & 0xFF
+            raw_up[off + 1 : off + stride] = diff.astype(np.uint8).tobytes()
+
+    comp_none = zlib.compress(bytes(raw_none), level=9)
+    comp_up = zlib.compress(bytes(raw_up), level=9)
+    idat_payload = comp_up if len(comp_up) <= len(comp_none) else comp_none
+
+    signature = b"\x89PNG\r\n\x1a\n"
+    ihdr = struct.pack(">IIBBBBB", width, height, 8, 6, 0, 0, 0)
+    return (
+        signature
+        + _png_chunk(b"IHDR", ihdr)
+        + _png_chunk(b"IDAT", idat_payload)
+        + _png_chunk(b"IEND", b"")
+    )
+
+
+def _classify_swatch_uv(u: float, v: float, swatch_uvs: dict[str, tuple[float, float]]) -> str:
+    """Return closest swatch name for a Blender `(u, v)` coordinate."""
+    best_name = "other"
+    best_d2 = 1e9
+    for name, (su, sv) in swatch_uvs.items():
+        d2 = (u - su) ** 2 + (v - sv) ** 2
+        if d2 < best_d2:
+            best_d2 = d2
+            best_name = name
+    return best_name
+
+
+def bake_terrain_data_mask(
+    terrain_obj: bpy.types.Object,
+    water_obj: bpy.types.Object,
+    bounds: tuple[float, float, float, float],
+    resolution: int = 512,
+    out_png_path: Path | None = None,
+) -> dict[str, Any]:
+    """Generate `origens_terrain.png` (lossless RGBA: R=laterite, G=grass, B=water, A=height)."""
+    res = max(64, int(resolution))
+    min_x, max_x, min_z, max_z = (float(b) for b in bounds)
+    span_x = max(max_x - min_x, 1e-4)
+    span_z = max(max_z - min_z, 1e-4)
+
+    swatch_uvs = {
+        "laterite": vn_palette.get_swatch_uv("laterite", gltf=False),
+        "lateriteDark": vn_palette.get_swatch_uv("lateriteDark", gltf=False),
+        "dryGrass": vn_palette.get_swatch_uv("dryGrass", gltf=False),
+        "cerradoGreen": vn_palette.get_swatch_uv("cerradoGreen", gltf=False),
+        "waterOrigens": vn_palette.get_swatch_uv("waterOrigens", gltf=False),
+        "dataTeal": vn_palette.get_swatch_uv("dataTeal", gltf=False),
+        "paperWarm": vn_palette.get_swatch_uv("paperWarm", gltf=False),
+        "paper": vn_palette.get_swatch_uv("paper", gltf=False),
+        "brick": vn_palette.get_swatch_uv("brick", gltf=False),
+        "rock": vn_palette.get_swatch_uv("rock", gltf=False),
+    }
+
+    bm_world = bmesh.new()
+    face_classes: list[int] = []  # 0=other, 1=laterite, 2=grass, 3=water
+    try:
+        for obj, is_water_obj in ((terrain_obj, False), (water_obj, True)):
+            bm_part = bmesh.new()
+            bm_part.from_mesh(obj.data)
+            bm_part.transform(obj.matrix_world)
+            uv_layer = bm_part.loops.layers.uv.active
+
+            # Tag faces before triangulate using a custom int layer
+            tag_layer = bm_part.faces.layers.int.new("mask_cls")
+            for face in bm_part.faces:
+                cls_id = 0
+                if uv_layer is not None and len(face.loops) > 0:
+                    uv = face.loops[0][uv_layer].uv
+                    sw = _classify_swatch_uv(float(uv.x), float(uv.y), swatch_uvs)
+                    if sw in ("waterOrigens", "dataTeal"):
+                        cls_id = 3
+                    elif sw in ("laterite", "lateriteDark", "paperWarm"):
+                        cls_id = 1
+                    elif sw in ("dryGrass", "cerradoGreen"):
+                        cls_id = 2
+                elif is_water_obj:
+                    cls_id = 3
+                face[tag_layer] = cls_id
+
+            bmesh.ops.triangulate(bm_part, faces=bm_part.faces)
+            vert_map = [bm_world.verts.new(v.co) for v in bm_part.verts]
+            for face in bm_part.faces:
+                try:
+                    new_f = bm_world.faces.new([vert_map[v.index] for v in face.verts])
+                    face_classes.append(face[tag_layer])
+                    _ = new_f
+                except ValueError:
+                    pass
+            bm_part.free()
+
+        bm_world.normal_update()
+        bvh = BVHTree.FromBMesh(bm_world)
+    finally:
+        bm_world.free()
+
+    # Sample A Linha spline in Blender XY so the trail under the ribbon gets painted in R (laterite)
+    ctrl_vecs = [Vector(tuple(float(c) for c in pt)) for pt in LINE_CONTROL_POINTS_BLENDER]
+    spline_pts, _ = vn_shapes._sample_spline_uniform(ctrl_vecs, step=0.25)
+    spline_xy = np.array([(p.x, p.y) for p in spline_pts], dtype=np.float32)
+
+    rgba = np.zeros((res, res, 4), dtype=np.uint8)
+    down = Vector((0.0, 0.0, -1.0))
+    min_h, max_h = -0.6, 2.6
+    inv_h_span = 1.0 / (max_h - min_h)
+
+    for iz in range(res):
+        v = (iz + 0.5) / res
+        world_z = min_z + v * span_z
+        bl_y = -world_z
+        for ix in range(res):
+            u = (ix + 0.5) / res
+            world_x = min_x + u * span_x
+            bl_x = world_x
+
+            hit_loc, _hit_norm, hit_idx, _hit_dist = bvh.ray_cast(
+                Vector((bl_x, bl_y, 6.0)), down, 12.0
+            )
+            if hit_loc is None or hit_idx is None:
+                continue
+
+            cls_id = face_classes[hit_idx] if hit_idx < len(face_classes) else 0
+            h_norm = max(0.0, min(1.0, (float(hit_loc.z) - min_h) * inv_h_span))
+            h_u8 = int(round(h_norm * 255.0))
+
+            if cls_id == 3:
+                rgba[iz, ix] = (0, 0, 255, h_u8)
+            elif cls_id == 1:
+                rgba[iz, ix] = (255, 0, 0, h_u8)
+            elif cls_id == 2:
+                rgba[iz, ix] = (0, 255, 0, h_u8)
+            else:
+                rgba[iz, ix] = (0, 0, 0, h_u8)
+
+    # Paint A Linha trail (1.1 m half-width) onto non-water terrain pixels in R (laterite)
+    xs = min_x + ((np.arange(res, dtype=np.float32) + 0.5) / res) * span_x
+    zs = min_z + ((np.arange(res, dtype=np.float32) + 0.5) / res) * span_z
+    grid_x, grid_z = np.meshgrid(xs, zs)
+    grid_bl_y = -grid_z
+    non_water = (rgba[:, :, 3] > 0) & (rgba[:, :, 2] == 0)
+    trail_r2 = 1.10 ** 2
+    for sx, sy in spline_xy[::2]:
+        d2 = (grid_x - sx) ** 2 + (grid_bl_y - sy) ** 2
+        mask = non_water & (d2 <= trail_r2)
+        rgba[mask, 0] = 255
+        rgba[mask, 1] = 0
+
+    png_bytes = _encode_rgba_png(rgba)
+    if out_png_path is not None:
+        out_png_path.parent.mkdir(parents=True, exist_ok=True)
+        out_png_path.write_bytes(png_bytes)
+
+    return {
+        "resolution": res,
+        "bytes": len(png_bytes),
+        "path": str(out_png_path) if out_png_path else None,
+        "bounds": [min_x, max_x, min_z, max_z],
+    }
+
+
+def _is_collider_obj(obj: bpy.types.Object) -> bool:
+    return obj.name.lower().startswith(vn_collide.COLLIDER_PREFIXES)
+
+
+def _is_dynamic_or_kinematic_ancestor(obj: bpy.types.Object) -> bool:
+    cur: bpy.types.Object | None = obj
+    while cur is not None:
+        ln = cur.name.lower()
+        if "physicaldynamic" in ln or "physicalkinematic" in ln:
+            return True
+        cur = cur.parent
+    return False
+
+
+def _merge_objects_into_static_mesh(
+    name: str,
+    objs: list[bpy.types.Object],
+    collection: bpy.types.Collection,
+) -> bpy.types.Object | None:
+    """Unparent, apply world transforms, and join `objs` into a single static mesh `name`."""
+    meshes = [o for o in objs if o is not None and o.type == "MESH" and o.data is not None]
+    if not meshes:
+        return None
+
+    view_layer = bpy.context.view_layer
+    for obj in meshes:
+        mw = obj.matrix_world.copy()
+        obj.parent = None
+        obj.matrix_world = mw
+        if obj.hide_select:
+            obj.hide_select = False
+    view_layer.update()
+
+    bpy.ops.object.select_all(action="DESELECT")
+    for obj in meshes:
+        obj.select_set(True)
+    view_layer.objects.active = meshes[0]
+    bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+
+    if len(meshes) > 1:
+        bpy.ops.object.join()
+
+    merged = view_layer.objects.active
+    merged.name = name
+    if merged.data is not None:
+        merged.data.name = name
+        pal_mat = vn_palette.ensure_palette_material()
+        merged.data.materials.clear()
+        merged.data.materials.append(pal_mat)
+        for poly in merged.data.polygons:
+            poly.material_index = 0
+
+    for col in list(merged.users_collection):
+        col.objects.unlink(merged)
+    collection.objects.link(merged)
+    return merged
+
+
+def _collect_subtree(root: bpy.types.Object, out: list[bpy.types.Object]) -> None:
+    if root not in out:
+        out.append(root)
+    for child in root.children:
+        _collect_subtree(child, out)
+
+
+def assemble_and_export_final(
+    out_dir: Path,
+    stats: dict[str, Any],
+) -> dict[str, Any]:
+    """T2.14a–c: Merge static visuals into <= 6 meshes, bake AO + terrain/shadow PNGs, and split-export 4 GLBs."""
+    out_dir.mkdir(parents=True, exist_ok=True)
+    scene = bpy.context.scene
+    bpy.context.view_layer.update()
+
+    all_objs = [
+        o
+        for o in scene.objects
+        if not any(c.name.startswith("_Preview") for c in o.users_collection)
+    ]
+
+    # 1. Compute shared engine XZ bounds across static terrain/water/landmarks before merging
+    terrain_obj = bpy.data.objects.get("OrigensTerrainVisual")
+    water_obj = bpy.data.objects.get("OrigensRioTocantinsWater")
+    if terrain_obj is None or water_obj is None:
+        raise RuntimeError("Missing OrigensTerrainVisual or OrigensRioTocantinsWater for terrain bake")
+
+    # Classify scene objects
+    ref_objs: list[bpy.types.Object] = []
+    dynamic_roots: list[bpy.types.Object] = []
+    fixed_physical_roots: list[bpy.types.Object] = []
+    interactive_objs: list[bpy.types.Object] = []
+    static_visuals: list[bpy.types.Object] = []
+
+    for obj in all_objs:
+        ln = obj.name.lower()
+        if obj.name.startswith("ref"):
+            ref_objs.append(obj)
+            continue
+        if obj.parent is None and ("physicaldynamic" in ln or "physicalkinematic" in ln):
+            dynamic_roots.append(obj)
+            continue
+        if obj.parent is None and "physicalfixed" in ln:
+            fixed_physical_roots.append(obj)
+            continue
+
+    for obj in all_objs:
+        if obj.type != "MESH" or obj.data is None:
+            continue
+        if _is_collider_obj(obj) or _is_dynamic_or_kinematic_ancestor(obj):
+            continue
+        if obj.name in INTERACTIVE_LANDMARK_MESHES:
+            interactive_objs.append(obj)
+            continue
+        static_visuals.append(obj)
+
+    # Compute bounds from static visuals (matches final merged bounds)
+    b_min_x, b_max_x, b_min_z, b_max_z, _, _ = vn_bake_shadow.compute_engine_xz_bounds(
+        static_visuals, padding=2.0
+    )
+    shared_bounds = (b_min_x, b_max_x, b_min_z, b_max_z)
+
+    # 2. T2.14b (part 1): Bake terrain height & RGBA data mask BEFORE merging terrain
+    terrain_png_path = out_dir / "origens_terrain.png"
+    terrain_mask_info = bake_terrain_data_mask(
+        terrain_obj=terrain_obj,
+        water_obj=water_obj,
+        bounds=shared_bounds,
+        resolution=512,
+        out_png_path=terrain_png_path,
+    )
+
+    # 3. Unparent interactive landmark meshes preserving world transforms so they export cleanly in origensObjects.glb
+    for obj in interactive_objs:
+        mw = obj.matrix_world.copy()
+        obj.parent = None
+        obj.matrix_world = mw
+    bpy.context.view_layer.update()
+
+    # 4. T2.14a: Merge static visuals into <= 6 meshes
+    visual_col = vn_scene.ensure_collection("OrigensVisualMerged")
+    groups: dict[str, list[bpy.types.Object]] = {
+        "OrigensPaperBorders": [],
+        "OrigensWaterBase": [],
+        "OrigensLineRibbon": [],
+        "OrigensFoliageStatic": [],
+        "OrigensOpaqueStatic": [],
+    }
+    for obj in static_visuals:
+        if obj.name == "OrigensPaperBorders":
+            groups["OrigensPaperBorders"].append(obj)
+        elif obj.name == "OrigensRioTocantinsWater":
+            groups["OrigensWaterBase"].append(obj)
+        elif obj.name == "OrigensLineRibbon":
+            groups["OrigensLineRibbon"].append(obj)
+        elif obj.name.startswith(FOLIAGE_STATIC_PREFIXES):
+            groups["OrigensFoliageStatic"].append(obj)
+        else:
+            groups["OrigensOpaqueStatic"].append(obj)
+
+    merged_static_objs: list[bpy.types.Object] = []
+    for gname, gobjs in groups.items():
+        merged = _merge_objects_into_static_mesh(gname, gobjs, visual_col)
+        if merged is not None:
+            merged_static_objs.append(merged)
+
+    if len(merged_static_objs) > 6:
+        raise AssertionError(f"Expected <= 6 merged static meshes, got {len(merged_static_objs)}")
+
+    # 5. T2.14a: Bake vertex AO (COLOR_0) on merged static meshes
+    # Subdivide only large opaque terrain/architecture faces (min_area=4.0, max_cuts=2)
+    # so contact creases are captured without blowing up the mobile triangle/byte budget.
+    opaque_obj = next((o for o in merged_static_objs if o.name == "OrigensOpaqueStatic"), None)
+    if opaque_obj is not None:
+        vn_bake_ao.subdivide_large_faces(opaque_obj, min_area=8.0, max_cuts=2)
+    ao_summary = vn_bake_ao.bake_vertex_ao(
+        merged_static_objs,
+        distance=0.6,
+        samples=64,
+        subdivide_area=0.0,
+    )
+
+    # 6. T2.14b (part 2): Bake top-down Q1 shadow map (1024x1024 R8 PNG + JSON)
+    shadow_png_path = out_dir / "origens_shadow.png"
+    shadow_meta_path = out_dir / "origens_shadow.json"
+    shadow_info = vn_bake_shadow.bake_topdown_shadow(
+        objects=merged_static_objs,
+        resolution=1024,
+        bounds=shared_bounds,
+        out_png_path=str(shadow_png_path),
+        out_meta_path=str(shadow_meta_path),
+    )
+
+    # 7. T2.14c: Split-export 4 GLBs
+    # 7a. origensVisual.glb (export_vertex_color="ACTIVE" ensures COLOR_0 AO is written)
+    vis_glb = out_dir / "origensVisual.glb"
+    vn_export.export_glb(
+        str(vis_glb),
+        objects=merged_static_objs,
+        export_vertex_color="ACTIVE",
+    )
+
+    # 7b. origensPhysical.glb (only *PhysicalFixed roots + their collider children)
+    phys_export_objs: list[bpy.types.Object] = []
+    for root in fixed_physical_roots:
+        phys_export_objs.append(root)
+        for child in root.children:
+            if _is_collider_obj(child):
+                phys_export_objs.append(child)
+    phys_glb = out_dir / "origensPhysical.glb"
+    vn_export.export_glb(str(phys_glb), objects=phys_export_objs)
+
+    # 7c. origensObjects.glb (dynamic physicals + interactive landmark meshes)
+    obj_export_objs: list[bpy.types.Object] = []
+    for root in dynamic_roots:
+        _collect_subtree(root, obj_export_objs)
+    for io_obj in interactive_objs:
+        if io_obj not in obj_export_objs:
+            obj_export_objs.append(io_obj)
+    objs_glb = out_dir / "origensObjects.glb"
+    vn_export.export_glb(str(objs_glb), objects=obj_export_objs)
+
+    # 7d. origensReferences.glb (all ref* empties)
+    refs_glb = out_dir / "origensReferences.glb"
+    vn_export.export_glb(str(refs_glb), objects=ref_objs)
+
+    # 8. Inspect & verify all 4 GLBs
+    vis_info = vn_export.inspect_glb(str(vis_glb))
+    phys_info = vn_export.inspect_glb(str(phys_glb))
+    objs_info = vn_export.inspect_glb(str(objs_glb))
+    refs_info = vn_export.inspect_glb(str(refs_glb))
+
+    if vis_info["meshes"] > 6:
+        raise AssertionError(f"origensVisual.glb has {vis_info['meshes']} meshes (must be <= 6)")
+    has_color0 = any(
+        "COLOR_0" in prim.get("attributes", {})
+        for mesh in vis_info["gltf"].get("meshes", [])
+        for prim in mesh.get("primitives", [])
+    )
+    if not has_color0:
+        raise AssertionError("origensVisual.glb is missing COLOR_0 vertex AO attribute")
+
+    all_nodes = []
+    for inf in (vis_info, phys_info, objs_info, refs_info):
+        all_nodes.extend(inf["gltf"].get("nodes", []))
+    all_names = {n.get("name", "") for n in all_nodes}
+
+    required_refs = [
+        "refRespawnOrigens",
+        "refRespawn",
+        "refMilestone1994",
+        "refHouse1994",
+        "refMilestone2005",
+        "refMilestone2011",
+        "refMilestoneContact",
+        "refPipeContact",
+        "refEndDotIsland",
+        "refEndDotSphere",
+        "refSecretTermite",
+        "refBusStopOrigens",
+        "refZoneBounding",
+        "refZoneFrustum",
+        *[f"refSeriema{i}" for i in range(1, 5)],
+        *[f"refLinePoint{i:02d}" for i in range(1, 17)],
+        *[f"refNav{i:02d}" for i in range(1, 13)],
+        *[f"refCamera{i}" for i in range(1, 6)],
+        *[f"refSignal{i:02d}" for i in range(1, 21)],
+    ]
+    missing_refs = [r for r in required_refs if r not in all_names]
+    if missing_refs:
+        raise AssertionError(f"Missing required refs across split GLBs: {missing_refs}")
+
+    required_meshes = ["OrigensLineRibbon", "OrigensEndDotSphere", "OrigensCapelo", "screen"]
+    missing_meshes = [m for m in required_meshes if m not in all_names]
+    if missing_meshes:
+        raise AssertionError(f"Missing required landmark meshes across split GLBs: {missing_meshes}")
+
+    report = {
+        "mode": "final",
+        "outDir": str(out_dir),
+        "visualMeshesCount": vis_info["meshes"],
+        "visualMeshNames": [o.name for o in merged_static_objs],
+        "ao": {
+            "objects": ao_summary["objects"],
+            "min": ao_summary["min_ao"],
+            "mean": ao_summary["mean_ao"],
+            "max": ao_summary["max_ao"],
+        },
+        "terrainMask": terrain_mask_info,
+        "shadowMask": {
+            "resolution": shadow_info["resolution"],
+            "bytes": shadow_info["bytes"],
+            "path": shadow_info["png_path"],
+            "metaPath": shadow_info["meta_path"],
+        },
+        "glbs": {
+            "origensVisual": {"bytes": vis_info["bytes"], "meshes": vis_info["meshes"], "triangles": vis_info["triangles"]},
+            "origensPhysical": {"bytes": phys_info["bytes"], "nodes": phys_info["nodes"]},
+            "origensObjects": {"bytes": objs_info["bytes"], "meshes": objs_info["meshes"], "nodes": objs_info["nodes"]},
+            "origensReferences": {"bytes": refs_info["bytes"], "nodes": refs_info["nodes"]},
+        },
+        "lineLengthM": stats["lineLengthM"],
+        "splineJsonPath": stats["splineJsonPath"],
+    }
+    print("ORIGENS_FINAL_OK", json.dumps(report, indent=2))
+    return report
+
+
 def main() -> None:
     cli = parse_cli_args()
     stats = build_origens_blockout(
@@ -2070,8 +2628,11 @@ def main() -> None:
         spline_json_out=cli["out_spline"],
     )
 
-    vn_export.export_glb(str(cli["out_glb"]))
-    verify_origens_glb(cli["out_glb"], stats)
+    if cli["mode"] == "final":
+        assemble_and_export_final(cli["out_dir"], stats)
+    else:
+        vn_export.export_glb(str(cli["out_glb"]))
+        verify_origens_glb(cli["out_glb"], stats)
 
     if cli["render_preview"]:
         vn_scene.render_3views(
