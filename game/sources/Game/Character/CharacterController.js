@@ -13,6 +13,7 @@ import { Game } from '../Game.js'
 import { Events } from '../Events.js'
 import { feel } from '../../data/feel.js'
 import { Stamp } from './Stamp.js'
+import { Grind } from './Grind.js'
 
 const DEG = Math.PI / 180
 const GRAVITY_FOR_LEAN = 9.81
@@ -83,6 +84,7 @@ export class CharacterController
         this.next = { x: translation.x, y: translation.y, z: translation.z }
         this.body.setNextKinematicRotation(this.yawQuaternion())
         this.stamp = new Stamp(this)
+        this.grind = new Grind(this)
     }
 
     // KCC parameters are cheap setters: re-applied when a value changes in the debug panel
@@ -118,6 +120,7 @@ export class CharacterController
         this.coyoteTimer = this.bufferTimer = this.glideTimer = 0
         this.jumping = this.gliding = this.glideUsed = false
         this.stamp.reset()
+        this.grind.reset()
         this.body.setTranslation({ x, y, z }, true)
         this.body.setRotation(this.yawQuaternion(), true)
         this.body.setNextKinematicTranslation({ x, y, z })
@@ -273,6 +276,13 @@ export class CharacterController
         this.bufferTimer = input.jumpPressed ? jump.bufferTime : Math.max(0, this.bufferTimer - dt)
 
         const stamping = this.stamp.advance(input, dt)
+
+        if(!stamping && this.grind.advance(input, dt))
+        {
+            if(this.next.y < feel.body.fallLimit)
+                this.respawn()
+            return
+        }
 
         if(stamping)
         {
