@@ -169,13 +169,16 @@ export class Pointer
                 this.pinch.baseDistance = this.pinch.distance
             }
         
-            const pinchRatio = this.pinch.distance / this.pinch.baseDistance
-
-            if(pinchRatio !== this.pinch.ratio)
+            if(this.pinch.baseDistance > 0)
             {
-                this.pinch.ratioDelta = pinchRatio - this.pinch.ratio
-                this.pinch.ratio = pinchRatio
-                this.events.trigger('pinch')
+                const pinchRatio = this.pinch.distance / this.pinch.baseDistance
+
+                if(pinchRatio !== this.pinch.ratio)
+                {
+                    this.pinch.ratioDelta = pinchRatio - this.pinch.ratio
+                    this.pinch.ratio = pinchRatio
+                    this.events.trigger('pinch')
+                }
             }
         }
         else

@@ -166,14 +166,6 @@ export class OrigensEra
         // Line spline ("a Linha")
         this.line = new Line({ game: this.game, url: null })
         await this.line.load('eras/origens/origens_line_spline.json')
-        this._captureListenersSync(() =>
-        {
-            if(this.game.ticker && !this.line._tickerBound)
-            {
-                this.line._tickerBound = true
-                this.game.ticker.events.on('tick', () => this.line.updateVisual(), 6)
-            }
-        })
         this.world.line = this.line
         if(this.game.world)
             this.game.world.line = this.line
@@ -369,32 +361,11 @@ export class OrigensEra
         // 3. Dispose Line spline & its Rapier sensor body
         if(this.line)
         {
-            if(this.line.sensorBody && this.game?.physics?.world)
-            {
-                this.game.physics.world.removeRigidBody(this.line.sensorBody)
-                this.line.sensorBody = null
-                this.line.sensorColliders = []
-            }
-            if(this.line.mesh)
-            {
-                this.line.mesh.removeFromParent()
-                this.line.mesh.geometry?.dispose()
-                this.line.mesh.material?.dispose()
-                this.line.mesh = null
-            }
-            if(this.line.glowMesh)
-            {
-                this.line.glowMesh.removeFromParent()
-                this.line.glowMesh.geometry?.dispose()
-                this.line.glowMesh.material?.dispose()
-                this.line.glowMesh = null
-            }
+            this.line.dispose?.()
             if(this.world?.line === this.line)
                 this.world.line = null
-            this.line.lut = []
-            this.line.controlPoints = []
-            this.line.milestones = []
-            this.line.curve = null
+            if(this.game.world?.line === this.line)
+                this.game.world.line = null
             this.line = null
         }
 
@@ -457,6 +428,7 @@ export class OrigensEra
         {
             this.paletteMaterial.dispose()
             this.paletteMaterial = null
+            this.game?.materials?.list?.delete?.('palette')
         }
 
         if(this.world?.bakedShadowTexture)

@@ -67,6 +67,7 @@ export class CharacterController
         this.movedSpeed = 0 // horizontal speed actually achieved this step (m/s, from the computed movement)
         this.slopeAngle = 0 // rad of the ground under the feet (0 when airborne)
         this.steps = 0
+        this.externalOverride = false
 
         // Jump state
         this.coyoteTimer = 0 // s left to still jump after leaving the ground
@@ -240,6 +241,9 @@ export class CharacterController
     // `jumpPressed` (edge, latched by the Player) and `jumpHeld`.
     step(input, dt)
     {
+        if(this.externalOverride)
+            return
+
         const move = feel.move
         const air = feel.air
         const velocity = this.velocity

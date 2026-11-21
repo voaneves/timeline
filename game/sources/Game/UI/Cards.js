@@ -511,10 +511,21 @@ export class Cards
         ul.className = 'vn-card-links'
         for(const item of items)
         {
+            let safeHref = null
+            try
+            {
+                const parsed = new URL(item.href, location.href)
+                if(parsed.protocol === 'https:' || parsed.protocol === 'http:' || parsed.protocol === 'mailto:')
+                    safeHref = parsed.href
+            }
+            catch {}
+            if(!safeHref)
+                continue
+
             const li = document.createElement('li')
             const a = document.createElement('a')
             a.className = 'vn-card-link'
-            a.href = item.href
+            a.href = safeHref
             a.target = '_blank'
             a.rel = 'noopener noreferrer'
             a.textContent = item.label

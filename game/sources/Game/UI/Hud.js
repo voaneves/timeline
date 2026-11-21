@@ -289,7 +289,6 @@ export class Hud
             return
         this._restoreByPointer = Boolean(byPointer)
         this.menuDialog.close()
-        this.cards?.restoreCanvasFocus(this._restoreByPointer)
     }
 
     setOption(key, value)

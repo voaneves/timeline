@@ -55,10 +55,11 @@ export class Tracks
             this.stampPair(pos.x, feetY, pos.z, controller.yaw, scale)
         }
 
-        this.game.ticker.events.on('tick', () =>
+        this._tickCallback = () =>
         {
             this.update()
-        }, 7)
+        }
+        this.game.ticker.events.on('tick', this._tickCallback, 7)
     }
 
     createBootGeometry()
@@ -271,6 +272,11 @@ export class Tracks
 
     dispose()
     {
+        if(this._tickCallback && this.game?.ticker?.events)
+        {
+            this.game.ticker.events.off('tick', this._tickCallback)
+            this._tickCallback = null
+        }
         if(this._boundController)
             this._boundController.events.off('land', this._onLand)
         this.mesh.removeFromParent()

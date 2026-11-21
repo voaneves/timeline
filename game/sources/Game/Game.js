@@ -181,6 +181,7 @@ export class Game
         this.wireframe = new PhysicsWireframe()
         this.world = new World()
         await this.world.ready // greybox glb (the `?demo` world is synchronous)
+        this.applyReducedMotion(this.ui.options.reducedMotion)
         this.resourcesLoader.finishCritical()
 
         this.audio = new Audio(this)

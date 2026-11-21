@@ -200,13 +200,14 @@ export class Audio
         if(typeof window === 'undefined')
             return
 
-        const unlock = () =>
+        this._unlockEvents = [ 'pointerdown', 'keydown', 'touchstart' ]
+        this._unlockHandler = () =>
         {
             this.unlock()
         }
 
-        for(const evt of [ 'pointerdown', 'keydown', 'touchstart' ])
-            window.addEventListener(evt, unlock, { passive: true })
+        for(const evt of this._unlockEvents)
+            window.addEventListener(evt, this._unlockHandler, { passive: true })
 
         document.addEventListener('visibilitychange', () =>
         {
@@ -219,13 +220,32 @@ export class Audio
         })
     }
 
+    cleanupUnlockGestures()
+    {
+        if(typeof window === 'undefined' || !this._unlockHandler)
+            return
+        if(this.unlocked && this.ctx?.state === 'running')
+        {
+            for(const evt of this._unlockEvents)
+                window.removeEventListener(evt, this._unlockHandler)
+            this._unlockHandler = null
+        }
+    }
+
     unlock()
     {
+        if(this.game?.paused)
+            return
+
         const ctx = this.ensureContext()
         this.unlocked = true
         if(ctx && ctx.state === 'suspended' && !this.muted)
         {
-            ctx.resume().catch(() => {})
+            ctx.resume().then(() => this.cleanupUnlockGestures()).catch(() => {})
+        }
+        else if(ctx && ctx.state === 'running')
+        {
+            this.cleanupUnlockGestures()
         }
         if(this.bankLoaded && !this.ambienceNodes && !this.muted)
             this.startAmbience()
@@ -523,7 +543,11 @@ export class Audio
                 try
                 {
                     if(this.ctx.state === 'suspended' && this.unlocked)
-                        this.ctx.resume().catch(() => {})
+                    {
+                        if(this.game?.paused)
+                            return
+                        this.ctx.resume().then(() => this.cleanupUnlockGestures()).catch(() => {})
+                    }
 
                     const source = this.ctx.createBufferSource()
                     source.buffer = buffer

@@ -282,7 +282,7 @@ export class OrigensGameplay
         this.game.ticker.events.on('fixedTick', () =>
         {
             this.fixedUpdate()
-        }, 5)
+        }, 1)
 
         this.game.ticker.events.on('tick', () =>
         {
@@ -360,6 +360,7 @@ export class OrigensGameplay
             ),
         }
 
+        this._boundController.externalOverride = true
         this._boundController.velocity.x = 0
         this._boundController.velocity.y = 0
         this._boundController.velocity.z = 0
@@ -392,6 +393,7 @@ export class OrigensGameplay
         if(w.step >= w.totalSteps)
         {
             this.warpState = null
+            c.externalOverride = false
             c.teleport(w.end.x, w.end.y, w.end.z, c.yaw)
             this.events.trigger('pipeWarpComplete', [ { x: w.end.x, y: w.end.y, z: w.end.z } ])
             c.events.trigger('pipeWarpComplete', [ { x: w.end.x, y: w.end.y, z: w.end.z } ])
@@ -555,6 +557,7 @@ export class OrigensGameplay
             clearTimeout(this._stampTimer)
         if(this._boundController)
         {
+            this._boundController.externalOverride = false
             this._boundController.events.off('stamp', this._onStamp)
             this._boundController.events.off('break', this._onBreak)
         }
@@ -564,7 +567,19 @@ export class OrigensGameplay
         this.signalsMesh?.removeFromParent()
         this.signalsMesh?.geometry.dispose()
         this.signalsMesh?.material.dispose()
-        this.retroConsole?.removeFromParent()
+        if(this.retroConsole)
+        {
+            this.retroConsole.traverse((child) =>
+            {
+                child.geometry?.dispose?.()
+                if(Array.isArray(child.material))
+                    child.material.forEach((m) => m?.dispose?.())
+                else
+                    child.material?.dispose?.()
+            })
+            this.retroConsole.removeFromParent()
+            this.retroConsole = null
+        }
         this.stampOverlay?.remove()
     }
 }

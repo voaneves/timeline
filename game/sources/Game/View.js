@@ -664,7 +664,7 @@ export class View
             {
                 if(!this.orbit.mouseDragging)
                     return
-                if(this.mode !== View.MODE_DEFAULT || this.game.inputs.locked || (_event.buttons & 5) === 0)
+                if(this.mode !== View.MODE_DEFAULT || this.game.inputs.locked || (_event.buttons & 3) === 0)
                 {
                     endMouseDrag()
                     return

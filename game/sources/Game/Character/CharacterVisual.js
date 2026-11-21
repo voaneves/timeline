@@ -130,6 +130,7 @@ export class CharacterVisual
         this.lookYaw = 0
         this.lookPitch = 0
         this.bones = { head: null, neck: null, scarf1: null, scarf2: null, scarf3: null }
+        this.restPose = { head: null, neck: null, scarf1: null, scarf2: null, scarf3: null }
 
         // Scarf spring-damper states
         this.scarfSprings = [
@@ -191,11 +192,11 @@ export class CharacterVisual
             }
             if(child.isBone)
             {
-                if(child.name === 'head') this.bones.head = child
-                else if(child.name === 'neck') this.bones.neck = child
-                else if(child.name === 'scarf.01') this.bones.scarf1 = child
-                else if(child.name === 'scarf.02') this.bones.scarf2 = child
-                else if(child.name === 'scarf.03') this.bones.scarf3 = child
+                if(child.name === 'head') { this.bones.head = child; this.restPose.head = child.quaternion.clone() }
+                else if(child.name === 'neck') { this.bones.neck = child; this.restPose.neck = child.quaternion.clone() }
+                else if(child.name === 'scarf.01') { this.bones.scarf1 = child; this.restPose.scarf1 = child.quaternion.clone() }
+                else if(child.name === 'scarf.02') { this.bones.scarf2 = child; this.restPose.scarf2 = child.quaternion.clone() }
+                else if(child.name === 'scarf.03') { this.bones.scarf3 = child; this.restPose.scarf3 = child.quaternion.clone() }
             }
         })
 
@@ -533,6 +534,13 @@ export class CharacterVisual
             return
 
         const safeDt = Math.min(dt, 0.05)
+
+        // Restore rest pose before mixer update so clips without neck/head keyframes never accumulate procedural rotation
+        if(this.bones.neck && this.restPose.neck)
+            this.bones.neck.quaternion.copy(this.restPose.neck)
+        if(this.bones.head && this.restPose.head)
+            this.bones.head.quaternion.copy(this.restPose.head)
+
         this.mixer.update(safeDt)
 
         this.updateLean()

@@ -110,6 +110,21 @@ export class Rendering
             this.renderer.inspector = new Inspector()
         }
 
+        if(this.game.canvasElement)
+        {
+            this.game.canvasElement.addEventListener('webglcontextlost', (event) =>
+            {
+                event.preventDefault()
+                console.warn('[Rendering] WebGL context lost')
+                this.game.ui?.announcer?.announce?.('Contexto gráfico perdido; tentando recuperar...')
+            })
+            this.game.canvasElement.addEventListener('webglcontextrestored', () =>
+            {
+                console.info('[Rendering] WebGL context restored')
+                this.game.ui?.announcer?.announce?.('Contexto gráfico restaurado')
+            })
+        }
+
         // Make the renderer control the ticker
         this.renderer.setAnimationLoop((elapsedTime) => { this.game.ticker.update(elapsedTime) })
 

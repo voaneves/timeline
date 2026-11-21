@@ -285,8 +285,44 @@ export class Line
         if(this.game.ticker && !this._tickerBound)
         {
             this._tickerBound = true
-            this.game.ticker.events.on('tick', () => this.updateVisual(), 6)
+            this._tickCallback = () => this.updateVisual()
+            this.game.ticker.events.on('tick', this._tickCallback, 6)
         }
+    }
+
+    dispose()
+    {
+        if(this._tickCallback && this.game?.ticker?.events)
+        {
+            this.game.ticker.events.off('tick', this._tickCallback)
+            this._tickCallback = null
+        }
+        this._tickerBound = false
+
+        if(this.sensorBody && this.game?.physics?.world)
+        {
+            this.game.physics.world.removeRigidBody(this.sensorBody)
+            this.sensorBody = null
+            this.sensorColliders = []
+        }
+        if(this.mesh)
+        {
+            this.mesh.removeFromParent()
+            this.mesh.geometry?.dispose()
+            this.mesh.material?.dispose()
+            this.mesh = null
+        }
+        if(this.glowMesh)
+        {
+            this.glowMesh.removeFromParent()
+            this.glowMesh.geometry?.dispose()
+            this.glowMesh.material?.dispose()
+            this.glowMesh = null
+        }
+        this.lut = []
+        this.controlPoints = []
+        this.milestones = []
+        this.curve = null
     }
 
     createRibbonGeometry(width, thickness)
