@@ -20,6 +20,17 @@ html, body
     touch-action: none;
 }
 
+.js-canvas:focus
+{
+    outline: none;
+}
+
+.js-canvas:focus-visible
+{
+    outline: 3px solid #f50000;
+    outline-offset: -3px;
+}
+
 .touch-buttons
 {
     display: none;

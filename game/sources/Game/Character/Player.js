@@ -9,6 +9,7 @@
 //   `ticker.alpha`. The lean (visual bank) is applied per frame to a child mesh; the View follows the interpolated visual.
 // - Debug: folder "Feel" in the Tweakpane (only built when the debug panel is active).
 import * as THREE from 'three/webgpu'
+import { Events } from '../Events.js'
 import { Game } from '../Game.js'
 import { CharacterController } from './CharacterController.js'
 import { feel, resetFeel } from '../../data/feel.js'
@@ -32,9 +33,11 @@ export class Player
     constructor()
     {
         this.game = Game.getInstance()
+        this.events = new Events()
         this.feel = feel // tunables, reachable from tests (window.game.world.player.feel)
         this.stampLatch = false // same, for the stamp
         this.jumpLatch = false // a press since the last fixed step (a tap shorter than a frame is never lost)
+        this.interactCount = 0 // Phase 2 interactive hook counter
         this.input = { x: 0, z: 0, speed: 0, jumpPressed: false, jumpHeld: false, stampPressed: false } // world-space wanted direction (unit) and speed, last fixed step
 
         this.setActions()
@@ -65,6 +68,7 @@ export class Player
             { name: 'run', categories, keys: [] }, // forces a run whatever the deflection (no default key: Shift is the stamp; ghosts inject it by name)
             { name: 'jump', categories, keys: [ 'Keyboard.Space', 'Gamepad.cross' ] }, // press = jump (buffered), in the air = ribbon glide
             { name: 'stamp', categories, keys: [ 'Keyboard.ShiftLeft', 'Keyboard.ShiftRight', 'Keyboard.KeyC', 'Gamepad.circle' ] }, // in the air: lock, dive, mark the ground
+            { name: 'interact', categories, keys: [ 'Keyboard.KeyE', 'Keyboard.Enter', 'Gamepad.square' ] }, // Phase 2 interactive hook
             { name: 'moveStick', categories, keys: [ 'Gamepad.joystickLeft' ] }, // analog: value { x, y, radius, active }
         ])
 
@@ -77,6 +81,14 @@ export class Player
         {
             if(action.active)
                 this.stampLatch = true
+        })
+        this.game.inputs.events.on('interact', (action) =>
+        {
+            if(action.active)
+            {
+                this.interactCount++
+                this.events.trigger('interact', [ action ])
+            }
         })
     }
 

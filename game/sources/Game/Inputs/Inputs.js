@@ -49,6 +49,10 @@ export class Inputs
         this.setInteractiveButtons()
         this.setNipple()
 
+        this.addActions([
+            { name: 'menu', categories: [], keys: [ 'Keyboard.Escape', 'Gamepad.start' ] },
+            { name: 'map', categories: [ 'wandering' ], keys: [ 'Keyboard.KeyM', 'Gamepad.select' ] },
+        ])
         this.addActions(actions)
         
         for(const filter of filters)
@@ -64,7 +68,7 @@ export class Inputs
 
     setKeyboard()
     {
-        this.keyboard = new Keyboard()
+        this.keyboard = new Keyboard(this.game.canvasElement)
 
         this.keyboard.events.on('down', (key, code) =>
         {
@@ -110,7 +114,19 @@ export class Inputs
 
         this.gamepad.events.on('joystickChange', (joystick) =>
         {
-            this.change(`Gamepad.joystick${joystick.name.charAt(0).toUpperCase() + joystick.name.slice(1)}`, { x: joystick.x, y: joystick.y, radius: joystick.radius, active: joystick.active })
+            if(joystick.active)
+                this.updateMode(Inputs.MODE_GAMEPAD)
+
+            const scale = joystick.active && joystick.radius > 0 ? joystick.safeRadius / joystick.radius : 0
+            this.change(
+                `Gamepad.joystick${joystick.name.charAt(0).toUpperCase() + joystick.name.slice(1)}`,
+                {
+                    x: joystick.x * scale,
+                    y: joystick.y * scale,
+                    radius: joystick.active ? joystick.safeRadius : 0,
+                    active: joystick.active
+                }
+            )
         })
     }
 
@@ -302,20 +318,29 @@ export class Inputs
                 if(action.value !== value)
                     hasChanged = true
             }
-            else if(typeof value === 'object')
+            else if(value && typeof value === 'object')
             {
                 const keys = Object.keys(value)
 
-                for(const key of keys)
+                if(!action.value || typeof action.value !== 'object')
                 {
-                    if(action.value[key] !== value[key])
-                        hasChanged = true
+                    hasChanged = true
+                }
+                else
+                {
+                    for(const key of keys)
+                    {
+                        if(action.value[key] !== value[key])
+                            hasChanged = true
+                    }
                 }
             }
 
             if(hasChanged)
             {
                 action.value = value
+                if(value && typeof value === 'object' && typeof value.active === 'boolean')
+                    action.active = value.active
                 action.trigger = 'change'
 
                 this.events.trigger('actionChange', [ action ])

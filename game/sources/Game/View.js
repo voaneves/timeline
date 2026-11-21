@@ -69,6 +69,7 @@ export class View
         this.setFocusPoint()
         this.setZoom()
         this.setSpherical()
+        this.setManualOrbit()
         this.setRoll()
         this.setCameras()
         this.setOptimalArea()
@@ -218,6 +219,8 @@ export class View
     // Fixed step: control yaw from the SIMULATED position (rigid body), never from the interpolated visual or the frame delta
     fixedUpdate()
     {
+        this.updateManualOrbit(this.game.ticker.fixedDelta)
+
         let x = 0
         let z = 0
         const body = this.getSubject()?.object?.physical?.body
@@ -547,6 +550,91 @@ export class View
         }
     }
 
+    // Manual orbit (plan 3.3 & 3.4): Q/E or right analog stick, clamped to +-25 deg yaw and +-8 deg pitch,
+    // springs back to 0 within 1.2 s after input stops. Applied on top of the authored yaw without altering controlYaw.
+    setManualOrbit()
+    {
+        this.orbit = {
+            yaw: 0,
+            yawPrevious: 0,
+            pitch: 0,
+            pitchPrevious: 0,
+            yawSpring: { x: 0, v: 0 },
+            pitchSpring: { x: 0, v: 0 },
+            maxYaw: 25 * DEG,
+            maxPitch: 8 * DEG,
+            yawRate: 50 * DEG,
+            pitchRate: 24 * DEG,
+            returnDuration: 1.2,
+            returnHalfLife: 0.25,
+            active: false,
+        }
+
+        this.game.inputs.addActions([
+            { name: 'cameraOrbitLeft',  categories: [ 'wandering' ], keys: [ 'Keyboard.KeyQ' ] },
+            { name: 'cameraOrbitRight', categories: [ 'wandering' ], keys: [ 'Keyboard.KeyE' ] },
+            { name: 'cameraOrbitStick', categories: [ 'wandering' ], keys: [ 'Gamepad.joystickRight' ] },
+        ])
+    }
+
+    updateManualOrbit(dt)
+    {
+        const orbit = this.orbit
+        orbit.yawPrevious = orbit.yaw
+        orbit.pitchPrevious = orbit.pitch
+
+        const actions = this.game.inputs.actions
+        const left = actions.get('cameraOrbitLeft')?.active ? 1 : 0
+        const right = actions.get('cameraOrbitRight')?.active ? 1 : 0
+        let yawInput = right - left
+        let pitchInput = 0
+
+        const stick = actions.get('cameraOrbitStick')?.value
+        if(stick && typeof stick === 'object' && stick.active)
+        {
+            if(Math.abs(stick.x) > Math.abs(yawInput))
+                yawInput = clamp(stick.x, -1, 1)
+            pitchInput = clamp(stick.y, -1, 1)
+        }
+
+        const hasYawInput = Math.abs(yawInput) > 1e-4
+        const hasPitchInput = Math.abs(pitchInput) > 1e-4
+        orbit.active = hasYawInput || hasPitchInput
+
+        if(hasYawInput)
+        {
+            orbit.yawSpring.x = clamp(orbit.yawSpring.x + yawInput * orbit.yawRate * dt, -orbit.maxYaw, orbit.maxYaw)
+            orbit.yawSpring.v = 0
+        }
+        else if(orbit.yawSpring.x !== 0 || orbit.yawSpring.v !== 0)
+        {
+            springStep(orbit.yawSpring, 0, orbit.returnHalfLife, dt)
+            if(Math.abs(orbit.yawSpring.x) < 1e-4 && Math.abs(orbit.yawSpring.v) < 1e-4)
+            {
+                orbit.yawSpring.x = 0
+                orbit.yawSpring.v = 0
+            }
+        }
+
+        if(hasPitchInput)
+        {
+            orbit.pitchSpring.x = clamp(orbit.pitchSpring.x + pitchInput * orbit.pitchRate * dt, -orbit.maxPitch, orbit.maxPitch)
+            orbit.pitchSpring.v = 0
+        }
+        else if(orbit.pitchSpring.x !== 0 || orbit.pitchSpring.v !== 0)
+        {
+            springStep(orbit.pitchSpring, 0, orbit.returnHalfLife, dt)
+            if(Math.abs(orbit.pitchSpring.x) < 1e-4 && Math.abs(orbit.pitchSpring.v) < 1e-4)
+            {
+                orbit.pitchSpring.x = 0
+                orbit.pitchSpring.v = 0
+            }
+        }
+
+        orbit.yaw = clamp(orbit.yawSpring.x, -orbit.maxYaw, orbit.maxYaw)
+        orbit.pitch = clamp(orbit.pitchSpring.x, -orbit.maxPitch, orbit.maxPitch)
+    }
+
     setRoll()
     {
         this.roll = {}
@@ -822,8 +910,11 @@ export class View
 
         // Radius and visual yaw: the control yaw only changes on the fixed step; the render interpolates between steps
         this.spherical.radius.current = this.framing.distance
-        const yaw = lerp(this.controlYawPrevious, this.controlYaw, this.game.ticker.alpha)
-        this.spherical.offset.setFromSphericalCoords(this.spherical.radius.current, this.spherical.phi, yaw)
+        const orbitYaw = lerp(this.orbit.yawPrevious, this.orbit.yaw, this.game.ticker.alpha)
+        const orbitPitch = lerp(this.orbit.pitchPrevious, this.orbit.pitch, this.game.ticker.alpha)
+        const yaw = lerp(this.controlYawPrevious, this.controlYaw, this.game.ticker.alpha) + orbitYaw
+        const phi = clamp(this.spherical.phi + orbitPitch, 0.15, Math.PI * 0.48)
+        this.spherical.offset.setFromSphericalCoords(this.spherical.radius.current, phi, yaw)
 
         // Position
         this.position.copy(this.focusPoint.smoothedPosition).add(this.spherical.offset)
