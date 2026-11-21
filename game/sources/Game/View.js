@@ -501,6 +501,14 @@ export class View
         this.zoom.sensitivity = 0.05
         this.zoom.toggle = 0
         this.zoom.toggleLast = -1
+        this.zoom.minMultiplier = 0.60
+        this.zoom.maxMultiplier = 1.65
+        this.zoom.wheelSensitivity = 0.08
+        this.zoom.halfLife = 0.08
+        this.zoom.multiplier = 1.0
+        this.zoom.targetMultiplier = 1.0
+        this.zoom.multiplierSpring = { x: 1.0, v: 0 }
+        this.zoomMultiplier = 1.0
 
         this.game.inputs.addActions([
             { name: 'zoom',    categories: [ 'wandering', 'racing' ], keys: [ 'Wheel.roll' ] },
@@ -511,6 +519,13 @@ export class View
         {
             this.zoom.baseRatio -= action.value * this.zoom.sensitivity
             this.zoom.baseRatio = clamp(this.zoom.baseRatio, 0, 1)
+
+            this.zoom.targetMultiplier = clamp(
+                this.zoom.targetMultiplier + action.value * this.zoom.wheelSensitivity,
+                this.zoom.minMultiplier,
+                this.zoom.maxMultiplier
+            )
+            this.zoomMultiplier = this.zoom.targetMultiplier
         })
 
         this.game.inputs.events.on('zoomToggle', (action) =>
@@ -585,7 +600,21 @@ export class View
             returnDuration: 1.2,
             returnHalfLife: 0.25,
             active: false,
+            mouseDragYaw: 0,
+            mouseDragPitch: 0,
+            mouseDragYawTarget: 0,
+            mouseDragPitchTarget: 0,
+            mouseDragYawSpring: { x: 0, v: 0 },
+            mouseDragPitchSpring: { x: 0, v: 0 },
+            mouseDragMinPitch: -12 * DEG,
+            mouseDragMaxPitch: 22 * DEG,
+            mouseDragHalfLife: 0.055,
+            mouseDragging: false,
+            mouseLastX: 0,
+            mouseLastY: 0,
         }
+        this.mouseDragYaw = 0
+        this.mouseDragPitch = 0
 
         this.game.inputs.addActions([
             { name: 'cameraOrbitLeft',       categories: [ 'wandering' ], keys: [ 'Keyboard.KeyQ', 'Touch.cameraOrbitLeft' ] },
@@ -606,6 +635,78 @@ export class View
             if(action.trigger === 'start')
                 this.orbit.nudgeLatch += this.orbit.nudgeAngle
         })
+
+        const canvas = this.game.canvasElement
+        if(canvas)
+        {
+            const endMouseDrag = () =>
+            {
+                if(!this.orbit.mouseDragging)
+                    return
+                this.orbit.mouseDragging = false
+                canvas.classList.remove('is-dragging')
+            }
+
+            canvas.addEventListener('mousedown', (_event) =>
+            {
+                if(this.mode !== View.MODE_DEFAULT || this.game.inputs.locked)
+                    return
+                if(_event.button !== 0 && _event.button !== 2)
+                    return
+
+                this.orbit.mouseDragging = true
+                this.orbit.mouseLastX = _event.clientX
+                this.orbit.mouseLastY = _event.clientY
+                canvas.classList.add('is-dragging')
+            })
+
+            window.addEventListener('mousemove', (_event) =>
+            {
+                if(!this.orbit.mouseDragging)
+                    return
+                if(this.mode !== View.MODE_DEFAULT || this.game.inputs.locked || (_event.buttons & 5) === 0)
+                {
+                    endMouseDrag()
+                    return
+                }
+
+                const dx = _event.clientX - this.orbit.mouseLastX
+                const dy = _event.clientY - this.orbit.mouseLastY
+                this.orbit.mouseLastX = _event.clientX
+                this.orbit.mouseLastY = _event.clientY
+
+                const refSize = Math.max(320, Math.min(this.game.viewport.width || 1280, this.game.viewport.height || 720))
+                const yawDelta = - (dx / refSize) * Math.PI * 1.35
+                const pitchDelta = - (dy / refSize) * (34 * DEG)
+
+                this.orbit.mouseDragYawTarget += yawDelta
+                this.orbit.mouseDragPitchTarget = clamp(
+                    this.orbit.mouseDragPitchTarget + pitchDelta,
+                    this.orbit.mouseDragMinPitch,
+                    this.orbit.mouseDragMaxPitch
+                )
+            })
+
+            window.addEventListener('mouseup', endMouseDrag)
+            window.addEventListener('blur', endMouseDrag)
+
+            canvas.addEventListener('dblclick', () =>
+            {
+                if(this.mode !== View.MODE_DEFAULT || this.game.inputs.locked)
+                    return
+                this.resetMouseCamera()
+            })
+        }
+    }
+
+    resetMouseCamera()
+    {
+        // Collapse accumulated multi-turn target to shortest angle to 0 so spring unwinds smoothly
+        this.orbit.mouseDragYawSpring.x = smallestAngle(0, this.orbit.mouseDragYawSpring.x)
+        this.orbit.mouseDragYawTarget = 0
+        this.orbit.mouseDragPitchTarget = 0
+        this.zoom.targetMultiplier = 1.0
+        this.zoomMultiplier = 1.0
     }
 
     updateManualOrbit(dt)
@@ -920,11 +1021,10 @@ export class View
 
             if(this.mode === View.MODE_DEFAULT)
             {
-                // Focus point
+                // Two-finger touch pan & pinch when no touchControls subject override is active
                 if(action.active)
                 {
-                    // Map
-                    if(this.game.inputs.pointer.mode === Pointer.MODE_MOUSE || this.game.inputs.pointer.touches.length >= 2)
+                    if(this.game.inputs.pointer.touches.length >= 2)
                     {
                         this.focusPoint.isTracking = false
                         
@@ -948,13 +1048,37 @@ export class View
 
     update()
     {
+        const dt = Math.min(this.game.ticker.delta, cameraConfig.maxDelta)
+
         // Focus point: critical springs, y locked in the air, look-ahead (T1.6)
-        this.updateFollow(Math.min(this.game.ticker.delta, cameraConfig.maxDelta))
+        this.updateFollow(dt)
+
+        // Smooth mouse-drag 360° yaw / clamped pitch & mouse-wheel zoom multiplier (render only)
+        if(dt > 0)
+        {
+            springStep(this.orbit.mouseDragYawSpring, this.orbit.mouseDragYawTarget, this.orbit.mouseDragHalfLife, dt)
+            springStep(this.orbit.mouseDragPitchSpring, this.orbit.mouseDragPitchTarget, this.orbit.mouseDragHalfLife, dt)
+            springStep(this.zoom.multiplierSpring, this.zoom.targetMultiplier, this.zoom.halfLife, dt)
+        }
+        else
+        {
+            this.orbit.mouseDragYawSpring.x = this.orbit.mouseDragYawTarget
+            this.orbit.mouseDragPitchSpring.x = this.orbit.mouseDragPitchTarget
+            this.zoom.multiplierSpring.x = this.zoom.targetMultiplier
+        }
+
+        this.orbit.mouseDragYaw = this.orbit.mouseDragYawSpring.x
+        this.orbit.mouseDragPitch = clamp(this.orbit.mouseDragPitchSpring.x, this.orbit.mouseDragMinPitch, this.orbit.mouseDragMaxPitch)
+        this.mouseDragYaw = this.orbit.mouseDragYaw
+        this.mouseDragPitch = this.orbit.mouseDragPitch
+
+        this.zoom.multiplier = clamp(this.zoom.multiplierSpring.x, this.zoom.minMultiplier, this.zoom.maxMultiplier)
+        this.zoomMultiplier = this.zoom.multiplier
 
         // Radius and visual yaw: the control yaw only changes on the fixed step; the render interpolates between steps
-        this.spherical.radius.current = this.framing.distance
-        const orbitYaw = lerp(this.orbit.yawPrevious, this.orbit.yaw, this.game.ticker.alpha)
-        const orbitPitch = lerp(this.orbit.pitchPrevious, this.orbit.pitch, this.game.ticker.alpha)
+        this.spherical.radius.current = this.framing.distance * this.zoom.multiplier
+        const orbitYaw = lerp(this.orbit.yawPrevious, this.orbit.yaw, this.game.ticker.alpha) + this.orbit.mouseDragYaw
+        const orbitPitch = lerp(this.orbit.pitchPrevious, this.orbit.pitch, this.game.ticker.alpha) + this.orbit.mouseDragPitch
         const yaw = this.controlYawPrevious + smallestAngle(this.controlYawPrevious, this.controlYaw) * this.game.ticker.alpha + orbitYaw
         const phi = clamp(this.spherical.phi + orbitPitch, 0.15, Math.PI * 0.48)
         this.spherical.offset.setFromSphericalCoords(this.spherical.radius.current, phi, yaw)

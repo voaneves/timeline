@@ -19,23 +19,34 @@ html, body
     inset: 0;
 }
 
-.js-canvas
+.js-canvas,
+.game-canvas
 {
     display: block;
     width: 100%;
     height: 100%;
     touch-action: none;
+    outline: none;
+    cursor: grab;
 }
 
-.js-canvas:focus
+.js-canvas.is-dragging,
+.game-canvas.is-dragging
+{
+    cursor: grabbing;
+}
+
+.js-canvas:focus,
+.game-canvas:focus
 {
     outline: none;
 }
 
-.js-canvas:focus-visible
+.js-canvas.is-keyboard-focus:focus-visible,
+.game-canvas.is-keyboard-focus:focus-visible
 {
-    outline: 3px solid var(--vn-signal);
-    outline-offset: -3px;
+    outline: 2px solid var(--color-focus, var(--vn-signal, #f50000));
+    outline-offset: -2px;
 }
 
 /* One-thumb touch controls & WCAG 2.5.7 single-pointer controls */

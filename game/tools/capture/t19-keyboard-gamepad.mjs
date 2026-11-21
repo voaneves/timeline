@@ -330,16 +330,42 @@ async function runTest2CanvasKeyboard()
     const { page, errors } = await openPage(`${base}?expose&webgl`)
     await page.waitForTimeout(300)
 
-    // Verify canvas attributes & pointerdown focus
+    // Verify immediate keyboard control BEFORE clicking the canvas (document.activeElement is body)
+    const beforeClick = await page.evaluate(() =>
+    {
+        const p = window.game.world.player.object.physical.body.translation()
+        return {
+            activeTag: document.activeElement?.tagName ?? null,
+            pos: [ p.x, p.y, p.z ],
+        }
+    })
+    await page.keyboard.down('KeyW')
+    await page.waitForTimeout(260)
+    await page.keyboard.up('KeyW')
+    const afterImmediateMove = await page.evaluate(() =>
+    {
+        const p = window.game.world.player.object.physical.body.translation()
+        return { pos: [ p.x, p.y, p.z ] }
+    })
+    const immediateMovedDist = Math.hypot(
+        afterImmediateMove.pos[0] - beforeClick.pos[0],
+        afterImmediateMove.pos[2] - beforeClick.pos[2]
+    )
+    await page.waitForTimeout(350)
+
+    // Verify canvas attributes, pointerdown focus, and NO focus outline ring on mouse click
     await page.mouse.click(640, 360)
     const focusInfo = await page.evaluate(() =>
     {
         const canvas = document.querySelector('.js-canvas')
+        const cs = getComputedStyle(canvas)
         window.__t2Actions = []
         window.game.inputs.events.on('actionStart', (a) => window.__t2Actions.push(a.name))
         const p = window.game.world.player.object.physical.body.translation()
         return {
             focused: document.activeElement === canvas,
+            outlineStyle: cs.outlineStyle,
+            outlineWidth: cs.outlineWidth,
             tabindex: canvas.getAttribute('tabindex'),
             role: canvas.getAttribute('role'),
             ariaLabel: canvas.getAttribute('aria-label'),
@@ -406,6 +432,41 @@ async function runTest2CanvasKeyboard()
     await page.waitForTimeout(1400)
     const orbitReturnDeg = await page.evaluate(() => window.game.view.orbit.yaw * 180 / Math.PI)
 
+    // Test free isometric mouse click-and-drag orbit (> 40 deg persistent yaw + pitch) + mouse wheel zoom + double-click reset
+    const camDistBeforeZoom = await page.evaluate(() => window.game.view.spherical.radius.current)
+    await page.mouse.move(640, 360)
+    await page.mouse.down({ button: 'left' })
+    await page.mouse.move(280, 260, { steps: 12 })
+    await page.mouse.up({ button: 'left' })
+    await page.waitForTimeout(320)
+    const afterMouseDrag = await page.evaluate(() => ({
+        dragYawDeg: window.game.view.mouseDragYaw * 180 / Math.PI,
+        dragPitchDeg: window.game.view.mouseDragPitch * 180 / Math.PI,
+    }))
+
+    // Wheel zoom out (+300 deltaY) and zoom in (-500 deltaY)
+    await page.mouse.wheel(0, 300)
+    await page.waitForTimeout(260)
+    const afterWheelOut = await page.evaluate(() => ({
+        zoomMultiplier: window.game.view.zoomMultiplier,
+        radius: window.game.view.spherical.radius.current,
+    }))
+    await page.mouse.wheel(0, -500)
+    await page.waitForTimeout(260)
+    const afterWheelIn = await page.evaluate(() => ({
+        zoomMultiplier: window.game.view.zoomMultiplier,
+        radius: window.game.view.spherical.radius.current,
+    }))
+
+    // Double-click resets mouseDragYaw, mouseDragPitch, and zoomMultiplier to 0 / 1.0
+    await page.mouse.dblclick(640, 360)
+    await page.waitForTimeout(380)
+    const afterDblClickReset = await page.evaluate(() => ({
+        dragYawDeg: window.game.view.mouseDragYaw * 180 / Math.PI,
+        dragPitchDeg: window.game.view.mouseDragPitch * 180 / Math.PI,
+        zoomMultiplier: window.game.view.zoomMultiplier,
+    }))
+
     // Test KeyM (map), Escape (menu), KeyE (cameraOrbitRight ONLY — must NOT increment interactCount)
     await page.keyboard.press('KeyM')
     await page.waitForTimeout(60)
@@ -437,9 +498,19 @@ async function runTest2CanvasKeyboard()
     const movedDist = Math.hypot(moveCheck.pos[0] - focusInfo.startPos[0], moveCheck.pos[2] - focusInfo.startPos[2])
     const actionsSet = new Set(actionSummary.actions)
     const keyEOrbitsWithoutInteract = afterE.orbitYawDeg > 2 && afterE.interactCount === interactBeforeE
+    const noMouseFocusOutline = focusInfo.outlineStyle === 'none' || focusInfo.outlineWidth === '0px'
+    const mouseDragWorked = Math.abs(afterMouseDrag.dragYawDeg) > 40 && Math.abs(afterMouseDrag.dragPitchDeg) > 2
+    const wheelZoomWorked = afterWheelOut.radius > camDistBeforeZoom * 1.1 && afterWheelIn.radius < camDistBeforeZoom * 0.95
+    const dblClickResetWorked =
+        Math.abs(afterDblClickReset.dragYawDeg) < 0.5 &&
+        Math.abs(afterDblClickReset.dragPitchDeg) < 0.5 &&
+        Math.abs(afterDblClickReset.zoomMultiplier - 1.0) < 0.02
+
     const pass =
         errors.length === 0 &&
+        immediateMovedDist > 0.35 &&
         focusInfo.focused &&
+        noMouseFocusOutline &&
         focusInfo.tabindex === '0' &&
         focusInfo.role === 'application' &&
         movedDist > 1.0 &&
@@ -452,6 +523,9 @@ async function runTest2CanvasKeyboard()
         orbitHeldDeg < -10 &&
         Math.abs(orbitHeldDeg) <= 25.05 &&
         Math.abs(orbitReturnDeg) < 0.5 &&
+        mouseDragWorked &&
+        wheelZoomWorked &&
+        dblClickResetWorked &&
         keyEOrbitsWithoutInteract &&
         actionsSet.has('forward') &&
         actionsSet.has('jump') &&
@@ -464,7 +538,9 @@ async function runTest2CanvasKeyboard()
 
     return {
         pass,
+        immediateMovedDistM: +immediateMovedDist.toFixed(3),
         focused: focusInfo.focused,
+        noMouseFocusOutline,
         movedDistM: +movedDist.toFixed(3),
         pressedLenWhileHeld: moveCheck.pressedLen,
         blurReleasedImmediately: !afterBlurImmediate.forwardActive && afterBlurImmediate.pressedLen === 0,
@@ -472,6 +548,11 @@ async function runTest2CanvasKeyboard()
         jumpHeightM: +jumpHeight.toFixed(3),
         orbitHeldDeg: +orbitHeldDeg.toFixed(2),
         orbitReturnDeg: +orbitReturnDeg.toFixed(3),
+        mouseDragYawDeg: +afterMouseDrag.dragYawDeg.toFixed(2),
+        mouseDragPitchDeg: +afterMouseDrag.dragPitchDeg.toFixed(2),
+        wheelOutRadiusM: +afterWheelOut.radius.toFixed(3),
+        wheelInRadiusM: +afterWheelIn.radius.toFixed(3),
+        dblClickResetWorked,
         orbitRightAfterEDeg: +afterE.orbitYawDeg.toFixed(2),
         keyEOrbitsWithoutInteract,
         interactCount: actionSummary.interactCount,
