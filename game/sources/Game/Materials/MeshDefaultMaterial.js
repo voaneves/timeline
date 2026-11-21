@@ -1,9 +1,37 @@
 import * as THREE from 'three/webgpu'
+import { Debug } from '../Debug.js'
 import { Game } from '../Game.js'
-import { Fn, color, float, frontFacing, If, max, mix, normalWorld, positionWorld, vec2, vec3, vec4 } from 'three/tsl'
+import { Fn, color, float, frontFacing, If, max, mix, normalWorld, positionWorld, uniform, vec2, vec3, vec4, vertexColor } from 'three/tsl'
 
 export class MeshDefaultMaterial extends THREE.MeshLambertNodeMaterial
 {
+    static resolveInitialAoStrength()
+    {
+        if(typeof location === 'undefined')
+            return 1
+
+        const raw = Debug.getParam('ao')
+        if(raw === null || raw === '')
+            return 1
+
+        const normalized = String(raw).trim().toLowerCase()
+        if(normalized === '0' || normalized === 'false' || normalized === 'off')
+            return 0
+
+        const parsed = Number(normalized)
+        return Number.isFinite(parsed) ? Math.max(0, Math.min(2, parsed)) : 1
+    }
+
+    static aoStrengthUniform = uniform(MeshDefaultMaterial.resolveInitialAoStrength())
+
+    static setAoStrength(value)
+    {
+        const parsed = Number(value)
+        if(Number.isFinite(parsed))
+            MeshDefaultMaterial.aoStrengthUniform.value = Math.max(0, Math.min(2, parsed))
+        return MeshDefaultMaterial.aoStrengthUniform.value
+    }
+
     static revealDiscardNodeBuilder = (game, outputColor) =>
     {
         return Fn(([ outputColor ]) =>
@@ -34,9 +62,14 @@ export class MeshDefaultMaterial extends THREE.MeshLambertNodeMaterial
         this.hasCoreShadows = parameters.hasCoreShadows ?? true
         this.hasDropShadows = parameters.hasDropShadows ?? true
         this.hasLightBounce = parameters.hasLightBounce ?? true
+        this.hasVertexAo = parameters.hasVertexAo ?? true
         this.hasFog = parameters.hasFog ?? true
         this.hasWater = parameters.hasWater ?? true
         this.hasReveal = parameters.hasReveal ?? true
+
+        this.aoStrengthUniform = typeof parameters.aoStrength === 'number'
+            ? uniform(parameters.aoStrength)
+            : (parameters.aoStrengthNode ?? MeshDefaultMaterial.aoStrengthUniform)
 
         this._colorNode = parameters.colorNode ?? color(0xffffff)
         this._normalNode = parameters.normalNode ?? normalWorld
@@ -116,6 +149,13 @@ export class MeshDefaultMaterial extends THREE.MeshLambertNodeMaterial
                 
                 const shadowColor = baseColor.rgb.mul(this.game.lighting.shadowColor).rgb
                 outputColor.assign(mix(outputColor, shadowColor, combinedShadowMix))
+            }
+
+            // Vertex ambient occlusion (COLOR_0 -> geometry.attributes.color, fallback vec4(1))
+            if(this.hasVertexAo)
+            {
+                const aoFactor = mix(vec3(1), vertexColor().rgb, this.aoStrengthUniform)
+                outputColor.mulAssign(aoFactor)
             }
             
             // Fog
