@@ -494,7 +494,16 @@ def build_diorama_terrain_and_water(
             side_swatch="lateriteDark",
         )
 
-    # 7. Sculpted Tidewater-tech organic shoreline & undulating cerrado outer rim
+    terrain_vis = _finalize_bmesh(
+        bm_terr,
+        name="OrigensTerrainVisual",
+        location=(0.0, 0.0, 0.0),
+        collection=collection,
+        bevel_width=0.02,
+        bevel_segments=1,
+    )
+
+    # 7. Sculpted Tidewater-tech organic shoreline & undulating cerrado outer rim (un-beveled smooth grid)
     # Terrain noise helpers adapted from dgreenheck/tidewater (MIT, (c) 2026 DRG Software Solutions LLC)
     def _tw_hash2(ix: int, iz: int, s: int) -> float:
         h = (ix * 374761393 + iz * 668265263 + s * 1274126177) & 0xFFFFFFFF
@@ -534,7 +543,8 @@ def build_diorama_terrain_and_water(
             cell *= 0.5
         return total
 
-    nx_grid, ny_grid = 44, 40
+    bm_skirt = bmesh.new()
+    nx_grid, ny_grid = 36, 32
     gx_min, gx_max = -42.0, 42.0
     gy_min, gy_max = -17.0, 52.0
     grid_verts: list[list[bmesh.types.BMVert]] = []
@@ -543,23 +553,20 @@ def build_diorama_terrain_and_water(
         row_verts: list[bmesh.types.BMVert] = []
         for ix in range(nx_grid + 1):
             vx = gx_min + (gx_max - gx_min) * (ix / nx_grid)
-            # Signed distance outside the walkable 66x54 island core
             dx_out = max(0.0, abs(vx) - 31.5)
             dy_out = max(0.0, (-8.0 - vy) if vy < 18.0 else (vy - 44.5))
             edge_dist = math.hypot(dx_out, dy_out)
             relief = _tw_erosion_relief(vx, vy)
             if edge_dist <= 0.01:
-                # Subtle depression under walkable flats so it never fights flat collider tops
                 vz = -0.06
             else:
                 t_drop = min(1.0, edge_dist / 8.5)
                 smooth_drop = t_drop * t_drop * (3.0 - 2.0 * t_drop)
                 mound = max(0.0, relief) * (1.0 - smooth_drop) * 1.15
                 vz = -0.04 - smooth_drop * 0.92 + mound * 0.65 + relief * 0.14
-            row_verts.append(bm_terr.verts.new((vx, vy, vz)))
+            row_verts.append(bm_skirt.verts.new((vx, vy, vz)))
         grid_verts.append(row_verts)
 
-    skirt_faces: list[bmesh.types.BMFace] = []
     for iy in range(ny_grid):
         for ix in range(nx_grid):
             v00 = grid_verts[iy][ix]
@@ -567,25 +574,23 @@ def build_diorama_terrain_and_water(
             v11 = grid_verts[iy + 1][ix + 1]
             v01 = grid_verts[iy + 1][ix]
             avg_z = (v00.co.z + v10.co.z + v11.co.z + v01.co.z) * 0.25
-            # Skip interior flat cells already covered by walkable slabs
             if v00.co.z <= -0.059 and v10.co.z <= -0.059 and v11.co.z <= -0.059 and v01.co.z <= -0.059:
                 continue
             try:
-                f = bm_terr.faces.new((v00, v10, v11, v01))
+                f = bm_skirt.faces.new((v00, v10, v11, v01))
                 f.smooth = True
                 swatch = "paperWarm" if avg_z < -0.22 else ("laterite" if avg_z < -0.02 else "dryGrass")
-                cerrado_kit._tag_faces_swatch(bm_terr, [f], swatch)
-                skirt_faces.append(f)
+                cerrado_kit._tag_faces_swatch(bm_skirt, [f], swatch)
             except ValueError:
                 pass
 
-    terrain_vis = _finalize_bmesh(
-        bm_terr,
-        name="OrigensTerrainVisual",
+    _finalize_bmesh(
+        bm_skirt,
+        name="OrigensTerrainSkirt",
         location=(0.0, 0.0, 0.0),
         collection=collection,
-        bevel_width=0.02,
-        bevel_segments=1,
+        bevel_width=0.0,
+        bevel_segments=0,
     )
 
     # Analytical cuboid colliders matching every walkable terrace & step

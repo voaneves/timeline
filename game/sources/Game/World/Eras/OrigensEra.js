@@ -178,7 +178,7 @@ export class OrigensEra
                 foliageMesh,
                 terrainTexture: resources.origensTerrain,
                 bounds: this.world.bakedShadowMeta || ORIGENS_BOUNDS,
-                qualityTier: this.game.quality?.tier || 'Q0',
+                qualityTier: `Q${this.game.quality?.level ?? 0}`,
             })
             this.grass = new Grass({
                 terrainTexture: resources.origensTerrain,

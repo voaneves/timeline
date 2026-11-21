@@ -21,7 +21,8 @@ export class WaterSurface
         this.foliageMesh = options.foliageMesh || null
         this.terrainTexture = options.terrainTexture || null
         this.bounds = options.bounds || { minX: -37.3, maxX: 37.3, minZ: -49, maxZ: 24 }
-        this.qualityTier = options.qualityTier || this.game.quality?.tier || 'Q0'
+        const level = this.game.quality?.level ?? 0
+        this.qualityTier = options.qualityTier || `Q${level}`
         this.useFFT = this.qualityTier === 'Q0'
         this.fft = this.useFFT ? new OceanFFT() : null
         this._fftAccum = 0
@@ -114,27 +115,35 @@ export class WaterSurface
             nearMask = float(1).sub(smoothstep(float(55.0), float(105.0), edgeSum))
         }
 
-        const material = new MeshDefaultMaterial({
-            colorNode: finalWaterColor,
-            hasCoreShadows: false,
-            hasDropShadows: false,
-            hasLightBounce: false,
-            hasVertexAo: false,
-            hasWater: false,
-            hasFog: true,
-            hasReveal: true,
-        })
+        const material = isQ0
+            ? new MeshDefaultMaterial({
+                colorNode: finalWaterColor,
+                hasCoreShadows: false,
+                hasDropShadows: false,
+                hasLightBounce: false,
+                hasVertexAo: false,
+                hasWater: false,
+                hasFog: true,
+                hasReveal: true,
+            })
+            : new THREE.MeshBasicNodeMaterial({
+                colorNode: finalWaterColor,
+            })
 
         // Dampen vertical displacement near horizon so fog edge stays calm
-        material.positionNode = vec3(
-            positionLocal.x,
-            positionLocal.y.add(waveDispY.mul(nearMask)),
-            positionLocal.z
-        )
+        if(isQ0)
+        {
+            material.positionNode = vec3(
+                positionLocal.x,
+                positionLocal.y.add(waveDispY.mul(nearMask)),
+                positionLocal.z
+            )
+        }
 
         const mesh = new THREE.Mesh(geometry, material)
         mesh.name = 'OrigensHorizonOcean'
         mesh.position.set(0, -0.22, -12.5)
+        mesh.renderOrder = 10
         mesh.castShadow = false
         mesh.receiveShadow = false
         mesh.userData.preventMaterialOverride = true

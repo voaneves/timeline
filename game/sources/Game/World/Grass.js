@@ -42,8 +42,9 @@ export class Grass
         this.bounds = options.bounds || DEFAULT_BOUNDS
         this.terrainTexture = options.terrainTexture || null
 
-        const tier = this.game.quality?.tier || 'Q0'
-        this.targetCount = tier === 'Q0' ? 2400 : (tier === 'Q1' ? 520 : 320)
+        const level = this.game.quality?.level ?? 0
+        this.isQ0 = level === 0
+        this.targetCount = this.isQ0 ? 2400 : (level === 1 ? 360 : 220)
         this.instances = this.sampleInstances(this.targetCount)
         this.mesh = this.createMesh(this.instances)
 
@@ -127,7 +128,7 @@ export class Grass
         const uvs = []
         const indices = []
 
-        const bladeAngles = [ 0, Math.PI / 3, (2 * Math.PI) / 3 ]
+        const bladeAngles = this.isQ0 ? [ 0, Math.PI / 3, (2 * Math.PI) / 3 ] : [ 0, Math.PI * 0.5 ]
         const segments = 3
         const baseHalfWidth = 0.052
         const height = 0.48
