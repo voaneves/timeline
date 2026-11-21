@@ -139,10 +139,28 @@ export class View
     {
         const cfg = cameraConfig
         this.framing = {}
-        this.framing.distance = cfg.distance
-        this.framing.phi = (90 - cfg.pitch) * DEG
         this.framing.computeVFov = (aspect) => clamp(2 * Math.atan(Math.tan(cfg.hFov * DEG / 2) / aspect) / DEG, cfg.vFovMin, cfg.vFovMax)
-        this.framing.vFov = this.framing.computeVFov(this.game.viewport.ratio)
+
+        // Aspect-reactive framing (T1.7): landscape values at aspect >= 1, portrait values at aspect <= 0.5, interpolated between
+        this.framing.apply = (aspect) =>
+        {
+            const portrait = clamp((1 - aspect) / 0.5, 0, 1)
+            const vFov = this.framing.computeVFov(aspect)
+            const hFovEff = 2 * Math.atan(Math.tan(vFov * DEG / 2) * aspect)
+            this.framing.vFov = vFov
+            this.framing.distance = Math.max(lerp(cfg.distance, cfg.distancePortrait, portrait), cfg.minWidth / (2 * Math.tan(hFovEff / 2)))
+            this.framing.phi = (90 - lerp(cfg.pitch, cfg.pitchPortrait, portrait)) * DEG
+            this.framing.focusOffsetY = lerp(cfg.focusOffsetY, cfg.focusOffsetYPortrait, portrait)
+            this.framing.lookAhead = lerp(cfg.lookAhead, cfg.lookAheadPortrait, portrait)
+            if(this.spherical?.radius)
+            {
+                this.spherical.phi = this.framing.phi
+                this.spherical.radius.edges.min = this.framing.distance
+                this.spherical.radius.edges.max = this.framing.distance
+                this.spherical.radius.current = this.framing.distance
+            }
+        }
+        this.framing.apply(this.game.viewport.ratio)
 
         this.controlYaw = Math.PI * 0.25 // what the Player reads (through spherical.theta); changes on the fixed step only
         this.controlYawPrevious = this.controlYaw
@@ -256,7 +274,7 @@ export class View
         follow.lastZ = source.z
 
         const speed = follow.velocity.length()
-        const scale = speed > 1e-4 ? cfg.lookAhead * Math.min(speed / cfg.lookAheadSpeed, 1) / speed : 0
+        const scale = speed > 1e-4 ? this.framing.lookAhead * Math.min(speed / cfg.lookAheadSpeed, 1) / speed : 0
         follow.ahead.x += (follow.velocity.x * scale - follow.ahead.x) * k
         follow.ahead.y += (follow.velocity.y * scale - follow.ahead.y) * k
 
@@ -282,7 +300,7 @@ export class View
             springStep(follow.y, targetY, cfg.halfLifeY, delta)
         }
 
-        this.focusPoint.smoothedPosition.set(follow.x.x + follow.ahead.x, follow.y.x + cfg.focusOffsetY, follow.z.x + follow.ahead.y)
+        this.focusPoint.smoothedPosition.set(follow.x.x + follow.ahead.x, follow.y.x + this.framing.focusOffsetY, follow.z.x + follow.ahead.y)
         this.focusPoint.position.copy(this.focusPoint.smoothedPosition)
     }
 
@@ -743,7 +761,10 @@ export class View
         this.ratioOverflow = Math.max(1, this.idealRatio / this.game.viewport.ratio) - 1
 
         const aspect = this.game.viewport.width / this.game.viewport.height
-        this.framing.vFov = this.framing.computeVFov(aspect)
+        if(!(aspect > 0) || !Number.isFinite(aspect))
+            return
+        this.framing.apply(aspect)
+        this.optimalArea.needsUpdate = true
 
         for(const camera of [ this.camera, this.defaultCamera, this.freeCamera ])
         {

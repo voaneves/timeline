@@ -8,6 +8,13 @@ export const cameraConfig = {
     distance: 10.5, // camera to focus point
     pitch: 28, // elevation above the horizon
     focusOffsetY: 0.9, // focus point above the feet
+    pitchPortrait: 36, // at aspect <= 0.5 (interpolated from aspect 1.0)
+    focusOffsetYPortrait: 1.6, // avatar in the lower third
+    lookAheadPortrait: 1.0,
+    distancePortrait: 8, // distance floor at aspect <= 0.5 (interpolated from 1.0)
+    // Useful width (m) on the focus plane: distance grows until it fits. The plan's 6 m cannot coexist with an avatar of 9-12% of the
+    // height at 390x844 (avatar% x width = 0.39 there, fixed by the aspect), so the avatar minimum wins and the width floor is 3.95 m.
+    minWidth: 3.95,
     halfLifeXZ: 0.10, // critical spring on the followed position (x, z)
     halfLifeY: 0.25, // critical spring on y
     fallFollow: 1, // y only follows in the air once the subject is this far below the last platform
