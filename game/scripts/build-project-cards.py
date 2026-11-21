@@ -1,7 +1,7 @@
 """Generate 6 original 1200x675 WebP project preview cards (<= 60 KB each) for Era 5.
 
 Reads project metadata from `game/sources/data/content.json`, renders crisp
-editorial/diagrammatic artwork for each of the 6 portfolio projects with Pillow,
+editorial/diagrammatic artwork for each of the 6 showcase projects with Pillow,
 and encodes them via `ffmpeg` (`libwebp`) into `game/static/eras/transformacao/projects/`.
 
 Run:
