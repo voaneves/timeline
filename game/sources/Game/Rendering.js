@@ -12,6 +12,12 @@ export class Rendering
     {
         this.game = Game.getInstance()
         this.backendName = null
+        this.renderScale = 1.0
+        this.minRenderScale = 0.60
+        this.maxRenderScale = 1.00
+        this._lastRenderMs = null
+        this._emaFrameMs = 0
+        this._lastScaleAdjustMs = 0
 
         if(this.game.debug.active)
         {
@@ -83,7 +89,7 @@ export class Rendering
             antialias: this.game.viewport.pixelRatio < 2
         })
         this.renderer.setSize(this.game.viewport.width, this.game.viewport.height)
-        this.renderer.setPixelRatio(this.game.viewport.pixelRatio)
+        this.applyPixelRatio()
         this.renderer.sortObjects = false
 
         this.renderer.domElement.classList.add('experience')
@@ -135,12 +141,20 @@ export class Rendering
             if(level === 0)
             {
                 this.postProcessing.outputNode = this.cheapDOFPass.add(this.bloomPass)
+                if(!Quality.isMobile())
+                    this.renderScale = 1.0
             }
-            else // tiers 1 and 2 (tier 2 differs only from T2.29 on)
+            else if(level === 1)
             {
                 this.postProcessing.outputNode = scenePassColor.add(this.bloomPass)
             }
+            else // Q2: no bloom, lower max render scale
+            {
+                this.postProcessing.outputNode = scenePassColor
+                this.renderScale = Math.min(this.renderScale, 0.85)
+            }
 
+            this.applyPixelRatio()
             this.postProcessing.needsUpdate = true
         }
         qualityChange(this.game.quality.level)
@@ -205,17 +219,72 @@ export class Rendering
         }
     }
 
+    getEffectivePixelRatio()
+    {
+        const baseDpr = this.game.viewport?.pixelRatio || 1
+        return Math.max(0.5, Number((baseDpr * this.renderScale).toFixed(3)))
+    }
+
+    applyPixelRatio()
+    {
+        if(!this.renderer || !this.game.viewport)
+            return
+        this.renderer.setPixelRatio(this.getEffectivePixelRatio())
+    }
+
+    updateDynamicResolution(dtMs, nowMs)
+    {
+        const level = this.game.quality?.level ?? 0
+        const allowDynamic = Quality.isMobile() || level >= 1
+        if(!allowDynamic || !this.game.ready || this.game.paused)
+            return
+        if(typeof dtMs !== 'number' || !Number.isFinite(dtMs) || dtMs <= 0)
+            return
+
+        const clampedDt = Math.min(dtMs, 100)
+        const effectiveDt = this.game.quality?.syntheticFrameMs !== null && this.game.quality?.syntheticFrameMs !== undefined
+            ? this.game.quality.syntheticFrameMs
+            : clampedDt
+        this._emaFrameMs = this._emaFrameMs ? (this._emaFrameMs * 0.9 + effectiveDt * 0.1) : effectiveDt
+
+        if(nowMs - this._lastScaleAdjustMs < 500)
+            return
+
+        const maxScale = level >= 2 ? 0.85 : this.maxRenderScale
+        let nextScale = this.renderScale
+        if(this._emaFrameMs > 15.5)
+            nextScale = Math.max(this.minRenderScale, Number((this.renderScale - 0.05).toFixed(2)))
+        else if(this._emaFrameMs < 12.5 && this.renderScale < maxScale)
+            nextScale = Math.min(maxScale, Number((this.renderScale + 0.05).toFixed(2)))
+
+        if(Math.abs(nextScale - this.renderScale) >= 0.01)
+        {
+            this.renderScale = nextScale
+            this._lastScaleAdjustMs = nowMs
+            this.applyPixelRatio()
+        }
+    }
+
     resize()
     {
         if(this.game.viewport.width <= 0 || this.game.viewport.height <= 0)
             return
 
         this.renderer.setSize(this.game.viewport.width, this.game.viewport.height)
-        this.renderer.setPixelRatio(this.game.viewport.pixelRatio)
+        this.applyPixelRatio()
     }
 
     async render()
     {
+        const now = performance.now()
+        if(this._lastRenderMs !== null)
+        {
+            const dtMs = now - this._lastRenderMs
+            this.game.quality?.recordFrame(dtMs)
+            this.updateDynamicResolution(dtMs, now)
+        }
+        this._lastRenderMs = now
+
         // this.renderer.render(this.game.scene, this.game.view.camera)
         this.postProcessing.render()
 

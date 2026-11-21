@@ -93,6 +93,8 @@ export class Game
         this.viewport = new Viewport(this.domElement)
         this.cards = new Cards()
         this.hud = new Hud(this.cards)
+        if(this.hud.options.quality !== 'auto')
+            this.quality.setManualLevel(Number(this.hud.options.quality))
         this.installPauseControl()
         this.ui = {
             cards: this.cards,
@@ -124,6 +126,8 @@ export class Game
         {
             if(key === 'reducedMotion')
                 this.applyReducedMotion(Boolean(value))
+            else if(key === 'quality')
+                this.quality.setManualLevel(value === 'auto' ? null : Number(value))
         })
         this.rendering.start()
         this.perf = new PerfProbe() // window.__perf

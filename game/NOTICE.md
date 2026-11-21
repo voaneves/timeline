@@ -87,4 +87,11 @@ Supersedes the "25 packages" figures in the T0.5 and T0.7 sections above (those 
   - **Before (Q1 with 512x512 real-time shadow map, `?expose&q1shadow=realtime`):** `castShadow = true`, **30 draw calls**, **14,669 triangles**, **22 programs**, render pass CPU time = **1.738 ms/frame** (frame p50 = 14.9 ms, p95 = 17.4 ms at 75 Hz display cap).
   - **After (Q1 with top-down baked R8 shadow, no shadow map, `?expose`):** `castShadow = false`, **16 draw calls (-46.7%)**, **8,153 triangles (-44.4%)**, **19 programs**, render pass CPU time = **1.189 ms/frame (-31.6% faster)** (frame p50 = 14.9 ms), static ground shadow luminance = **0.1189** (block 1 shadow) / **0.0928** (steps shadow) vs **0.3517** on open lit ground (`shadow/lit = 0.3381`, well below the `< 0.80` threshold; with `bakedShadowEnabled = 0` control, shadow ground returns to `0.3517`).
 
+## Quality auto-adaptation & Origens Q0/Q1 perf sweep (T2.29 / T2.30a / T2.30b)
+- `Quality.js`: 3-second post-reveal frame-time sampling in `auto` mode (`p90 > 18 ms` steps down `Q0 -> Q1 -> Q2`; `setManualLevel` wired to HUD Menu selector `Auto / Alta Q0 / Média Q1 / Baixa Q2`; `injectSyntheticFrameMs(ms)` and `?qtest=slow` for deterministic testing).
+- `Rendering.js`: Q2 bypasses bloom (`outputNode = scenePassColor`) and caps `renderScale <= 0.85`; dynamic resolution scaling (`0.60 .. 1.00`) on mobile / Q1+Q2 adjusts `setPixelRatio` when EMA frame time exceeds `15.5 ms` or recovers below `12.5 ms`.
+- Measured via `tools/capture/t229-quality-adapt.mjs` (`?era=origens&expose`, headed Chrome D3D11, RX 6750 XT, 75 Hz display):
+  - **Desktop Q0 (1280×720, WebGPU):** `84` draw calls, `157,518` triangles, `renderScale = 1.0`; synthetic `25 ms` frames triggered `Q0 -> Q1` (`p90 = 25 ms`, `renderScale = 0.95`) and `Q1 -> Q2` (`renderScale = 0.70`) over 3 s windows.
+  - **Mobile proxy Q1 (390×844, DPR 2, Android UA, WebGL2, 4× CPU throttle, 6-stop Origens sweep):** `23..49` draw calls (max `49 <= 120`), `63,893..83,085` triangles (max `83,085 <= 250,000`), `33..35` geometries, `20` textures, `37` programs, p50 `64.9..74.6` fps (`13.4..15.4` ms), steady-state p95 `16.1..18.7` ms, `0` errors.
+
 
