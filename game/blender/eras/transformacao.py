@@ -65,6 +65,7 @@ INTERACTIVE_LANDMARK_MESHES: frozenset[str] = frozenset(
         "BackstageTrapdoorHatch",
         *(f"Cartridge{i:02d}" for i in range(1, 7)),
         *(f"ProjectScreen{i:02d}" for i in range(1, 7)),
+        *(f"ProjectScreen{i:02d}Face" for i in range(1, 7)),
     }
 )
 

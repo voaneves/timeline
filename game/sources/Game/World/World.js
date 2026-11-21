@@ -406,4 +406,14 @@ export class World
 
         this.game.physics?.world?.propagateModifiedBodyPositionsToColliders()
     }
+
+    setPaused(paused)
+    {
+        const next = Boolean(paused)
+        this.origensEra?.ambientLife?.setPaused?.(next)
+        const activeZone = this.zoneStreamer?.activeZone
+        const activeEra = activeZone ? this.zoneStreamer?.loaded?.get(activeZone) : null
+        activeEra?.ambientLife?.setPaused?.(next)
+        activeEra?.setPaused?.(next)
+    }
 }

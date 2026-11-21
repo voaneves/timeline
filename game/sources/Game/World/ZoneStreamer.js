@@ -32,6 +32,7 @@ export class ZoneStreamer
         this.activeZone = 'origens'
         this.autoStream = Boolean(options.autoStream)
         this._tickCounter = 0
+        this._navSeq = 0
         this._idleHandle = null
         this._idleUsesTimeout = false
 
@@ -43,7 +44,10 @@ export class ZoneStreamer
 
     normalizeName(name)
     {
-        return String(name || '').trim().toLowerCase()
+        const key = String(name || '').trim().toLowerCase()
+        if(key === 'ia')
+            return 'transformacao'
+        return key
     }
 
     ringDistance(nameA, nameB)
@@ -88,7 +92,7 @@ export class ZoneStreamer
         {
             this._idleHandle = null
             if(this.activeZone === activeName && !this.loaded.has(nextName) && !this.loading.has(nextName))
-                this.loadEra(nextName)
+                this.loadEra(nextName, { activate: false })
         }
 
         if(typeof requestIdleCallback === 'function')
@@ -103,14 +107,25 @@ export class ZoneStreamer
         }
     }
 
-    async loadEra(name)
+    async loadEra(name, options = {})
     {
+        const activate = options.activate !== false
         const key = this.normalizeName(name)
         if(this.loaded.has(key))
-            return this.loaded.get(key)
+        {
+            const existing = this.loaded.get(key)
+            if(activate)
+                await existing.activate?.()
+            return existing
+        }
 
         if(this.loading.has(key))
-            return this.loading.get(key)
+        {
+            const existing = await this.loading.get(key)
+            if(activate && existing && !existing._disposed)
+                await existing.activate?.()
+            return existing
+        }
 
         const def = this.zones.get(key)
         if(!def || typeof def.create !== 'function')
@@ -120,16 +135,18 @@ export class ZoneStreamer
         {
             const era = def.create(this.world)
             await era.load()
+            if(era._disposed)
+                return null
             this.loaded.set(key, era)
 
             if(key === 'origens' && this.world)
                 this.world.origensEra = era
 
             if(this.world?.player)
-            {
                 this._restorePlayerController()
-                era.attachPlayer?.(this.world.player)
-            }
+
+            if(activate)
+                await era.activate?.()
 
             return era
         })()
@@ -180,20 +197,26 @@ export class ZoneStreamer
         if(!this.zones.has(key))
             return null
 
+        const seq = ++this._navSeq
         this._cancelIdlePreload()
 
         // Dispose eras >= 2 zones away first so Rapier/GPU stay bounded
         this.unloadDistant(key)
 
-        const era = await this.loadEra(key)
-        this.activeZone = key
+        const era = await this.loadEra(key, { activate: false })
+        if(seq !== this._navSeq)
+        {
+            this.unloadDistant(this.activeZone)
+            return null
+        }
 
-        // Re-apply target era's respawn, shadow, line, and lighting preset
-        era?.setRespawn?.()
-        if(era?.line && this.world)
-            this.world.line = era.line
-        this.game?.eraCycles?.setPreset?.(key)
-        this.world?.autoWalk?.buildGraph?.()
+        this.activeZone = key
+        await era?.activate?.()
+        if(seq !== this._navSeq)
+        {
+            this.unloadDistant(this.activeZone)
+            return null
+        }
 
         if(this.world?.player?.controller)
         {
@@ -282,7 +305,7 @@ export class ZoneStreamer
             if(zoneDist <= 1)
             {
                 if(zone.create && !this.loaded.has(zone.name) && !this.loading.has(zone.name))
-                    this.loadEra(zone.name)
+                    this.loadEra(zone.name, { activate: false })
             }
             else if(zoneDist >= 2)
             {

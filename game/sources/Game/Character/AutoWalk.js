@@ -3,12 +3,12 @@ import { Events } from '../Events.js'
 import { Game } from '../Game.js'
 import { feel } from '../../data/feel.js'
 
-const MILESTONE_CYCLE = [
-    { id: 'e-1994-09', label: '1994 — Nasci em Araguaína/TO' },
-    { id: 'e-2005-01', label: '2005 — Ponto Interativo' },
-    { id: 'e-2011-12', label: '2011 — Ensino Médio' },
-    { id: 'contato', label: 'Contato — Vamos conversar' },
-]
+const DEFAULT_MILESTONE_LABELS = new Map([
+    [ 'e-1994-09', '1994 — Nasci em Araguaína/TO' ],
+    [ 'e-2005-01', '2005 — Ponto Interativo' ],
+    [ 'e-2011-12', '2011 — Ensino Médio' ],
+    [ 'contato', 'Contato — Vamos conversar' ],
+])
 
 const MILESTONE_ALIASES = new Map([
     [ '1994', 'e-1994-09' ],
@@ -72,6 +72,8 @@ export class AutoWalk
     {
         this.nodes.clear()
         this.milestoneToNode.clear()
+        this._cycleIndex = -1
+        this._selectedMilestone = null
 
         const refs = this.world?.references
         if(!refs)
@@ -459,10 +461,59 @@ export class AutoWalk
         }
     }
 
+    getAvailableMilestones()
+    {
+        const refs = this.world?.references
+        if(!refs)
+            return []
+
+        const list = []
+        const seenIds = new Set()
+        const milestoneRefs = []
+
+        for(const [ name, entry ] of refs.entries())
+        {
+            if(/^refMilestone/i.test(name))
+                milestoneRefs.push([ name, entry ])
+        }
+        milestoneRefs.sort((a, b) => a[0].localeCompare(b[0]))
+
+        for(const [ name, entry ] of milestoneRefs)
+        {
+            const rawId = entry.userData?.entryId || name
+            const aliased = MILESTONE_ALIASES.get(String(rawId).toLowerCase()) || rawId
+            const targetId = this.resolveGoalNode(aliased)
+                ? aliased
+                : (this.resolveGoalNode(name) ? name : null)
+            if(!targetId || seenIds.has(targetId))
+                continue
+            seenIds.add(targetId)
+            const label = entry.userData?.label
+                || entry.userData?.title
+                || DEFAULT_MILESTONE_LABELS.get(aliased)
+                || String(aliased)
+            list.push({ id: targetId, label })
+        }
+
+        if((refs.has('refPipeContact') || refs.has('refEndDotSphere')) && this.resolveGoalNode('contato'))
+        {
+            if(!seenIds.has('contato'))
+            {
+                list.push({
+                    id: 'contato',
+                    label: DEFAULT_MILESTONE_LABELS.get('contato'),
+                })
+            }
+        }
+
+        return list
+    }
+
     announceArrival()
     {
-        const entry = MILESTONE_CYCLE.find((m) => m.id === MILESTONE_ALIASES.get(String(this.target).toLowerCase()))
-        const label = entry ? entry.label : (this.target || 'destino')
+        const normalized = MILESTONE_ALIASES.get(String(this.target).toLowerCase()) || String(this.target)
+        const entry = this.getAvailableMilestones().find((m) => m.id === this.target || m.id === normalized)
+        const label = entry ? entry.label : (DEFAULT_MILESTONE_LABELS.get(normalized) || this.target || 'destino')
         this.game?.ui?.announcer?.announce(`Chegou a ${label}`)
         this.events.trigger('arrive', [ { target: this.target, path: this.path } ])
     }
@@ -497,10 +548,13 @@ export class AutoWalk
 
             if(event.code === 'Tab')
             {
+                const cycle = this.getAvailableMilestones()
+                if(cycle.length === 0)
+                    return
                 event.preventDefault()
                 const dir = event.shiftKey ? -1 : 1
-                this._cycleIndex = (this._cycleIndex + dir + MILESTONE_CYCLE.length) % MILESTONE_CYCLE.length
-                this._selectedMilestone = MILESTONE_CYCLE[this._cycleIndex]
+                this._cycleIndex = (this._cycleIndex + dir + cycle.length) % cycle.length
+                this._selectedMilestone = cycle[this._cycleIndex]
                 this.game?.ui?.announcer?.announce(
                     `Marco selecionado: ${this._selectedMilestone.label}. Pressione Enter para ir até lá.`
                 )

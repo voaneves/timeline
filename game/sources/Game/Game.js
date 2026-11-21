@@ -287,7 +287,7 @@ export class Game
         if(next)
             this.cards?.releaseGameInputs?.()
 
-        this.world?.origensEra?.ambientLife?.setPaused?.(next)
+        this.world?.setPaused?.(next)
 
         if(this.audio?.ctx)
         {

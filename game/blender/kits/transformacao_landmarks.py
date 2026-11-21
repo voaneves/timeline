@@ -161,6 +161,29 @@ def build_project_station(
     scr_obj["projectIndex"] = index
     scr_obj["screenImage"] = f"projects/{spec['id']}.webp"
 
+    # Separate 16:9 screen face mesh (`ProjectScreen01Face..06Face`) with 0..1 UVs
+    bm_face = bmesh.new()
+    uv_layer = bm_face.loops.layers.uv.verify()
+    v0 = bm_face.verts.new((-1.60, -0.112, 1.65))
+    v1 = bm_face.verts.new((1.60, -0.112, 1.65))
+    v2 = bm_face.verts.new((1.60, -0.112, 3.45))
+    v3 = bm_face.verts.new((-1.60, -0.112, 3.45))
+    face = bm_face.faces.new((v0, v1, v2, v3))
+    uvs = ((0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0))
+    for loop, uv in zip(face.loops, uvs):
+        loop[uv_layer].uv = uv
+    scr_face_obj = tk._finalize_bmesh(
+        f"ProjectScreen{tag}Face",
+        bm_face,
+        collection,
+        location=scr_loc,
+        rot_z_deg=rot_z_deg,
+        bevel_width=0.0,
+    )
+    scr_face_obj["projectId"] = spec["id"]
+    scr_face_obj["projectIndex"] = index
+    scr_face_obj["screenImage"] = f"projects/{spec['id']}.webp"
+
     scr_phys = tk._make_physical_root(f"TransformacaoScreen{tag}", "fixed", scr_loc, collection, rot_z_deg=rot_z_deg)
     vn_collide.add_cuboid(
         f"cuboidScreen{tag}",

@@ -26,6 +26,8 @@ export class MapDialog
         this.zones = MAP_ZONES
         this.activeZoneId = 'origens'
         this._restoreByPointer = false
+        this._teleported = false
+        this._opener = null
 
         this.buildDialog()
         this.bindEvents()
@@ -112,7 +114,18 @@ export class MapDialog
 
         this.dialog.addEventListener('close', () =>
         {
+            const byPointer = this._restoreByPointer
+            const teleported = this._teleported
+            const opener = this._opener
             this._restoreByPointer = false
+            this._teleported = false
+            this._opener = null
+
+            if(!teleported && opener && opener !== document.body && opener !== document.documentElement && opener.isConnected && opener !== this.game?.canvasElement)
+                opener.focus({ preventScroll: true })
+            else
+                this.cards?.restoreCanvasFocus?.(byPointer)
+
             this.events.trigger('close')
         })
 
@@ -178,6 +191,8 @@ export class MapDialog
 
     open()
     {
+        this._opener = document.activeElement instanceof HTMLElement ? document.activeElement : null
+        this._teleported = false
         this.cards?.closeOtherDialogs?.(this.dialog)
         this.cards?.releaseGameInputs?.()
         this.syncActiveZone()
@@ -197,7 +212,6 @@ export class MapDialog
             return
         this._restoreByPointer = Boolean(byPointer)
         this.dialog.close()
-        this.cards?.restoreCanvasFocus?.(this._restoreByPointer)
     }
 
     selectZone(zone, byPointer = false)
@@ -205,7 +219,8 @@ export class MapDialog
         this.activeZoneId = zone.id
         this.syncActiveZone()
 
-        this.game?.world?.zoneStreamer?.goToEra?.(zone.eraId)
+        this._teleported = true
+        this.game?.world?.zoneStreamer?.goToEra?.(zone.id)
         window.dispatchEvent(new CustomEvent('timeline:teleportEra', {
             detail: { id: zone.id, eraId: zone.eraId, name: zone.name },
         }))

@@ -96,6 +96,7 @@ export class Transitions
         this._skipResolve = null
         this._timer = null
         this._overlay = null
+        this._transitionSeq = 0
         this._disposed = false
 
         this._onKeyDown = (event) =>
@@ -164,10 +165,14 @@ export class Transitions
 
     async transitionTo(targetName, options = {})
     {
-        const key = String(targetName || '').trim().toLowerCase()
         const streamer = this.world?.zoneStreamer
+        const key = streamer?.normalizeName
+            ? streamer.normalizeName(targetName)
+            : String(targetName || '').trim().toLowerCase()
         if(!streamer || !streamer.zones.has(key))
             return null
+
+        const seq = ++this._transitionSeq
 
         if(this.active)
             this.skip()
@@ -206,6 +211,9 @@ export class Transitions
         const loadPromise = streamer.goToEra(key)
 
         const [ era ] = await Promise.all([ loadPromise, waitPromise ])
+
+        if(seq !== this._transitionSeq || this._disposed)
+            return null
 
         if(overlay)
             overlay.classList.remove('is-visible')

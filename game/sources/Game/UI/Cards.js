@@ -477,8 +477,6 @@ export class Cards
             return
         this._restoreByPointer = Boolean(byPointer)
         this.dialog.close()
-        this.activeCard = null
-        this.restoreCanvasFocus(this._restoreByPointer)
     }
 
     closeList(byPointer = false)
@@ -487,7 +485,6 @@ export class Cards
             return
         this._restoreByPointer = Boolean(byPointer)
         this.listDialog.close()
-        this.restoreCanvasFocus(this._restoreByPointer)
     }
 
     closeOtherDialogs(keep = null)
