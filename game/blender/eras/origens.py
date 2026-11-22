@@ -327,397 +327,152 @@ def _reparent_landmark_to_physical_fixed(
 # ------------------------------------------------------------------ 1. Diorama Island & Terrain
 
 
+def _sample_island_height_blender(bx: float, by: float) -> float:
+    """Exact mirror of TerrainHeight.js sampleIslandHeight(x, z) with Three.js z = -by."""
+    x = bx
+    z = -by
+
+    def smoothstep(e0: float, e1: float, val: float) -> float:
+        t = max(0.0, min(1.0, (val - e0) / (e1 - e0)))
+        return t * t * (3.0 - 2.0 * t)
+
+    def mix(a: float, b: float, t: float) -> float:
+        return a + (b - a) * t
+
+    def pad_rect_blend(px: float, pz: float, x0: float, x1: float, z0: float, z1: float, feather: float) -> float:
+        dx = (x0 - px) if px < x0 else ((px - x1) if px > x1 else 0.0)
+        dz = (z0 - pz) if pz < z0 else ((pz - z1) if pz > z1 else 0.0)
+        return 1.0 - smoothstep(0.0, feather, math.hypot(dx, dz))
+
+    cx = x / 35.0
+    cz = (z + 18.0) / 30.0
+    angle = math.atan2(cz, cx)
+    r_norm = math.hypot(cx, cz)
+    coast_mod = 1.0 + 0.07 * math.sin(angle * 2.0 + 0.4) + 0.05 * math.cos(angle * 3.0 - 0.7)
+
+    coast_t = smoothstep(0.78 * coast_mod, 1.06 * coast_mod, r_norm)
+    h = mix(0.0, -1.35, coast_t)
+
+    inland = 1.0 - smoothstep(0.65 * coast_mod, 0.90 * coast_mod, r_norm)
+    h += (0.28 * math.sin(x * 0.14 + 0.4) * math.cos(z * 0.13 - 0.2)) * inland
+
+    h = mix(h, 0.0, pad_rect_blend(x, z, -18.0, 18.0, -12.0, 6.5, 5.5))
+    h = mix(h, 0.80, pad_rect_blend(x, z, -24.0, -5.0, -26.5, -10.5, 5.5))
+    h = mix(h, 1.60, pad_rect_blend(x, z, -23.0, 19.0, -45.5, -26.5, 6.5))
+    h = mix(h, 2.40, pad_rect_blend(x, z, 8.0, 22.5, -29.0, -17.0, 6.5))
+    return h
+
+
+def _dist_to_island_path_blender(bx: float, by: float) -> float:
+    x, z = bx, -by
+    polys = (
+        ((-17.0, 3.8), (15.0, 3.8)),
+        ((0.0, 2.0), (4.5, -5.2), (9.5, -10.0), (14.0, -20.5)),
+        ((0.0, 2.0), (-7.5, 1.5)),
+        ((0.0, 2.0), (-11.0, -7.0), (-12.5, -18.0)),
+    )
+    best = 1e9
+    for poly in polys:
+        for i in range(len(poly) - 1):
+            ax, az = poly[i]
+            bx2, bz2 = poly[i + 1]
+            abx, abz = bx2 - ax, bz2 - az
+            len2 = abx * abx + abz * abz
+            t = 0.0 if len2 < 1e-6 else max(0.0, min(1.0, ((x - ax) * abx + (z - az) * abz) / len2))
+            d = math.hypot(x - (ax + abx * t), z - (az + abz * t))
+            if d < best:
+                best = d
+    return best
+
+
+def _build_heightfield_bmesh(nx: int, ny: int, tag_swatches: bool) -> bmesh.types.BMesh:
+    bm = bmesh.new()
+    gx_min, gx_max = -40.0, 40.0
+    gy_min, gy_max = -16.0, 52.0
+    verts_grid: list[list[bmesh.types.BMVert]] = []
+    for iy in range(ny + 1):
+        by = gy_min + (gy_max - gy_min) * (iy / ny)
+        row: list[bmesh.types.BMVert] = []
+        for ix in range(nx + 1):
+            bx = gx_min + (gx_max - gx_min) * (ix / nx)
+            bz = _sample_island_height_blender(bx, by)
+            row.append(bm.verts.new((bx, by, bz)))
+        verts_grid.append(row)
+
+    for iy in range(ny):
+        for ix in range(nx):
+            v00 = verts_grid[iy][ix]
+            v10 = verts_grid[iy][ix + 1]
+            v11 = verts_grid[iy + 1][ix + 1]
+            v01 = verts_grid[iy + 1][ix]
+            f = bm.faces.new((v00, v10, v11, v01))
+            f.smooth = True
+            if tag_swatches:
+                cx = 0.25 * (v00.co.x + v10.co.x + v11.co.x + v01.co.x)
+                cy = 0.25 * (v00.co.y + v10.co.y + v11.co.y + v01.co.y)
+                cz = 0.25 * (v00.co.z + v10.co.z + v11.co.z + v01.co.z)
+                r_norm = math.hypot(cx / 35.0, (-cy + 18.0) / 30.0)
+                if cz <= 0.02 and r_norm > 0.72:
+                    swatch = "paperWarm"
+                elif _dist_to_island_path_blender(cx, cy) < 1.35 and cz > -0.05:
+                    swatch = "laterite"
+                elif cz >= 1.35:
+                    swatch = "cerradoGreen"
+                else:
+                    swatch = "dryGrass"
+                cerrado_kit._tag_faces_swatch(bm, [f], swatch)
+    return bm
+
+
 def build_diorama_terrain_and_water(
     collection: bpy.types.Collection,
     stats: dict[str, Any],
 ) -> dict[str, bpy.types.Object]:
-    """Build the 70 x 55 m Origens diorama paper-cut island, stepped terraces, street curb, and Rio Tocantins."""
-    # 1. Submerged sandbar rim (replaces harsh dark cliff box so island slopes into stylized ocean)
+    """Build smooth continuous sculpted Toy/Clay Island visual + matching trimesh Rapier collider."""
     bm_borders = bmesh.new()
-    _add_box(
-        bm_borders,
-        size=(76.0, 62.0, 0.35),
-        center=(0.0, 17.0, -0.78),
-        swatch_name="lateriteDark",
-        top_swatch="paperWarm",
-        side_swatch="lateriteDark",
-        bottom_swatch="lateriteDark",
-    )
-    borders_vis = _finalize_bmesh(
-        bm_borders,
-        name="OrigensPaperBorders",
-        location=(0.0, 0.0, 0.0),
-        collection=collection,
-        bevel_width=0.04,
-        bevel_segments=1,
-    )
+    _add_box(bm_borders, size=(4.0, 4.0, 0.2), center=(0.0, 18.0, -2.5), swatch_name="paperWarm")
+    borders_vis = _finalize_bmesh(bm_borders, name="OrigensPaperBorders", location=(0.0, 0.0, 0.0), collection=collection)
 
-    bm_terr = bmesh.new()
-
-    # 2. Main Lowland Ground Slab (X in [-34, +34], Y in [-10, +46], top at Z = 0.0 m)
-    # Walkable across O1 (Spawn), O2 (1994 block + Casa Natal), O3 (Contact Pipe), and approach corridors.
-    _add_box(
-        bm_terr,
-        size=(68.0, 56.0, 0.50),
-        center=(0.0, 18.0, -0.25),
-        swatch_name="lateriteDark",
-        top_swatch="dryGrass",
-        side_swatch="laterite",
-        bottom_swatch="lateriteDark",
-    )
-
-    # 3. O1 Laterite Street & Sidewalk Curb ("meio-fio da rua de laterita", Y in [-9.5, +4.5])
-    # Elevated 6 cm above lowland Z=0.0 (top at Z = +0.06 m) to completely prevent depth-buffer z-fighting at distance.
-    _add_box(
-        bm_terr,
-        size=(36.0, 4.0, 0.12),
-        center=(-1.0, -3.8, 0.0),
-        swatch_name="laterite",
-        top_swatch="laterite",
-        side_swatch="lateriteDark",
-    )
-    # Raised paper/concrete sidewalk curb ("meio-fio") along Y = -1.75 m (top at Z = 0.08 m, autostep 0.35 m)
-    _add_box(
-        bm_terr,
-        size=(36.0, 0.42, 0.16),
-        center=(-1.0, -1.75, 0.0),
-        swatch_name="paperShadow",
-        top_swatch="paperWarm",
-        side_swatch="ink",
-    )
-    # Low town neighbor houses silhouette along the south-east/south-west backdrop (O1 "casas baixas ao fundo")
-    _add_box(
-        bm_terr,
-        size=(4.6, 3.2, 2.4),
-        center=(-15.5, -5.5, 1.2),
-        swatch_name="paperWarm",
-        top_swatch="brick",
-        side_swatch="paperWarm",
-    )
-    _add_box(
-        bm_terr,
-        size=(4.8, 3.4, 0.55),
-        center=(-15.5, -5.5, 2.65),
-        swatch_name="brick",
-        top_swatch="lateriteDark",
-    )
-    _add_box(
-        bm_terr,
-        size=(5.2, 3.4, 2.5),
-        center=(16.5, -5.2, 1.25),
-        swatch_name="paper",
-        top_swatch="brick",
-        side_swatch="paper",
-    )
-    _add_box(
-        bm_terr,
-        size=(5.4, 3.6, 0.55),
-        center=(16.5, -5.2, 2.75),
-        swatch_name="brick",
-        top_swatch="brickDark",
-    )
-
-    # 4. West School Terrace (O8 at `blender (-12.0, 18.0, 0.8)`):
-    # Broad plateau X in [-24.0, -4.0], Y in [10.0, 27.0], top at Z = 0.80 m
-    _add_box(
-        bm_terr,
-        size=(20.0, 17.0, 0.80),
-        center=(-14.0, 18.5, 0.40),
-        swatch_name="laterite",
-        top_swatch="dryGrass",
-        side_swatch="lateriteDark",
-    )
-    # Gentle walkable access ramp from South (O1/O3, Y=5.0..10.0, Z=0.0->0.80 m, slope ~9 deg)
-    # and stepped terrace blocks (0.27 m, 0.54 m) so auto-walk (`refNav*`) and player walk up effortlessly.
-    for step_idx, (sy, sz_top) in enumerate(((7.2, 0.27), (8.8, 0.54)), start=1):
-        _add_box(
-            bm_terr,
-            size=(10.0, 1.8, sz_top),
-            center=(-11.0, sy, sz_top * 0.5),
-            swatch_name="laterite",
-            top_swatch="laterite",
-            side_swatch="lateriteDark",
-        )
-
-    # 5. North Cerrado Plateau (O6 Pequi Orchard, O7 Secret Termite Mound, O9 Seriema Path, O10 Bus Stop):
-    # Broad plateau X in [-24.0, +20.0], Y in [26.0, 47.0], top at Z = 1.60 m
-    _add_box(
-        bm_terr,
-        size=(44.0, 21.0, 1.60),
-        center=(-2.0, 36.5, 0.80),
-        swatch_name="laterite",
-        top_swatch="cerradoGreen",
-        side_swatch="lateriteDark",
-    )
-    # Stepped transition stairs/ramps from central lowland (Z=0.0 -> 1.60 m along Y=20..26, X in [-3..+6])
-    for s_idx, (sy, sz_top) in enumerate(
-        ((20.0, 0.32), (21.5, 0.64), (23.0, 0.96), (24.5, 1.28)),
-        start=1,
-    ):
-        _add_box(
-            bm_terr,
-            size=(8.5, 1.6, sz_top),
-            center=(1.5, sy, sz_top * 0.5),
-            swatch_name="laterite",
-            top_swatch="laterite",
-            side_swatch="lateriteDark",
-        )
-    # Stepped transition from O8 School Terrace (Z=0.80 m) to North Plateau (Z=1.60 m) at X=-11, Y=24.5..26.5
-    for sy, sz_top in ((24.8, 1.08), (25.8, 1.35)):
-        _add_box(
-            bm_terr,
-            size=(8.0, 1.2, sz_top),
-            center=(-11.0, sy, sz_top * 0.5),
-            swatch_name="laterite",
-            top_swatch="laterite",
-            side_swatch="lateriteDark",
-        )
-
-    # 6. Northeast CRT Hill (O5 at `blender (14.0, 22.0, 2.4)`):
-    # Elevated terrace X in [7.5, 23.5], Y in [16.5, 29.5], top at Z = 2.40 m
-    _add_box(
-        bm_terr,
-        size=(16.0, 13.0, 2.40),
-        center=(15.5, 23.0, 1.20),
-        swatch_name="lateriteDark",
-        top_swatch="dryGrass",
-        side_swatch="rock",
-    )
-    # Stepped bridge connecting O5 Hill (Z=2.40 m) westward to O6 North Plateau (Z=1.60 m) at X in [4.5..7.5], Y=25.5
-    for sx, sz_top in ((6.8, 2.15), (5.4, 1.88)):
-        _add_box(
-            bm_terr,
-            size=(1.5, 6.0, sz_top),
-            center=(sx, 25.5, sz_top * 0.5),
-            swatch_name="laterite",
-            top_swatch="laterite",
-            side_swatch="lateriteDark",
-        )
-
+    bm_terr = _build_heightfield_bmesh(nx=68, ny=64, tag_swatches=True)
     terrain_vis = _finalize_bmesh(
         bm_terr,
         name="OrigensTerrainVisual",
-        location=(0.0, 0.0, 0.0),
-        collection=collection,
-        bevel_width=0.02,
-        bevel_segments=1,
-    )
-
-    # 7. Sculpted Tidewater-tech organic shoreline & undulating cerrado outer rim (un-beveled smooth grid)
-    # Terrain noise helpers adapted from dgreenheck/tidewater (MIT, (c) 2026 DRG Software Solutions LLC)
-    def _tw_hash2(ix: int, iz: int, s: int) -> float:
-        h = (ix * 374761393 + iz * 668265263 + s * 1274126177) & 0xFFFFFFFF
-        h = ((h ^ (h >> 13)) * 1274126177) & 0xFFFFFFFF
-        h ^= h >> 16
-        return (h & 0xFFFFFFFF) / 4294967296.0
-
-    def _tw_erosion_relief(x: float, y: float) -> float:
-        total = 0.0
-        amp = 0.48
-        cell = 11.5
-        gx, gy = 0.35, -0.25
-        for o in range(4):
-            sl = math.hypot(gx, gy) or 1.0
-            dx, dy = (gy / sl) * 0.9, (-gx / sl) * 0.9
-            px, py = x / cell, y / cell
-            ix, iy = math.floor(px), math.floor(py)
-            fx, fy = px - ix, py - iy
-            v = 0.0
-            wt = 0.0
-            for jj in (-1, 0, 1):
-                for ii in (-1, 0, 1):
-                    cx, cy = ix + ii, iy + jj
-                    ox = fx - ii - 0.25 - _tw_hash2(cx, cy, 11 + o) * 0.5
-                    oy = fy - jj - 0.25 - _tw_hash2(cx, cy, 57 + o) * 0.5
-                    d2 = ox * ox + oy * oy
-                    if d2 >= 1.5625:
-                        continue
-                    q = 1.0 - d2 / 1.5625
-                    w = q * q * q
-                    v += math.cos((ox * dx + oy * dy) * math.tau) * w
-                    wt += w
-            if wt > 1e-6:
-                v /= wt
-            total += amp * v
-            amp *= 0.5
-            cell *= 0.5
-        return total
-
-    bm_skirt = bmesh.new()
-    nx_grid, ny_grid = 36, 32
-    gx_min, gx_max = -42.0, 42.0
-    gy_min, gy_max = -17.0, 52.0
-    grid_verts: list[list[bmesh.types.BMVert]] = []
-    for iy in range(ny_grid + 1):
-        vy = gy_min + (gy_max - gy_min) * (iy / ny_grid)
-        row_verts: list[bmesh.types.BMVert] = []
-        for ix in range(nx_grid + 1):
-            vx = gx_min + (gx_max - gx_min) * (ix / nx_grid)
-            dx_out = max(0.0, abs(vx) - 31.5)
-            dy_out = max(0.0, (-8.0 - vy) if vy < 18.0 else (vy - 44.5))
-            edge_dist = math.hypot(dx_out, dy_out)
-            relief = _tw_erosion_relief(vx, vy)
-            if edge_dist <= 0.01:
-                vz = -0.06
-            else:
-                t_drop = min(1.0, edge_dist / 8.5)
-                smooth_drop = t_drop * t_drop * (3.0 - 2.0 * t_drop)
-                mound = max(0.0, relief) * (1.0 - smooth_drop) * 1.15
-                vz = -0.04 - smooth_drop * 0.92 + mound * 0.65 + relief * 0.14
-            row_verts.append(bm_skirt.verts.new((vx, vy, vz)))
-        grid_verts.append(row_verts)
-
-    for iy in range(ny_grid):
-        for ix in range(nx_grid):
-            v00 = grid_verts[iy][ix]
-            v10 = grid_verts[iy][ix + 1]
-            v11 = grid_verts[iy + 1][ix + 1]
-            v01 = grid_verts[iy + 1][ix]
-            avg_z = (v00.co.z + v10.co.z + v11.co.z + v01.co.z) * 0.25
-            if v00.co.z <= -0.059 and v10.co.z <= -0.059 and v11.co.z <= -0.059 and v01.co.z <= -0.059:
-                continue
-            try:
-                f = bm_skirt.faces.new((v00, v10, v11, v01))
-                f.smooth = True
-                swatch = "paperWarm" if avg_z < -0.22 else ("laterite" if avg_z < -0.02 else "dryGrass")
-                cerrado_kit._tag_faces_swatch(bm_skirt, [f], swatch)
-            except ValueError:
-                pass
-
-    _finalize_bmesh(
-        bm_skirt,
-        name="OrigensTerrainSkirt",
         location=(0.0, 0.0, 0.0),
         collection=collection,
         bevel_width=0.0,
         bevel_segments=0,
     )
 
-    # Analytical cuboid colliders matching every walkable terrace & step
-    terr_colliders: list[bpy.types.Object] = [
-        # Main lowland ground slab (top at Z = 0.0 m)
-        vn_collide.add_cuboid(
-            "cuboidTerrainLowland",
-            size=(68.0, 56.0, 0.50),
-            location=(0.0, 18.0, -0.25),
-            collection=collection,
-        ),
-        # Curb along Y = -1.75 m (top at Z = 0.08 m)
-        vn_collide.add_cuboid(
-            "cuboidStreetCurb",
-            size=(36.0, 0.42, 0.16),
-            location=(-1.0, -1.75, 0.0),
-            collection=collection,
-        ),
-        # Background low houses colliders
-        vn_collide.add_cuboid(
-            "cuboidBgHouseWest",
-            size=(4.8, 3.4, 2.9),
-            location=(-15.5, -5.5, 1.45),
-            collection=collection,
-        ),
-        vn_collide.add_cuboid(
-            "cuboidBgHouseEast",
-            size=(5.4, 3.6, 3.0),
-            location=(16.5, -5.2, 1.50),
-            collection=collection,
-        ),
-        # O8 West School Terrace (top at Z = 0.80 m) + approach steps (0.27 m, 0.54 m)
-        vn_collide.add_cuboid(
-            "cuboidTerrainSchoolTerrace",
-            size=(20.0, 17.0, 0.80),
-            location=(-14.0, 18.5, 0.40),
-            collection=collection,
-        ),
-        vn_collide.add_cuboid(
-            "cuboidSchoolApproachStep1",
-            size=(10.0, 1.8, 0.27),
-            location=(-11.0, 7.2, 0.135),
-            collection=collection,
-        ),
-        vn_collide.add_cuboid(
-            "cuboidSchoolApproachStep2",
-            size=(10.0, 1.8, 0.54),
-            location=(-11.0, 8.8, 0.27),
-            collection=collection,
-        ),
-        # North Cerrado Plateau (O6, O7, O9, O10 — top at Z = 1.60 m) + central stairs
-        vn_collide.add_cuboid(
-            "cuboidTerrainNorthPlateau",
-            size=(44.0, 21.0, 1.60),
-            location=(-2.0, 36.5, 0.80),
-            collection=collection,
-        ),
-        vn_collide.add_cuboid(
-            "cuboidNorthStep1",
-            size=(8.5, 1.6, 0.32),
-            location=(1.5, 20.0, 0.16),
-            collection=collection,
-        ),
-        vn_collide.add_cuboid(
-            "cuboidNorthStep2",
-            size=(8.5, 1.6, 0.64),
-            location=(1.5, 21.5, 0.32),
-            collection=collection,
-        ),
-        vn_collide.add_cuboid(
-            "cuboidNorthStep3",
-            size=(8.5, 1.6, 0.96),
-            location=(1.5, 23.0, 0.48),
-            collection=collection,
-        ),
-        vn_collide.add_cuboid(
-            "cuboidNorthStep4",
-            size=(8.5, 1.6, 1.28),
-            location=(1.5, 24.5, 0.64),
-            collection=collection,
-        ),
-        vn_collide.add_cuboid(
-            "cuboidSchoolToNorthStep1",
-            size=(8.0, 1.2, 1.08),
-            location=(-11.0, 24.8, 0.54),
-            collection=collection,
-        ),
-        vn_collide.add_cuboid(
-            "cuboidSchoolToNorthStep2",
-            size=(8.0, 1.2, 1.35),
-            location=(-11.0, 25.8, 0.675),
-            collection=collection,
-        ),
-        # O5 Northeast CRT Hill (top at Z = 2.40 m) + west descent steps to O6
-        vn_collide.add_cuboid(
-            "cuboidTerrainCrtHill",
-            size=(16.0, 13.0, 2.40),
-            location=(15.5, 23.0, 1.20),
-            collection=collection,
-        ),
-        vn_collide.add_cuboid(
-            "cuboidCrtToNorthStep1",
-            size=(1.5, 6.0, 2.15),
-            location=(6.8, 25.5, 1.075),
-            collection=collection,
-        ),
-        vn_collide.add_cuboid(
-            "cuboidCrtToNorthStep2",
-            size=(1.5, 6.0, 1.88),
-            location=(5.4, 25.5, 0.94),
-            collection=collection,
-        ),
-    ]
+    bm_col = _build_heightfield_bmesh(nx=34, ny=32, tag_swatches=False)
+    col_mesh_obj = _finalize_bmesh(
+        bm_col,
+        name="_TempIslandColliderMesh",
+        location=(0.0, 0.0, 0.0),
+        collection=collection,
+        bevel_width=0.0,
+        bevel_segments=0,
+    )
+    trimesh_col = vn_collide.add_trimesh(
+        "trimeshIslandTerrain",
+        col_mesh_obj,
+        collection=collection,
+        strip_materials=True,
+    )
+    bpy.data.objects.remove(col_mesh_obj, do_unlink=True)
 
     terrain_root = vn_collide.wrap_physical_object(
         name="origensTerrain",
         visual_obj=terrain_vis,
-        colliders=terr_colliders,
+        colliders=[trimesh_col],
         mass=0.0,
         friction=0.75,
         category="floor",
-        extra_props={"era": "origens", "islandSizeM": [70.0, 55.0]},
+        extra_props={"era": "origens", "islandSizeM": [80.0, 68.0]},
         collection=collection,
         body_type="fixed",
         location=(0.0, 0.0, 0.0),
     )
-    stats["colliders"]["cuboid"] += len(terr_colliders)
+    stats["colliders"]["trimesh"] += 1
 
     # 7. Rio Tocantins Water Strip to the South (`blender_y in [-22..-10]`, PLAN-3D §4.3)
     bm_water = bmesh.new()
@@ -1709,7 +1464,10 @@ def build_beat_o11_line(
     spline_json_out: Path,
 ) -> dict[str, Any]:
     """Build O11 'a Linha' (`OrigensLineRibbon` + `refLinePoint01..16` + `refLinePoint1..16` + spline JSON)."""
-    pts_b = [tuple(float(c) for c in pt) for pt in LINE_CONTROL_POINTS_BLENDER]
+    pts_b = [
+        (float(pt[0]), float(pt[1]), max(float(pt[2]), _sample_island_height_blender(float(pt[0]), float(pt[1])) + 0.14))
+        for pt in LINE_CONTROL_POINTS_BLENDER
+    ]
 
     # Sample uniform polyline to compute exact total arc length
     ctrl_vecs = [Vector(pt) for pt in pts_b]

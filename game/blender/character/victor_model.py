@@ -77,7 +77,7 @@ TARGET_HEADS_RATIO = 2.60
 MAX_CORE_TRIS = 4500
 MAX_TOTAL_TRIS = 6000
 TARGET_MATERIAL_COUNT = 2
-OUTLINE_THICKNESS_M = 0.015
+OUTLINE_THICKNESS_M = 0.006
 MAX_SILHOUETTE_DEVIATION_PCT = 5.0
 
 INK_HEX = "#0a0a0a"
@@ -553,33 +553,33 @@ def build_head_and_quiff_blockout(
 
     cranium = make_lowpoly_ellipsoid(
         "Victor_HeadCranium",
-        radii=(0.156, 0.162, 0.165),
-        location=(0.0, -0.008, 0.912),
-        rotation_deg=(3.0, 0.0, 0.0),
-        segments=12,
-        rings=8,
+        radii=(0.158, 0.160, 0.160),
+        location=(0.0, -0.006, 0.916),
+        rotation_deg=(2.0, 0.0, 0.0),
+        segments=16,
+        rings=10,
         collection=collection,
     )
     _tag_rig_part(cranium, "head", part_role="head", outline_candidate=True)
 
     jaw = make_lowpoly_ellipsoid(
         "Victor_HeadJaw",
-        radii=(0.128, 0.126, 0.105),
-        location=(0.0, -0.025, 0.844),
-        rotation_deg=(6.0, 0.0, 0.0),
-        segments=12,
-        rings=6,
+        radii=(0.132, 0.128, 0.102),
+        location=(0.0, -0.020, 0.848),
+        rotation_deg=(4.0, 0.0, 0.0),
+        segments=16,
+        rings=8,
         collection=collection,
     )
     _tag_rig_part(jaw, "head", part_role="head", outline_candidate=True)
 
     nose = make_lowpoly_ellipsoid(
         "Victor_Nose",
-        radii=(0.022, 0.032, 0.024),
-        location=(0.0, -0.172, 0.888),
-        rotation_deg=(-10.0, 0.0, 0.0),
-        segments=8,
-        rings=4,
+        radii=(0.012, 0.012, 0.010),
+        location=(0.0, -0.164, 0.884),
+        rotation_deg=(-6.0, 0.0, 0.0),
+        segments=10,
+        rings=6,
         collection=collection,
     )
     _tag_rig_part(nose, "head", part_role="face_detail", outline_candidate=False)
@@ -598,25 +598,25 @@ def build_head_and_quiff_blockout(
         _tag_rig_part(ear, "head", part_role="head", outline_candidate=True)
         head_objs.append(ear)
 
-    # Hair back/side cap + signature forward-swept quiff ("topete para frente")
+    # Clean rounded chibi hair crown + soft side-swept bangs (no protruding beak/pompadour)
     hair_cap = make_lowpoly_ellipsoid(
         "Victor_HairCap",
-        radii=(0.166, 0.170, 0.152),
-        location=(0.0, 0.014, 0.952),
-        rotation_deg=(-12.0, 0.0, 0.0),
-        segments=12,
-        rings=8,
+        radii=(0.168, 0.172, 0.148),
+        location=(0.0, 0.010, 0.958),
+        rotation_deg=(-8.0, 0.0, 0.0),
+        segments=16,
+        rings=10,
         collection=collection,
     )
     _tag_rig_part(hair_cap, "head", part_role="hair", outline_candidate=True)
 
     hair_nape = make_lowpoly_ellipsoid(
         "Victor_HairNape",
-        radii=(0.132, 0.075, 0.085),
-        location=(0.0, 0.128, 0.875),
-        rotation_deg=(24.0, 0.0, 0.0),
-        segments=10,
-        rings=5,
+        radii=(0.136, 0.072, 0.082),
+        location=(0.0, 0.124, 0.882),
+        rotation_deg=(18.0, 0.0, 0.0),
+        segments=12,
+        rings=6,
         collection=collection,
     )
     _tag_rig_part(hair_nape, "head", part_role="hair", outline_candidate=True)
@@ -624,11 +624,10 @@ def build_head_and_quiff_blockout(
     quiff_main = make_lowpoly_hair_quiff(
         "Victor_HairQuiffMain",
         stations=[
-            ((0.000, 0.105, 1.015), 0.125, 0.055, 0.0),
-            ((-0.010, 0.010, 1.075), 0.130, 0.078, 6.0),
-            ((-0.032, -0.095, 1.125), 0.112, 0.086, 12.0),
-            ((-0.064, -0.195, 1.160), 0.078, 0.066, 18.0),
-            ((-0.098, -0.268, 1.182), 0.034, 0.030, 24.0),
+            ((0.000, 0.045, 1.045), 0.135, 0.055, 0.0),
+            ((-0.012, -0.045, 1.058), 0.132, 0.056, 4.0),
+            ((-0.026, -0.118, 1.032), 0.105, 0.048, 8.0),
+            ((-0.036, -0.155, 0.992), 0.062, 0.032, 12.0),
         ],
         collection=collection,
     )
@@ -637,9 +636,9 @@ def build_head_and_quiff_blockout(
     quiff_side = make_lowpoly_hair_quiff(
         "Victor_HairQuiffSideCrest",
         stations=[
-            ((0.045, 0.025, 1.045), 0.075, 0.042, -12.0),
-            ((0.068, -0.075, 1.095), 0.066, 0.048, -16.0),
-            ((0.088, -0.168, 1.132), 0.032, 0.026, -22.0),
+            ((0.055, 0.005, 1.028), 0.078, 0.040, -10.0),
+            ((0.075, -0.075, 1.012), 0.068, 0.038, -14.0),
+            ((0.078, -0.135, 0.978), 0.042, 0.026, -18.0),
         ],
         collection=collection,
     )

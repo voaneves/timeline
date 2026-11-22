@@ -2,6 +2,7 @@ import * as THREE from 'three/webgpu'
 import { attribute, color } from 'three/tsl'
 import { Game } from '../Game.js'
 import { feel } from '../../data/feel.js'
+import { sampleIslandHeight } from './TerrainHeight.js'
 
 const MAX_FOOTPRINTS = 128
 const STEP_DISTANCE = 0.52
@@ -51,6 +52,9 @@ export class Tracks
 
             const pos = controller.body.translation()
             const feetY = pos.y - (feel.body.halfHeight + feel.body.radius)
+            const groundY = sampleIslandHeight(pos.x, pos.z)
+            if(feetY < 0.05 || Math.abs(feetY - groundY) > 0.18)
+                return
             const scale = speed > 6 ? 1.2 : 1.0
             this.stampPair(pos.x, feetY, pos.z, controller.yaw, scale)
         }
@@ -198,10 +202,14 @@ export class Tracks
                         if(this.distanceAccum >= this.stepDistance && controller.movedSpeed > 0.35)
                         {
                             this.distanceAccum = 0
-                            this.footSide *= -1
-                            const rightX = Math.cos(controller.yaw) * FOOT_OFFSET * this.footSide
-                            const rightZ = -Math.sin(controller.yaw) * FOOT_OFFSET * this.footSide
-                            this.stamp(visualPos.x + rightX, feetY, visualPos.z + rightZ, controller.yaw, 1)
+                            const groundY = sampleIslandHeight(visualPos.x, visualPos.z)
+                            if(feetY >= 0.05 && Math.abs(feetY - groundY) <= 0.18)
+                            {
+                                this.footSide *= -1
+                                const rightX = Math.cos(controller.yaw) * FOOT_OFFSET * this.footSide
+                                const rightZ = -Math.sin(controller.yaw) * FOOT_OFFSET * this.footSide
+                                this.stamp(visualPos.x + rightX, feetY, visualPos.z + rightZ, controller.yaw, 1)
+                            }
                         }
                     }
                     this.lastPos.set(visualPos.x, feetY, visualPos.z)

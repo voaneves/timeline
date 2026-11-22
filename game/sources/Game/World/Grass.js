@@ -3,6 +3,7 @@ import * as THREE from 'three/webgpu'
 import { attribute, color, cos, float, mix, positionLocal, sin, smoothstep, step, uniform, uv, vec3 } from 'three/tsl'
 import { Game } from '../Game.js'
 import { MeshDefaultMaterial } from '../Materials/MeshDefaultMaterial.js'
+import { sampleIslandSurface } from './TerrainHeight.js'
 
 function mulberry32(seed)
 {
@@ -128,48 +129,30 @@ export class Grass
 
     sampleInstances(targetCount)
     {
-        const pixels = this.extractTerrainPixels()
-        if(!pixels)
-            return []
-
-        const rand = mulberry32(20250412)
+        const rand = mulberry32(20260412)
         const list = []
-        const spanX = this.bounds.maxX - this.bounds.minX
-        const spanZ = this.bounds.maxZ - this.bounds.minZ
-        const maxAttempts = targetCount * 32
+        const maxAttempts = targetCount * 36
 
         for(let i = 0; i < maxAttempts && list.length < targetCount; i++)
         {
-            const u = rand()
-            const v = rand()
-            const px = Math.min(pixels.width - 1, Math.floor(u * pixels.width))
-            const py = Math.min(pixels.height - 1, Math.floor(v * pixels.height))
-            const idx = (py * pixels.width + px) * 4
-            const maskR = pixels.data[idx]
-            const maskG = pixels.data[idx + 1]
-            const maskB = pixels.data[idx + 2]
-
-            if(maskG < 128 || maskB >= 16 || maskR >= 16)
+            const x = -34.0 + rand() * 68.0
+            const z = -43.0 + rand() * 64.0
+            const surf = sampleIslandSurface(x, z)
+            if(!surf.isGrass)
                 continue
 
-            const x = this.bounds.minX + u * spanX
-            const z = this.bounds.minZ + v * spanZ
-            const exactY = sampleExactTerraceY(x, z)
-            if(exactY === null)
+            // Organic meadow patch clustering
+            const patch = 0.5 + 0.5 * Math.sin(x * 0.22 + z * 0.16) * Math.cos(x * 0.14 - z * 0.26)
+            if(patch < 0.30 && rand() > 0.14)
                 continue
 
-            // Organic cerrado patch clustering (meadows + sparse outliers)
-            const patch = 0.5 + 0.5 * Math.sin(x * 0.23 + z * 0.17) * Math.cos(x * 0.15 - z * 0.28)
-            if(patch < 0.34 && rand() > 0.15)
-                continue
-
-            const scale = (0.55 + rand() * 0.62) * (0.85 + patch * 0.32)
+            const scale = (0.55 + rand() * 0.65) * (0.85 + patch * 0.30)
             const angle = rand() * Math.PI * 2
             const tierRoll = rand()
             const lodTier = tierRoll < 0.35 ? 0 : (tierRoll < 0.70 ? 1 : 2)
-            const isFlower = rand() < 0.14 ? 1.0 : 0.0
+            const isFlower = rand() < 0.16 ? 1.0 : 0.0
 
-            list.push({ x, y: exactY - 0.02, z, scale, angle, lodTier, isFlower })
+            list.push({ x, y: surf.y - 0.025, z, scale, angle, lodTier, isFlower })
         }
 
         return list
