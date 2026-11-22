@@ -366,12 +366,12 @@ def build_diorama_terrain_and_water(
         bottom_swatch="lateriteDark",
     )
 
-    # 3. O1 Laterite Street & Sidewalk Curb ("meio-fio da rua de laterita", Y in [-9.5, +4.5], Z top = 0.0 m)
-    # Raised slightly above lowland Z=0.0 (top at Z = +0.016 m) to prevent coplanar z-fighting.
+    # 3. O1 Laterite Street & Sidewalk Curb ("meio-fio da rua de laterita", Y in [-9.5, +4.5])
+    # Elevated 6 cm above lowland Z=0.0 (top at Z = +0.06 m) to completely prevent depth-buffer z-fighting at distance.
     _add_box(
         bm_terr,
         size=(36.0, 4.0, 0.12),
-        center=(-1.0, -3.8, -0.044),
+        center=(-1.0, -3.8, 0.0),
         swatch_name="laterite",
         top_swatch="laterite",
         side_swatch="lateriteDark",
@@ -1690,9 +1690,9 @@ LINE_CONTROL_POINTS_BLENDER: tuple[tuple[float, float, float], ...] = (
     (9.40, 10.20, 0.65),  # 03: Alongside O4 first termite mound
     (11.80, 14.20, 1.45), # 04: Climbing O4 stepped termite mounds
     (13.60, 18.20, 2.45), # 05: Cresting O5 Northeast CRT Hill
-    (11.60, 22.80, 2.50), # 06: Looping past O5 Giant CRT Desk
-    (7.40, 25.80, 2.15),  # 07: Descending west bridge from O5 toward O6
-    (2.50, 27.20, 1.75),  # 08: Sweeping through O6 Pequi Orchard
+    (11.20, 23.60, 2.50), # 06: Looping past O5 Giant CRT Desk toward steps
+    (7.40, 25.50, 2.38),  # 07: Crossing west bridge steps cleanly above rim
+    (2.50, 26.80, 1.75),  # 08: Sweeping through O6 Pequi Orchard
     (-3.20, 24.50, 1.45), # 09: Curving southwest from O6 toward O8 School
     (-8.20, 19.80, 0.95), # 10: Entering O8 School Courtyard
     (-11.40, 16.20, 0.95),# 11: Looping past O8 School Flagpole & Awning

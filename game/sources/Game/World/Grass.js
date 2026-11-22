@@ -1,6 +1,6 @@
-// Adapted from dgreenheck/tidewater (MIT, (c) 2026 DRG Software Solutions LLC)
+// Adapted from dgreenheck/tidewater & mesqme/infinite-terrain (MIT)
 import * as THREE from 'three/webgpu'
-import { attribute, color, cos, float, length, mix, positionLocal, sin, smoothstep, uniform, uv, vec3 } from 'three/tsl'
+import { attribute, color, cos, float, mix, positionLocal, sin, smoothstep, step, uniform, uv, vec3 } from 'three/tsl'
 import { Game } from '../Game.js'
 import { MeshDefaultMaterial } from '../Materials/MeshDefaultMaterial.js'
 
@@ -25,8 +25,56 @@ const DEFAULT_BOUNDS = {
 }
 
 /**
- * Stylized Tidewater-tech instanced cerrado grass with 3-tier LOD width compensation
- * (single InstancedMesh draw call, strictly masked to dry terrain in origens_terrain.png).
+ * Exact dry-terrace ground elevation for Origens so zero blades ever float on edges, stairs, houses, or water.
+ * Returns null when (x, z) is near a cliff edge, staircase, road, house footprint, or water.
+ */
+function sampleExactTerraceY(x, z)
+{
+    if(Math.abs(x) > 27.5 || z < -43.0 || z > 1.2)
+        return null
+
+    // Exclude laterite street strip & sidewalk curb
+    if(x > -19.5 && x < 17.5 && z > 1.2 && z < 6.4)
+        return null
+
+    // Exclude background neighbor houses
+    if(x > -18.5 && x < -12.5 && z > 3.2 && z < 7.8)
+        return null
+    if(x > 13.2 && x < 19.8 && z > 2.8 && z < 7.8)
+        return null
+
+    // Exclude O2 1994 house + porch footprint
+    if(x > 1.8 && x < 7.2 && z > -11.0 && z < -5.5)
+        return null
+
+    // CRT Hill (Blender X [7.5..23.5], Y [16.5..29.5] -> Three.js Z [-29.5..-16.5], Y = 2.40)
+    if(x >= 8.4 && x <= 22.6 && z >= -28.6 && z <= -17.4)
+        return 2.40
+    if(x >= 6.8 && x <= 24.2 && z >= -30.2 && z <= -15.8)
+        return null // Margin around CRT cliff & steps
+
+    // North Plateau (Blender X [-24..20], Y [26..47] -> Three.js Z [-47..-26], Y = 1.60)
+    if(x >= -23.0 && x <= 19.0 && z >= -45.5 && z <= -27.0)
+        return 1.60
+    if(x >= -24.8 && x <= 20.8 && z >= -47.5 && z <= -24.0)
+        return null // Margin around North cliff & stairs
+
+    // School Terrace (Blender X [-24..-4], Y [10..27] -> Three.js Z [-27..-10], Y = 0.80)
+    if(x >= -23.0 && x <= -5.0 && z >= -26.0 && z <= -11.0)
+        return 0.80
+    if(x >= -24.8 && x <= -3.2 && z >= -27.8 && z <= -6.2)
+        return null // Margin around School cliff & approach steps
+
+    // Exclude central North staircase corridor (X [-3.5..6.5], Z [-26..-19])
+    if(x >= -3.5 && x <= 6.5 && z >= -26.0 && z <= -19.0)
+        return null
+
+    return 0.0
+}
+
+/**
+ * Stylized cerrado grass & wildflower tufts (inspired by Tidewater + infinite-terrain).
+ * Strictly grounded on flat dry terraces, clustered organically, zero floating blades.
  */
 export class Grass
 {
@@ -44,7 +92,7 @@ export class Grass
 
         const level = this.game.quality?.level ?? 0
         this.isQ0 = level === 0
-        this.targetCount = this.isQ0 ? 2400 : (level === 1 ? 360 : 220)
+        this.targetCount = this.isQ0 ? 3200 : (level === 1 ? 380 : 220)
         this.instances = this.sampleInstances(this.targetCount)
         this.mesh = this.createMesh(this.instances)
 
@@ -88,7 +136,7 @@ export class Grass
         const list = []
         const spanX = this.bounds.maxX - this.bounds.minX
         const spanZ = this.bounds.maxZ - this.bounds.minZ
-        const maxAttempts = targetCount * 24
+        const maxAttempts = targetCount * 32
 
         for(let i = 0; i < maxAttempts && list.length < targetCount; i++)
         {
@@ -100,21 +148,28 @@ export class Grass
             const maskR = pixels.data[idx]
             const maskG = pixels.data[idx + 1]
             const maskB = pixels.data[idx + 2]
-            const elevA = pixels.data[idx + 3]
 
-            // Strictly dry cerrado grass zones only: G >= 128, no water (B), no laterite road (R), inside terrain (A > 0)
-            if(maskG < 128 || maskB >= 32 || maskR >= 32 || elevA === 0)
+            if(maskG < 128 || maskB >= 16 || maskR >= 16)
                 continue
 
             const x = this.bounds.minX + u * spanX
             const z = this.bounds.minZ + v * spanZ
-            const y = (elevA / 255) * 3.2 - 0.6
-            const scale = 0.72 + rand() * 0.55
+            const exactY = sampleExactTerraceY(x, z)
+            if(exactY === null)
+                continue
+
+            // Organic cerrado patch clustering (meadows + sparse outliers)
+            const patch = 0.5 + 0.5 * Math.sin(x * 0.23 + z * 0.17) * Math.cos(x * 0.15 - z * 0.28)
+            if(patch < 0.34 && rand() > 0.15)
+                continue
+
+            const scale = (0.55 + rand() * 0.62) * (0.85 + patch * 0.32)
             const angle = rand() * Math.PI * 2
             const tierRoll = rand()
-            const lodTier = tierRoll < 0.30 ? 0 : (tierRoll < 0.65 ? 1 : 2)
+            const lodTier = tierRoll < 0.35 ? 0 : (tierRoll < 0.70 ? 1 : 2)
+            const isFlower = rand() < 0.14 ? 1.0 : 0.0
 
-            list.push({ x, y, z, scale, angle, lodTier })
+            list.push({ x, y: exactY - 0.02, z, scale, angle, lodTier, isFlower })
         }
 
         return list
@@ -122,35 +177,43 @@ export class Grass
 
     createBladeGeometry(instances)
     {
-        // Three crossed 3-segment tapered cerrado grass blades per clump
+        // Fan of 3-4 gracefully curved tapered grass blades per tuft (inspired by infinite-terrain)
         const positions = []
         const normals = []
         const uvs = []
         const indices = []
 
-        const bladeAngles = this.isQ0 ? [ 0, Math.PI / 3, (2 * Math.PI) / 3 ] : [ 0, Math.PI * 0.5 ]
+        const bladeSpecs = this.isQ0
+            ? [
+                { rot: 0.0, lean: 0.13, ox: 0.0, oz: 0.0, h: 1.0 },
+                { rot: 1.15, lean: 0.16, ox: 0.05, oz: -0.03, h: 0.86 },
+                { rot: 2.35, lean: 0.14, ox: -0.04, oz: 0.05, h: 0.78 },
+                { rot: 3.85, lean: 0.17, ox: 0.03, oz: 0.04, h: 0.92 },
+            ]
+            : [
+                { rot: 0.0, lean: 0.14, ox: 0.0, oz: 0.0, h: 1.0 },
+                { rot: 1.7, lean: 0.15, ox: 0.04, oz: 0.03, h: 0.85 },
+            ]
         const segments = 3
-        const baseHalfWidth = 0.052
+        const baseHalfWidth = 0.046
         const height = 0.48
 
         let vertOffset = 0
-        for(let b = 0; b < bladeAngles.length; b++)
+        for(const spec of bladeSpecs)
         {
-            const rot = bladeAngles[b]
-            const ca = Math.cos(rot)
-            const sa = Math.sin(rot)
-            const ox = Math.cos(rot + 1.1) * 0.045
-            const oz = Math.sin(rot + 1.1) * 0.045
+            const ca = Math.cos(spec.rot)
+            const sa = Math.sin(spec.rot)
+            const hBlade = height * spec.h
             for(let s = 0; s <= segments; s++)
             {
                 const t = s / segments
-                const w = baseHalfWidth * (1 - t * 0.88)
-                const y = t * height
-                const bendBack = t * t * 0.065
+                const w = baseHalfWidth * (1 - t * 0.92)
+                const y = t * hBlade
+                const bendBack = t * t * spec.lean
 
                 positions.push(
-                    (-w) * ca - bendBack * sa + ox, y, (-w) * sa + bendBack * ca + oz,
-                    w * ca - bendBack * sa + ox, y, w * sa + bendBack * ca + oz
+                    (-w) * ca - bendBack * sa + spec.ox, y, (-w) * sa + bendBack * ca + spec.oz,
+                    w * ca - bendBack * sa + spec.ox, y, w * sa + bendBack * ca + spec.oz
                 )
                 normals.push(0, 1, 0, 0, 1, 0)
                 uvs.push(0, t, 1, t)
@@ -177,6 +240,7 @@ export class Grass
         const rootPositions = new Float32Array(count * 3)
         const bladeAnglesAttr = new Float32Array(count)
         const bladeTiersAttr = new Float32Array(count)
+        const flowerMaskAttr = new Float32Array(count)
 
         for(let i = 0; i < instances.length; i++)
         {
@@ -186,19 +250,28 @@ export class Grass
             rootPositions[i * 3 + 2] = inst.z
             bladeAnglesAttr[i] = inst.angle
             bladeTiersAttr[i] = inst.lodTier
+            flowerMaskAttr[i] = inst.isFlower
         }
 
         geometry.setAttribute('aRootPos', new THREE.InstancedBufferAttribute(rootPositions, 3))
         geometry.setAttribute('aBladeAngle', new THREE.InstancedBufferAttribute(bladeAnglesAttr, 1))
         geometry.setAttribute('aBladeTier', new THREE.InstancedBufferAttribute(bladeTiersAttr, 1))
+        geometry.setAttribute('aFlower', new THREE.InstancedBufferAttribute(flowerMaskAttr, 1))
         return geometry
     }
 
     createMaterial()
     {
-        const oliveBase = color('#5a7a2c')
-        const goldTip = color('#c4ae42')
-        const grassColor = mix(oliveBase, goldTip, uv().y.clamp(0.0, 1.0))
+        const oliveBase = color('#486822')
+        const meadowMid = color('#6f9134')
+        const goldTip = color('#c6b446')
+        const flowerTip = color('#f7c531')
+
+        const h = uv().y.clamp(0.0, 1.0)
+        const bladeGrad = mix(oliveBase, mix(meadowMid, goldTip, smoothstep(float(0.35), float(1.0), h)), smoothstep(float(0.0), float(0.65), h))
+        const isFlower = attribute('aFlower', 'float')
+        const flowerBlend = isFlower.mul(step(float(0.78), h))
+        const grassColor = mix(bladeGrad, flowerTip, flowerBlend)
 
         const material = new MeshDefaultMaterial({
             colorNode: grassColor,
@@ -218,24 +291,22 @@ export class Grass
 
         const camDiff = this.uCamPos.xz.sub(rootPos.xz)
         const camDist = camDiff.x.mul(camDiff.x).add(camDiff.y.mul(camDiff.y)).add(0.001).sqrt()
-        // 3-tier Tidewater LOD taper: T2 fades [16..24], T1 fades [28..40], T0 fades [50..68]
-        const fadeT2 = float(1).sub(smoothstep(float(16.0), float(24.0), camDist))
-        const fadeT1 = float(1).sub(smoothstep(float(28.0), float(40.0), camDist))
-        const fadeT0 = float(1).sub(smoothstep(float(50.0), float(68.0), camDist))
+        // Far-field LOD only (beyond visible gameplay area so grass stays planted and never moves with player)
+        const fadeT2 = float(1).sub(smoothstep(float(38.0), float(50.0), camDist))
+        const fadeT1 = float(1).sub(smoothstep(float(52.0), float(66.0), camDist))
+        const fadeT0 = float(1).sub(smoothstep(float(68.0), float(86.0), camDist))
         const isT0 = float(1).sub(smoothstep(float(0.0), float(0.5), bladeTier))
         const isT2 = smoothstep(float(1.5), float(2.0), bladeTier)
         const isT1 = float(1).sub(isT0).sub(isT2).clamp(0, 1)
         const lodScale = fadeT0.mul(isT0).add(fadeT1.mul(isT1)).add(fadeT2.mul(isT2)).clamp(0, 1)
-        const widthComp = float(1).add(smoothstep(float(16.0), float(48.0), camDist).mul(0.45))
 
-        // Avoid degenerate zero-area triangles (WGSL NaN in derivatives/bloom): sink faded blades underground
         const safeScale = lodScale.max(0.05)
         const sinkY = float(1).sub(smoothstep(float(0.02), float(0.08), lodScale)).mul(2.5)
 
         const ca = cos(bladeAngle)
         const sa = sin(bladeAngle)
-        const px = positionLocal.x.mul(widthComp).mul(safeScale)
-        const pz = positionLocal.z.mul(widthComp).mul(safeScale)
+        const px = positionLocal.x.mul(safeScale)
+        const pz = positionLocal.z.mul(safeScale)
         const rotX = px.mul(ca).sub(pz.mul(sa))
         const rotZ = px.mul(sa).add(pz.mul(ca))
 
@@ -246,11 +317,11 @@ export class Grass
         const bendFactor = float(1).sub(dist.div(this.uBendRadius).clamp(0, 1))
         const bendSq = bendFactor.mul(bendFactor)
 
-        const windX = sin(this.uTime.mul(0.95).add(rootPos.x.mul(0.35)).add(rootPos.z.mul(0.25))).mul(0.05).mul(tipWeight)
-        const windZ = cos(this.uTime.mul(0.8).add(rootPos.z.mul(0.32))).mul(0.04).mul(tipWeight)
+        const windX = sin(this.uTime.mul(0.85).add(rootPos.x.mul(0.28)).add(rootPos.z.mul(0.22))).mul(0.045).mul(tipWeight)
+        const windZ = cos(this.uTime.mul(0.7).add(rootPos.z.mul(0.26))).mul(0.035).mul(tipWeight)
 
         const bendXZ = pushDir.mul(bendSq.mul(this.uBendStrength).mul(tipWeight))
-        const bendY = bendSq.mul(0.20).mul(tipWeight)
+        const bendY = bendSq.mul(0.18).mul(tipWeight)
 
         material.positionNode = vec3(
             rotX.add(windX).add(bendXZ.x),

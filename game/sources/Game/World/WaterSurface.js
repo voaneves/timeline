@@ -68,12 +68,22 @@ export class WaterSurface
 
         if(isQ0)
         {
-            const w1 = sin(positionWorld.x.mul(0.22).add(positionWorld.z.mul(0.14)).add(this.uTime.mul(1.1)))
-            const w2 = cos(positionWorld.x.mul(-0.18).add(positionWorld.z.mul(0.31)).sub(this.uTime.mul(0.95)))
-            const w3 = sin(positionWorld.x.mul(0.47).sub(positionWorld.z.mul(0.39)).add(this.uTime.mul(1.45)))
-            const analyticalHeight = w1.mul(0.055).add(w2.mul(0.04)).add(w3.mul(0.022))
+            const p1 = positionWorld.x.mul(0.24).add(positionWorld.z.mul(0.16)).add(this.uTime.mul(1.25))
+            const p2 = positionWorld.x.mul(-0.19).add(positionWorld.z.mul(0.33)).sub(this.uTime.mul(1.05))
+            const p3 = positionWorld.x.mul(0.52).sub(positionWorld.z.mul(0.44)).add(this.uTime.mul(1.65))
+            const p4 = positionWorld.x.mul(0.85).add(positionWorld.z.mul(0.72)).sub(this.uTime.mul(2.1))
+            const w1 = sin(p1)
+            const w2 = cos(p2)
+            const w3 = sin(p3)
+            const w4 = cos(p4)
+            waveDispY = w1.mul(0.12).add(w2.mul(0.08)).add(w3.mul(0.045))
 
-            waveDispY = analyticalHeight
+            // Analytical wave slope for stylized sun-lit wave facets & crest highlights
+            const dHx = cos(p1).mul(0.24 * 0.14).add(sin(p2).mul(0.19 * 0.10)).add(cos(p3).mul(0.52 * 0.06)).sub(sin(p4).mul(0.85 * 0.03))
+            const dHz = cos(p1).mul(0.16 * 0.14).sub(sin(p2).mul(0.33 * 0.10)).sub(cos(p3).mul(0.44 * 0.06)).sub(sin(p4).mul(0.72 * 0.03))
+            const waveLit = dHx.mul(0.65).add(dHz.mul(0.55)).add(0.5).clamp(0.0, 1.0)
+            const crestHighlight = smoothstep(float(0.68), float(0.92), waveLit)
+
             let fftFoam = float(0)
             if(this.fft)
             {
@@ -82,22 +92,27 @@ export class WaterSurface
                 fftFoam = fftSample.w
             }
 
-            const edgeDist = length(vec2(dx, dz))
-            const shallowBand = float(1).sub(smoothstep(float(0.0), float(14.0), edgeDist))
-            const swashPhase = sin(edgeDist.mul(1.6).sub(this.uTime.mul(1.75))).mul(0.5).add(0.5)
-            const shoreFoamBand = float(1).sub(smoothstep(float(0.0), float(3.2), edgeDist))
-            const stylizedShoreFoam = step(float(0.58), shoreFoamBand.mul(0.72).add(swashPhase.mul(0.45)))
+            // Organic shoreline perturbation so shore foam curves naturally instead of a straight rectangle
+            const shoreNoise = sin(positionWorld.x.mul(0.28)).mul(0.85).add(cos(positionWorld.z.mul(0.32)).mul(0.75))
+            const rawEdge = dx.mul(dx).add(dz.mul(dz)).add(0.0001).sqrt()
+            const edgeDist = rawEdge.add(shoreNoise.mul(0.45)).max(0.0)
 
-            const crestRipple = w1.mul(0.5).add(w2.mul(0.5)).mul(0.5).add(0.5)
-            const whitecapFoam = smoothstep(float(0.42), float(0.75), fftFoam.add(crestRipple.mul(0.22)))
-            const totalFoam = stylizedShoreFoam.max(whitecapFoam.mul(0.75))
+            const shallowBand = float(1).sub(smoothstep(float(0.0), float(15.0), edgeDist))
+            const swashPhase = sin(edgeDist.mul(1.75).sub(this.uTime.mul(1.85))).mul(0.5).add(0.5)
+            const shoreFoamBand = float(1).sub(smoothstep(float(0.0), float(3.4), edgeDist))
+            const stylizedShoreFoam = step(float(0.56), shoreFoamBand.mul(0.72).add(swashPhase.mul(0.45)))
 
-            const oceanBase = mix(deepOcean, midLagoon, crestRipple.mul(0.45).add(shallowBand.mul(0.35)))
-            const withShallow = mix(oceanBase, shallowTurquoise, shallowBand.mul(0.65))
-            const withFoam = mix(withShallow, foamCream, totalFoam.mul(0.88))
-            const horizonBlend = smoothstep(float(65.0), float(185.0), edgeDist)
-            finalWaterColor = mix(withFoam, horizonTint, horizonBlend.mul(0.82))
-            nearMask = float(1).sub(smoothstep(float(90.0), float(180.0), edgeDist))
+            const crestFoamWave = w1.mul(0.45).add(w3.mul(0.35)).add(w4.mul(0.2)).mul(0.5).add(0.5)
+            const whitecapFoam = smoothstep(float(0.55), float(0.82), fftFoam.add(crestFoamWave.mul(0.38)))
+            const totalFoam = stylizedShoreFoam.max(whitecapFoam.mul(0.8))
+
+            const oceanBase = mix(deepOcean, midLagoon, waveLit.mul(0.65).add(shallowBand.mul(0.35)))
+            const withShallow = mix(oceanBase, shallowTurquoise, shallowBand.mul(0.62))
+            const withHighlight = mix(withShallow, color('#8be3ee'), crestHighlight.mul(0.45))
+            const withFoam = mix(withHighlight, foamCream, totalFoam.mul(0.88))
+            const horizonBlend = smoothstep(float(70.0), float(185.0), rawEdge)
+            finalWaterColor = mix(withFoam, horizonTint, horizonBlend.mul(0.85))
+            nearMask = float(1).sub(smoothstep(float(90.0), float(180.0), rawEdge))
         }
         else
         {
@@ -166,14 +181,15 @@ export class WaterSurface
             hasReveal: true,
         })
 
-        const swayWeight = smoothstep(float(1.0), float(4.0), positionWorld.y)
-        const swayX = sin(this.uTime.mul(0.95).add(positionWorld.x.mul(0.35)).add(positionWorld.z.mul(0.25))).mul(0.045).mul(swayWeight)
-        const swayZ = cos(this.uTime.mul(0.8).add(positionWorld.z.mul(0.3))).mul(0.038).mul(swayWeight)
+        // Coherent directional breeze across whole canopy (no circular Lissajous / twisting)
+        const swayWeight = smoothstep(float(2.2), float(5.0), positionWorld.y)
+        const windWave = sin(this.uTime.mul(0.55).add(positionWorld.x.mul(0.05)).add(positionWorld.z.mul(0.05)))
+        const sway = windWave.mul(0.022).mul(swayWeight)
 
         windMat.positionNode = vec3(
-            positionLocal.x.add(swayX),
+            positionLocal.x.add(sway.mul(0.85)),
             positionLocal.y,
-            positionLocal.z.add(swayZ)
+            positionLocal.z.add(sway.mul(0.35))
         )
 
         mesh.material = windMat

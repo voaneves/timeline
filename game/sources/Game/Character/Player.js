@@ -260,8 +260,9 @@ export class Player
         if(actions.get('run').active)
             magnitude = 1
 
-        // View azimuth: the camera looks along (-sin(theta), -cos(theta)) on the ground plane
-        const theta = this.game.view.spherical.theta
+        // View azimuth: include orbit yaw + mouseDragYaw so movement stays camera-relative when orbiting
+        const view = this.game.view
+        const theta = view.spherical.theta + (view.orbit?.yaw ?? 0) + (view.orbit?.mouseDragYaw ?? 0)
         const forwardX = - Math.sin(theta)
         const forwardZ = - Math.cos(theta)
         const rightX = Math.cos(theta)
