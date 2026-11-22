@@ -12,14 +12,7 @@ export class DayCycles extends Cycles
 {
     constructor()
     {
-        // Deterministic by default (visual tests): fixed progress. `?cycle=0.3` overrides, `?cycle=live` restores the real-time clock.
-        const queryValue = new URLSearchParams(location.search).get('cycle')
-        let forcedProgress = 0.05 // day
-        if(queryValue === 'live')
-            forcedProgress = null
-        else if(queryValue !== null && !Number.isNaN(parseFloat(queryValue)))
-            forcedProgress = parseFloat(queryValue)
-
+        const forcedProgress = import.meta.env.VITE_DAY_CYCLE_PROGRESS ? parseFloat(import.meta.env.VITE_DAY_CYCLE_PROGRESS) : null
         super('🕜 Day Cycles', 4 * 60, forcedProgress, false)
     }
 

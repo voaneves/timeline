@@ -1,36 +1,53 @@
-// Rewritten for the empty engine (plan T0.6): no Server, Audio, Player, Menu, Areas, Weather cycles,
-// no resources to load. Construction order follows ENGINE-INVENTORY.md 3.3.
 import * as THREE from 'three/webgpu'
 
 import { Debug } from './Debug.js'
 import { Inputs } from './Inputs/Inputs.js'
 import { Physics } from './Physics/Physics.js'
-import { PhysicsWireframe } from './Physics/PhysicsWireframe.js'
 import { Rendering } from './Rendering.js'
 import { ResourcesLoader } from './ResourcesLoader.js'
 import { Ticker } from './Ticker.js'
 import { Time } from './Time.js'
+import { Player } from './Player.js'
 import { View } from './View.js'
 import { Viewport } from './Viewport.js'
 import { World } from './World/World.js'
 import { Tracks } from './Tracks.js'
+// import { Monitoring } from './Monitoring.js'
 import { Lighting } from './Ligthing.js'
 import { Materials } from './Materials.js'
 import { Objects } from './Objects.js'
 import { Fog } from './Fog.js'
 import { DayCycles } from './Cycles/DayCycles.js'
 import { Weather } from './Weather.js'
+import { Noises } from './Noises.js'
+import { Wind } from './Wind.js'
 import { Terrain } from './Terrain.js'
+import { Explosions } from './Explosions.js'
+import { YearCycles } from './Cycles/YearCycles.js'
+import { Server } from './Server.js'
+import { Modals } from './Modals.js'
+import { PhysicsVehicle } from './Physics/PhysicsVehicle.js'
+import { PhysicsWireframe } from './Physics/PhysicsWireframe.js'
+import { Zones } from './Zones.js'
+import { Overlay } from './Overlay.js'
+import { Tornado } from './Tornado.js'
+import { InteractivePoints } from './InteractivePoints.js'
 import { Respawns } from './Respawns.js'
+import { Audio } from './Audio.js'
+import { ClosingManager } from './ClosingManager.js'
+import { RayCursor } from './RayCursor.js'
 import { Water } from './Water.js'
 import { Reveal } from './Reveal.js'
-import { Quality } from './Quality.js'
-import { PerfProbe } from './PerfProbe.js'
-import { Cards } from './UI/Cards.js'
-import { Hud } from './UI/Hud.js'
-import { MapDialog } from './UI/Map.js'
+import { KonamiCode } from './KonamiCode.js'
 import { Achievements } from './Achievements.js'
-import { Audio } from './Audio.js'
+import { Notifications } from './Notifications.js'
+import { Quality } from './Quality.js'
+import { Menu } from './Menu.js'
+import { Title } from './Title.js'
+import { PreRenderer } from './PreRenderer.js'
+import { Options } from './Options.js'
+import gsap from 'gsap'
+import { Map } from './Map.js'
 
 export class Game
 {
@@ -57,313 +74,203 @@ export class Game
         this.canvasElement = this.domElement.querySelector('.js-canvas')
         document.documentElement.classList.add('is-started')
 
-        // Debug panel (tweakpane) is a separate chunk, fetched only when requested
-        await Debug.load()
-
-        // Load RAPIER (wasm) in parallel with the rest of the boot
-        const rapierPromise = import('@dimforge/rapier3d')
-
+        // First batch for intro
         this.scene = new THREE.Scene()
         this.debug = new Debug()
         this.resourcesLoader = new ResourcesLoader()
         this.quality = new Quality()
+        this.server = new Server()
         this.ticker = new Ticker()
         this.time = new Time()
         this.dayCycles = new DayCycles()
-        this.inputs = new Inputs([], [])
-
-        // `?ghost=rec|<name>` (T0.16): input recorder / replayer, separate chunk, only fetched when requested
-        const ghostMode = Debug.getParam('ghost')
-        if(ghostMode)
-        {
-            const { Ghost } = await import('./Ghost.js')
-            this.ghost = new Ghost(ghostMode)
-            await this.ghost.load()
-        }
-
-        // Default to Era 1 ("Origens") unless greybox, demo, palette, or Phase 1 greybox ghosts are requested
-        const eraParam = Debug.getParam('era')
-        const greyboxGhosts = new Set([ 'skid', 'jumpArc', 'stamp', 'platform', 'greybox-keyboard', 'vehicle' ])
-        if(eraParam === null && Debug.getParam('demo') === null && Debug.getParam('debug') !== 'palette' && !greyboxGhosts.has(ghostMode))
-        {
-            const url = new URL(location.href)
-            url.searchParams.set('era', 'origens')
-            history.replaceState(history.state, '', url.toString())
-        }
-
-        this.paused = false
+        this.yearCycles = new YearCycles()
+        this.inputs = new Inputs([], [ 'intro' ])
+        this.audio = new Audio()
+        this.notifications = new Notifications()
+        this.rayCursor = new RayCursor()
         this.viewport = new Viewport(this.domElement)
-        this.cards = new Cards()
-        this.hud = new Hud(this.cards)
-        this.map = new MapDialog(this.cards)
-        this.achievements = new Achievements(this.cards)
-        this.hud.setMap(this.map)
-        this.hud.setAchievements(this.achievements)
-        if(this.hud.options.quality !== 'auto')
-            this.quality.setManualLevel(Number(this.hud.options.quality))
-        this.installPauseControl()
-        this.ui = {
-            cards: this.cards,
-            hud: this.hud,
-            map: this.map,
-            achievements: this.achievements,
-            announcer: this.cards.announcer,
-            openMilestone: (id) => this.cards.openMilestone(id),
-            openProject: (id) => this.cards.openProject(id),
-            openProjects: () => this.cards.openProjects(),
-            openContact: () => this.cards.openContact(),
-            openList: () => this.cards.openList(),
-            openMenu: () => this.hud.openMenu(),
-            openMap: () => this.map.open(),
-            closeCard: (byPointer) => this.cards.close(byPointer),
-            setEraProgress: (eraName, visited, total) => this.hud.setEraProgress(eraName, visited, total),
-            setSignalsCount: (count, total) => this.hud.setSignalsCount(count, total),
-            setPaused: (paused) => this.setPaused(paused),
-            options: this.hud.options,
-        }
+        this.modals = new Modals()
+        this.menu = new Menu()
         this.rendering = new Rendering()
         await this.rendering.setRenderer()
 
-        // No file resources in the empty engine (textures are generated in code)
-        this.resources = {}
+        const compressed = !!import.meta.env.VITE_COMPRESSED
+        const compressedModelSuffix = compressed ? '-compressed' : ''
+        const compressedTextureFormat = compressed ? 'textureKtx' : 'texture'
+        const compressedTextureExtension = compressed ? 'ktx' : 'png'
 
-        this.respawns = new Respawns()
+        const cb = '?cb=1'
+        this.resources = await this.resourcesLoader.load([
+            [ 'respawnsReferencesModel',    `respawns/respawnsReferences${compressedModelSuffix}.glb${cb}`, 'gltf' ],
+            [ 'behindTheSceneStarsTexture', `behindTheScene/stars.${compressedTextureExtension}${cb}`,      compressedTextureFormat, (resource) => { resource.colorSpace = THREE.SRGBColorSpace; resource.minFilter = THREE.NearestFilter; resource.magFilter = THREE.NearestFilter; resource.generateMipmaps = false; resource.wrapS = THREE.RepeatWrapping; resource.wrapT = THREE.RepeatWrapping; } ],
+            [ 'soundTexture',               `intro/sound.${compressedTextureExtension}${cb}`,               compressedTextureFormat, (resource) => { resource.minFilter = THREE.LinearFilter; resource.magFilter = THREE.LinearFilter; resource.generateMipmaps = false; resource.repeat.x = 0.5; } ],
+            [ 'paletteTexture',             `palette.${compressedTextureExtension}${cb}`,                   compressedTextureFormat, (resource) => { resource.minFilter = THREE.NearestFilter; resource.magFilter = THREE.NearestFilter; resource.generateMipmaps = false; resource.colorSpace = THREE.SRGBColorSpace; } ],
+
+        ])
+        this.options = new Options()
+        this.respawns = new Respawns(import.meta.env.VITE_PLAYER_SPAWN || 'landing')
         this.view = new View()
         this.rendering.setPostprocessing()
-        this.applyReducedMotion(this.hud.options.reducedMotion)
-        this.hud.events.on('optionChange', (key, value) =>
-        {
-            if(key === 'reducedMotion')
-                this.applyReducedMotion(Boolean(value))
-            else if(key === 'quality')
-                this.quality.setManualLevel(value === 'auto' ? null : Number(value))
-        })
         this.rendering.start()
-        this.perf = new PerfProbe() // window.__perf
-        if(__DEV_TOOLS__ && Debug.isRequested())
-            import('./PerfHud.js').then(({ PerfHud }) => { this.perfHud = new PerfHud(this.perf) })
         this.reveal = new Reveal()
+        this.noises = new Noises()
         this.weather = new Weather()
+        this.wind = new Wind()
         this.tracks = new Tracks()
         this.lighting = new Lighting()
         this.fog = new Fog()
         this.water = new Water()
         this.materials = new Materials()
         this.objects = new Objects()
+        this.explosions = new Explosions()
+        this.world = new World()
 
-        this.RAPIER = await rapierPromise
+        // Load and init RAPIER
+        const rapierPromise = import('@dimforge/rapier3d')
 
-        const activeEra = (Debug.getParam('era') || '').trim().toLowerCase()
-        if(Debug.getParam('demo') === null && Debug.getParam('debug') !== 'palette')
-        {
-            const criticalFiles = [ 'palette.png' ]
-            if(Debug.getParam('loco') !== 'vehicle')
-                criticalFiles.push('character/victor_core.glb')
-            if(activeEra === 'origens')
+        // Load rest of resources
+        const resourcesPromise = this.resourcesLoader.load(
+            [
+                [ 'foliageTexture',                        `foliage/foliageSDF.${compressedTextureExtension}${cb}`,                              compressedTextureFormat, (resource) => { resource.minFilter = THREE.NearestFilter; resource.magFilter = THREE.NearestFilter; resource.generateMipmaps = false; } ],
+                [ 'bushesReferences',                      `bushes/bushesReferences${compressedModelSuffix}.glb${cb}`,                           'gltf' ],
+                [ 'vehicle',                               `vehicle/default${compressedModelSuffix}.glb${cb}`,                                   'gltf' ],
+                [ 'playgroundVisual',                      `playground/playgroundVisual${compressedModelSuffix}.glb${cb}`,                       'gltf' ],
+                [ 'playgroundPhysical',                    `playground/playgroundPhysical${compressedModelSuffix}.glb${cb}`,                     'gltf' ],
+                [ 'flowersReferencesModel',                `flowers/flowersReferences${compressedModelSuffix}.glb${cb}`,                         'gltf' ],
+                [ 'bricksModel',                           `bricks/bricks${compressedModelSuffix}.glb${cb}`,                                     'gltf' ],
+                [ 'fencesModel',                           `fences/fences${compressedModelSuffix}.glb${cb}`,                                     'gltf' ],
+                [ 'benchesModel',                          `benches/benches${compressedModelSuffix}.glb${cb}`,                                   'gltf' ],
+                [ 'explosiveCratesModel',                  `explosiveCrates/explosiveCrates${compressedModelSuffix}.glb${cb}`,                   'gltf' ],
+                [ 'lanternsModel',                         `lanterns/lanterns${compressedModelSuffix}.glb${cb}`,                                 'gltf' ],
+                [ 'terrainTexture',                        `terrain/terrain.${compressedTextureExtension}${cb}`,                                 compressedTextureFormat, (resource) => { resource.flipY = false; } ],
+                [ 'terrainModel',                          `terrain/terrain${compressedModelSuffix}.glb${cb}`,                                   'gltf' ],
+                [ 'floorSlabsTexture',                     `floor/slabs.${compressedTextureExtension}`,                                     compressedTextureFormat, (resource) => { resource.wrapS = THREE.RepeatWrapping; resource.wrapT = THREE.RepeatWrapping; resource.minFilter = THREE.LinearFilter; resource.magFilter = THREE.LinearFilter; resource.generateMipmaps = false } ],
+                [ 'birchTreesVisualModel',                 `birchTrees/birchTreesVisual${compressedModelSuffix}.glb${cb}`,                       'gltf' ],
+                [ 'birchTreesReferencesModel',             `birchTrees/birchTreesReferences${compressedModelSuffix}.glb${cb}`,                   'gltf' ],
+                [ 'oakTreesVisualModel',                   `oakTrees/oakTreesVisual${compressedModelSuffix}.glb${cb}`,                           'gltf' ],
+                [ 'oakTreesReferencesModel',               `oakTrees/oakTreesReferences${compressedModelSuffix}.glb${cb}`,                                               'gltf' ],
+                [ 'cherryTreesVisualModel',                `cherryTrees/cherryTreesVisual${compressedModelSuffix}.glb${cb}`,                     'gltf' ],
+                [ 'cherryTreesReferencesModel',            `cherryTrees/cherryTreesReferences${compressedModelSuffix}.glb${cb}`,                 'gltf' ],
+                [ 'sceneryModel',                          `scenery/scenery${compressedModelSuffix}.glb${cb}`,                                   'gltf' ],
+                [ 'areasModel',                            `areas/areas${compressedModelSuffix}.glb${cb}`,                                       'gltf' ],
+                [ 'poleLightsModel',                       `poleLights/poleLights${compressedModelSuffix}.glb${cb}`,                             'gltf' ],
+                [ 'whisperFlameTexture',                   `whispers/whisperFlame.${compressedTextureExtension}${cb}`,                           compressedTextureFormat, (resource) => { resource.minFilter = THREE.LinearFilter; resource.magFilter = THREE.LinearFilter; resource.generateMipmaps = false } ],
+                [ 'satanStarTexture',                      `areas/satanStar.${compressedTextureExtension}${cb}`,                                 compressedTextureFormat, (resource) => { resource.minFilter = THREE.LinearFilter; resource.magFilter = THREE.LinearFilter; resource.generateMipmaps = false } ],
+                [ 'tornadoPathReferencesModel',            `tornado/tornadoPathReferences${compressedModelSuffix}.glb${cb}`,                     'gltf' ],
+                [ 'overlayPatternTexture',                 `overlay/overlayPattern.${compressedTextureExtension}${cb}`,                          compressedTextureFormat, (resource) => { resource.wrapS = THREE.RepeatWrapping; resource.wrapT = THREE.RepeatWrapping; resource.magFilter = THREE.NearestFilter; resource.minFilter = THREE.NearestFilter; resource.generateMipmaps = false } ],
+                [ 'interactivePointsKeyIconCrossTexture',  `interactivePoints/interactivePointsKeyIconCross.${compressedTextureExtension}${cb}`, compressedTextureFormat, (resource) => { resource.minFilter = THREE.NearestFilter; resource.magFilter = THREE.NearestFilter; resource.generateMipmaps = false } ],
+                [ 'interactivePointsKeyIconEnterTexture',  `interactivePoints/interactivePointsKeyIconEnter.${compressedTextureExtension}${cb}`, compressedTextureFormat, (resource) => { resource.minFilter = THREE.NearestFilter; resource.magFilter = THREE.NearestFilter; resource.generateMipmaps = false } ],
+                [ 'interactivePointsKeyIconATexture',      `interactivePoints/interactivePointsKeyIconA.${compressedTextureExtension}${cb}`,     compressedTextureFormat, (resource) => { resource.minFilter = THREE.NearestFilter; resource.magFilter = THREE.NearestFilter; resource.generateMipmaps = false } ],
+                [ 'jukeboxMusicNotes',                     `jukebox/jukeboxMusicNotes.${compressedTextureExtension}${cb}`,                       compressedTextureFormat, (resource) => { resource.minFilter = THREE.LinearFilter; resource.magFilter = THREE.LinearFilter; resource.generateMipmaps = false } ],
+                [ 'achievementsGlyphsTexture',             `achievements/glyphs.${compressedTextureExtension}${cb}`,                             compressedTextureFormat, (resource) => { resource.minFilter = THREE.LinearFilter; resource.magFilter = THREE.LinearFilter; resource.generateMipmaps = false; resource.wrapS = THREE.RepeatWrapping; } ],
+                [ 'careerFreelancerTexture',               `career/careerFreelancer.${compressedTextureExtension}${cb}`,                         compressedTextureFormat, (resource) => { resource.flipY = false; resource.minFilter = THREE.LinearFilter; resource.magFilter = THREE.LinearFilter; resource.generateMipmaps = false; resource.wrapS = THREE.ClampToEdgeWrapping; resource.wrapT = THREE.ClampToEdgeWrapping; } ],
+                [ 'careerHeticTexture',                    `career/careerHetic.${compressedTextureExtension}${cb}`,                              compressedTextureFormat, (resource) => { resource.flipY = false; resource.minFilter = THREE.LinearFilter; resource.magFilter = THREE.LinearFilter; resource.generateMipmaps = false; resource.wrapS = THREE.ClampToEdgeWrapping; resource.wrapT = THREE.ClampToEdgeWrapping; } ],
+                [ 'careerImmersiveGardenTexture',          `career/careerImmersiveGarden.${compressedTextureExtension}${cb}`,                    compressedTextureFormat, (resource) => { resource.flipY = false; resource.minFilter = THREE.LinearFilter; resource.magFilter = THREE.LinearFilter; resource.generateMipmaps = false; resource.wrapS = THREE.ClampToEdgeWrapping; resource.wrapT = THREE.ClampToEdgeWrapping; } ],
+                [ 'careerIRLTeacherTexture',               `career/careerIRLTeacher.${compressedTextureExtension}${cb}`,                         compressedTextureFormat, (resource) => { resource.flipY = false; resource.minFilter = THREE.LinearFilter; resource.magFilter = THREE.LinearFilter; resource.generateMipmaps = false; resource.wrapS = THREE.ClampToEdgeWrapping; resource.wrapT = THREE.ClampToEdgeWrapping; } ],
+                [ 'careerOnlineTeacherTexture',            `career/careerOnlineTeacher.${compressedTextureExtension}${cb}`,                      compressedTextureFormat, (resource) => { resource.flipY = false; resource.minFilter = THREE.LinearFilter; resource.magFilter = THREE.LinearFilter; resource.generateMipmaps = false; resource.wrapS = THREE.ClampToEdgeWrapping; resource.wrapT = THREE.ClampToEdgeWrapping; } ],
+                [ 'careerUzikTexture',                     `career/careerUzik.${compressedTextureExtension}${cb}`,                               compressedTextureFormat, (resource) => { resource.flipY = false; resource.minFilter = THREE.LinearFilter; resource.magFilter = THREE.LinearFilter; resource.generateMipmaps = false; resource.wrapS = THREE.ClampToEdgeWrapping; resource.wrapT = THREE.ClampToEdgeWrapping; } ],
+                [ 'timeMachineScreenMGSTexture',           `timeMachine/timeMachineScreenMGS.${compressedTextureExtension}${cb}`,                compressedTextureFormat, (resource) => { resource.minFilter = THREE.NearestFilter; resource.magFilter = THREE.NearestFilter; resource.generateMipmaps = false; resource.wrapS = THREE.ClampToEdgeWrapping; resource.wrapT = THREE.ClampToEdgeWrapping; resource.colorSpace = THREE.SRGBColorSpace; } ],
+                [ 'timeMachineScreenFolioTexture',         `timeMachine/timeMachineScreenFolio.${compressedTextureExtension}${cb}`,              compressedTextureFormat, (resource) => { resource.minFilter = THREE.NearestFilter; resource.magFilter = THREE.NearestFilter; resource.generateMipmaps = false; resource.wrapS = THREE.ClampToEdgeWrapping; resource.wrapT = THREE.ClampToEdgeWrapping; resource.colorSpace = THREE.SRGBColorSpace; } ],
+            ],
+            (toLoad, total) =>
             {
-                criticalFiles.push(
-                    'eras/origens/origensVisual.glb',
-                    'eras/origens/origensPhysical.glb',
-                    'eras/origens/origensObjects.glb',
-                    'eras/origens/origensReferences.glb',
-                    'eras/origens/origens_terrain.png',
-                )
+                this.world.intro.updateProgress(1 - toLoad / total)
             }
-            else
-            {
-                criticalFiles.push('eras/greybox/greybox.glb')
-            }
-            try { await this.resourcesLoader.prepareCritical(criticalFiles) } catch {}
-        }
+        )
 
-        if(Debug.getParam('demo') === null && Debug.getParam('debug') !== 'palette' && Debug.getParam('loco') !== 'vehicle')
-        {
-            const characterResources = await this.resourcesLoader.load([
-                [ 'victorCore', 'character/victor_core.glb', 'gltf' ],
-                [ 'palette', 'palette.png', 'texture' ],
-            ])
-            Object.assign(this.resources, characterResources)
-        }
+        const [ newResources, RAPIER ] = await Promise.all([ resourcesPromise, rapierPromise ])
+        this.RAPIER = RAPIER
+        this.resources = { ...newResources, ...this.resources }
 
         this.terrain = new Terrain()
         this.physics = new Physics()
         this.wireframe = new PhysicsWireframe()
-        this.world = new World()
-        await this.world.ready // greybox glb (the `?demo` world is synchronous)
-        this.applyReducedMotion(this.ui.options.reducedMotion)
-        this.resourcesLoader.finishCritical()
+        this.physicalVehicle = new PhysicsVehicle()
+        this.zones = new Zones()
+        this.player = new Player()
+        this.closingManager = new ClosingManager()
+        this.interactivePoints = new InteractivePoints()
+        this.konamiCode = new KonamiCode()
+        this.achievements = new Achievements()
+        this.tornado = new Tornado()
+        this.map = new Map()
+        this.title = new Title()
+        // this.monitoring = new Monitoring()
+        this.world.step(1)
+        this.overlay = new Overlay()
 
-        this.audio = new Audio(this)
+        // Pre-render if quality high
+        if(this.quality.level === 0 && this.rendering.renderer.backend.isWebGPUBackend)
+            PreRenderer.render()
 
-        if(this.rendering?.renderer?.compileAsync)
+        this.ticker.wait(3, () =>
         {
-            try { await this.rendering.renderer.compileAsync(this.scene, this.view.camera) } catch {}
-        }
-
-        // `?debug=physics`: Rapier smoke test (T0.7), separate chunk, results in window.__physicsSmoke
-        if(__DEV_TOOLS__ && Debug.getParam('debug') === 'physics')
-            this.physicsSmoke = import('./Physics/PhysicsSmoke.js').then(({ runPhysicsSmoke }) => runPhysicsSmoke(this.RAPIER))
-
-        // Ghost starts counting fixed steps here: nothing has stepped the physics yet and nothing awaits until `ready`
-        this.ghost?.begin()
-
-        this.ready = true
-        this.reveal.start({
-            instant: Boolean(Debug.getParam('demo') !== null || Debug.getParam('debug') === 'palette'),
+            this.reveal.updateStep(0)
         })
 
-        if(activeEra === 'origens')
+        // Debug achievement
+        if(this.debug.active)
         {
-            this.ui.announcer.announceEra('Origens', 3)
-            this.bindProximityAnnouncer()
+            this.achievements.setProgress('debug', 1)
         }
-
-        // Lazy-load extra animation clips & audio bank post-reveal
-        this.world?.player?.visual?.loadExtras()
-        this.audio?.loadBank()
-    }
-
-    installPauseControl()
-    {
-        const origTickerUpdate = this.ticker.update.bind(this.ticker)
-        this.ticker.update = (elapsed) =>
-        {
-            if(this.paused)
-            {
-                this.ticker.elapsed = elapsed / 1000
-                this.rendering?.render()
-                return
-            }
-            origTickerUpdate(elapsed)
-        }
-
-        const actionsEl = this.hud?.header?.querySelector('.vn-hud-actions')
-        if(actionsEl)
-        {
-            this.pauseBtn = document.createElement('button')
-            this.pauseBtn.type = 'button'
-            this.pauseBtn.className = 'vn-hud-btn js-hud-pause'
-            this.pauseBtn.setAttribute('aria-pressed', 'false')
-            this.pauseBtn.textContent = 'Pausar'
-            this.pauseBtn.addEventListener('click', () => this.setPaused(!this.paused))
-
-            const menuBtn = actionsEl.querySelector('.js-hud-menu')
-            if(menuBtn)
-                actionsEl.insertBefore(this.pauseBtn, menuBtn.nextSibling)
-            else
-                actionsEl.appendChild(this.pauseBtn)
-        }
-
-        window.addEventListener('keydown', (event) =>
-        {
-            if(event.code !== 'KeyP' || event.repeat)
-                return
-            const target = event.target
-            if(target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable))
-                return
-            if(document.querySelector('dialog[open]'))
-                return
-            event.preventDefault()
-            this.setPaused(!this.paused)
-        })
-    }
-
-    setPaused(paused)
-    {
-        const next = Boolean(paused)
-        if(this.paused === next)
-            return
-
-        this.paused = next
-        document.documentElement.classList.toggle('is-paused', next)
-
-        if(this.pauseBtn)
-        {
-            this.pauseBtn.setAttribute('aria-pressed', String(next))
-            this.pauseBtn.textContent = next ? 'Retomar' : 'Pausar'
-            this.pauseBtn.classList.toggle('is-paused', next)
-        }
-
-        if(next)
-            this.cards?.releaseGameInputs?.()
-
-        this.world?.setPaused?.(next)
-
-        if(this.audio?.ctx)
-        {
-            if(next && this.audio.ctx.state === 'running')
-                this.audio.ctx.suspend().catch(() => {})
-            else if(!next && !this.audio.muted && this.audio.ctx.state === 'suspended')
-                this.audio.ctx.resume().catch(() => {})
-        }
-
-        this.ui?.announcer?.announce(next ? 'Jogo pausado' : 'Jogo retomado')
-    }
-
-    applyReducedMotion(enabled)
-    {
-        if(this.rendering?.cheapDOFPass)
-            this.rendering.cheapDOFPass.amount.value = enabled ? 0 : 0.003
-
-        if(this.view?.roll)
-        {
-            this.view.roll.kickStrength = enabled ? 0 : 1
-            if(enabled)
-            {
-                this.view.roll.value = 0
-                this.view.roll.speed = 0
-                this.view.roll.velocity = 0
-            }
-        }
-
-        if(enabled && this.view?.speedLines)
-        {
-            this.view.speedLines.strength = 0
-            if(this.view.speedLines.smoothedStrength)
-                this.view.speedLines.smoothedStrength.value = 0
-        }
-
-        this.world?.origensEra?.ambientLife?.setPaused?.(Boolean(enabled || this.paused))
-    }
-
-    bindProximityAnnouncer()
-    {
-        this.ticker.events.on('tick', () =>
-        {
-            if(!this.ready || this.paused || document.querySelector('dialog[open]'))
-                return
-            const playerPos = this.world?.player?.controller?.body?.translation?.()
-            const era = this.world?.origensEra
-            const setPieces = era?.setPieces
-            if(!playerPos || !era || !setPieces)
-                return
-
-            if(!setPieces.housePopped)
-            {
-                const ref1994 = this.world.references.get('refMilestone1994')?.position
-                if(ref1994 && Math.hypot(playerPos.x - ref1994.x, playerPos.z - ref1994.z) <= 3.0)
-                    this.ui.announcer.announceThrottled('prox-1994', 'Bloco 1994: pressione F', 1500)
-            }
-
-            if(!setPieces.crtLit)
-            {
-                const ref2005 = this.world.references.get('refMilestone2005')?.position
-                if(ref2005 && Math.hypot(playerPos.x - ref2005.x, playerPos.z - ref2005.z) <= 3.0)
-                    this.ui.announcer.announceThrottled('prox-2005', 'Bloco 2005: pressione F ou carimbe', 1500)
-            }
-
-            if(!setPieces.capeloAttached)
-            {
-                const ref2011 = this.world.references.get('refMilestone2011')?.position
-                if(ref2011 && Math.hypot(playerPos.x - ref2011.x, playerPos.z - ref2011.z) <= 3.0)
-                    this.ui.announcer.announceThrottled('prox-2011', 'Bloco 2011: pressione F', 1500)
-            }
-        }, 25)
     }
 
     reset()
     {
-        this.objects.resetAll()
-        this.world?.reset?.()
+        // Interactive buttons
+        this.inputs.interactiveButtons.clearItems()
+
+        // Player respawn
+        this.player.respawn(null, () =>
+        {
+            // Objects reset
+            this.objects.resetAll()
+
+            // Explosive crates
+            if(this.world.explosiveCrates)
+                this.world.explosiveCrates.reset()
+
+            // Bowling
+            if(this.world.areas.bowling)
+                this.world.areas.bowling.restart()
+
+            // Cookie
+            if(this.world.areas.cookie)
+                this.world.areas.cookie.cookies.instancedGroup.needsUpdate = true
+
+            // Toilet
+            if(this.world.areas.toilet)
+                this.world.areas.toilet.cabin.down = false
+
+            // Social
+            if(this.world.areas.social)
+            {
+                this.world.areas.social.statue.down = false
+                this.world.areas.social.fans.instancedGroup.needsUpdate = true
+            }
+            
+            // Benches
+            if(this.world.benches)
+                this.world.benches.instancedGroup.needsUpdate = true
+            
+            // Fences
+            if(this.world.fences)
+                this.world.fences.instancedGroup.needsUpdate = true
+            
+            // Bricks
+            if(this.world.bricks)
+                this.world.bricks.instancedGroup.needsUpdate = true
+            
+            // Lanterns
+            if(this.world.lanterns)
+                this.world.lanterns.instancedGroup.needsUpdate = true
+
+            // Achievement
+            gsap.delayedCall(2, () =>
+            {
+                this.achievements.setProgress('reset', 1)
+            })
+        })
     }
 }
+

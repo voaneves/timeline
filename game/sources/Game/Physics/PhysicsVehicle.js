@@ -1,289 +1,591 @@
-// Vehicle locomotion variant (plan T1.10, decision D1 comparison): a grey box cart on Rapier's
-// DynamicRayCastVehicleController, spawned instead of the on-foot Player with `?loco=vehicle`.
-//
-// Quarantine: self-contained. It only uses Game (ticker, inputs, objects, physics, respawns, view); nothing else
-// in the engine depends on it, so it can be deleted whole if D1 does not pick the vehicle.
-// Controller setup and wheel loop are adapted as code; no upstream assets.
-//
-// - Input: the same movement actions as the Player (forward / backward / left / right / run + the gamepad left stick).
-//   Tank-style: forward/backward = throttle, left/right = steering, run = boost. The actions are registered with the
-//   same names, so a Player and a vehicle are never alive together (World picks one).
-// - Determinism: everything is driven by 'fixedTick' (order 2, before the Physics step at order 3) with the fixed
-//   step as the only time source. No wall clock, no Math.random. The only per-frame code ('tick') is visual
-//   (wheel meshes, camera follow).
-// - The chassis forward axis is +X in body space (the Rapier default `indexForwardAxis`): the body is spawned
-//   yawed so that +X points along the respawn forward (-Z at yaw 0).
 import * as THREE from 'three/webgpu'
 import { Game } from '../Game.js'
-
-// Tunables (metres, kilograms, seconds)
-const SETTINGS = {
-    chassisHalf: { x: 0.85, y: 0.18, z: 0.5 },
-    chassisMass: 60,
-    centerOfMass: { x: 0, y: - 0.25, z: 0 },
-    wheel: { radius: 0.4, offsetX: 0.6, offsetZ: 0.62, connectionY: - 0.05, restLength: 0.4, maxTravel: 0.5, stiffness: 28, compression: 3.2, relaxation: 2.4, maxForce: 6000, frictionSlip: 1.8, sideFriction: 3 },
-    engineForce: 120, // per wheel (4 wheel drive)
-    boostMultiplier: 1.6,
-    topSpeed: 9,
-    topSpeedBoost: 18,
-    reverseTopSpeed: 4,
-    brake: 3, // per wheel, when stopping
-    idleBrake: 0.15,
-    steering: 0.5, // rad at standstill
-    steeringHighSpeed: 0.2, // rad at top speed
-    fallLimit: - 1, // below this height the cart is put back on the respawn (fixed step; Objects' own per-frame reset is at -1.5)
-}
+import { Events } from '../Events.js'
+import { lerp, remap, remapClamp, smallestAngle } from '../utilities/maths.js'
 
 export class PhysicsVehicle
 {
     constructor()
     {
         this.game = Game.getInstance()
-        this.settings = SETTINGS
-        this.control = { throttle: 0, steer: 0, boost: false } // last fixed step
-        this.speed = 0 // signed forward speed (m/s)
-        this.fixedSteps = 0
-        this.resets = 0
 
-        this.setActions()
-        this.setChassis()
-        this.setWheels()
+        this.events = new Events()
 
-        // Before Physics (3): the wheel rays + forces are applied by the physics step of this same fixed step
-        this.game.ticker.events.on('fixedTick', () =>
+        this.steeringAmplitude = 0.5
+        this.engineForceAmplitude = 300
+        this.boostMultiplier = 2
+        this.topSpeed = 5
+        this.topSpeedBoost = 40
+        this.brakeAmplitude = 35
+        this.idleBrake = 0.06
+        this.reverseBrake = 0.4
+
+        this.sideward = new THREE.Vector3(0, 0, 1)
+        this.upward = new THREE.Vector3(0, 1, 0)
+        this.forward = new THREE.Vector3(1, 0, 0)
+        this.position = new THREE.Vector3(0, 4, 0)
+        this.quaternion = new THREE.Quaternion()
+        this.velocity = new THREE.Vector3()
+        this.direction = this.forward.clone()
+        this.speed = 0
+        this.suspensionsHeights = {
+            low: 0.88,
+            mid: 1.23,
+            high: 1.63
+        }
+        this.suspensionsStiffness = {
+            low: 20,
+            mid: 30,
+            high: 40
+        }
+
+        // Debug
+        if(this.game.debug.active)
         {
-            this.fixedUpdate()
-        }, 2)
-        // After Objects.update (4), before View.update (7)
+            this.debugPanel = this.game.physics.debugPanel.addFolder({
+                title: 'Vehicle',
+                expanded: true,
+            })
+
+            this.debugPanel.addBinding(this, 'steeringAmplitude', { min: 0, max: Math.PI * 0.5, step: 0.01 })
+            this.debugPanel.addBinding(this, 'engineForceAmplitude', { min: 1, max: 20, step: 1 })
+            this.debugPanel.addBinding(this, 'boostMultiplier', { min: 1, max: 5, step: 0.01 })
+            this.debugPanel.addBinding(this, 'topSpeed', { min: 0, max: 20, step: 0.1 })
+            this.debugPanel.addBinding(this, 'topSpeedBoost', { min: 0, max: 20, step: 0.1 })
+            this.debugPanel.addBinding(this, 'brakeAmplitude', { min: 0, max: 200, step: 0.01 })
+            this.debugPanel.addBinding(this, 'idleBrake', { min: 0, max: 1, step: 0.001 })
+            this.debugPanel.addBinding(this, 'reverseBrake', { min: 0, max: 1, step: 0.001 })
+
+            this.debugPanel.addBinding(this.suspensionsHeights, 'low', { min: 0, max: 2, step: 0.01 })
+            this.debugPanel.addBinding(this.suspensionsHeights, 'mid', { min: 0, max: 2, step: 0.01 })
+            this.debugPanel.addBinding(this.suspensionsHeights, 'high', { min: 0, max: 2, step: 0.01 })
+
+            this.debugPanel.addBinding(this.suspensionsStiffness, 'low', { min: 0, max: 100, step: 0.1 })
+            this.debugPanel.addBinding(this.suspensionsStiffness, 'mid', { min: 0, max: 100, step: 0.1 })
+            this.debugPanel.addBinding(this.suspensionsStiffness, 'high', { min: 0, max: 100, step: 0.1 })
+        }
+
+        this.setChassis()
+        this.controller = this.game.physics.world.createVehicleController(this.chassis.physical.body)
+        this.setWheels()
+        this.setStop()
+        this.setUpsideDown()
+        this.setStuck()
+        // this.setBackWheel()
+        this.setFlip()
+
         this.game.ticker.events.on('tick', () =>
         {
-            this.update()
+            this.updatePrePhysics()
+        }, 2)
+        this.game.ticker.events.on('tick', () =>
+        {
+            this.updatePostPhysics()
         }, 5)
-    }
-
-    setActions()
-    {
-        const categories = [ 'wandering' ]
-        this.game.inputs.addActions([
-            { name: 'forward', categories, keys: [ 'Keyboard.KeyW', 'Keyboard.ArrowUp', 'Gamepad.up' ] },
-            { name: 'backward', categories, keys: [ 'Keyboard.KeyS', 'Keyboard.ArrowDown', 'Gamepad.down' ] },
-            { name: 'left', categories, keys: [ 'Keyboard.KeyA', 'Keyboard.ArrowLeft', 'Gamepad.left' ] },
-            { name: 'right', categories, keys: [ 'Keyboard.KeyD', 'Keyboard.ArrowRight', 'Gamepad.right' ] },
-            { name: 'run', categories, keys: [ 'Keyboard.ShiftLeft', 'Keyboard.ShiftRight' ] },
-            { name: 'moveStick', categories, keys: [ 'Gamepad.joystickLeft', 'Touch.joystick' ] }, // analog: value { x, y, radius, active }
-        ])
     }
 
     setChassis()
     {
-        const respawn = this.game.respawns.getDefault()
-        const { chassisHalf: half, wheel } = SETTINGS
-        const yaw = (respawn.rotation ?? 0) + Math.PI / 2 // body +X -> world forward (-Z at respawn yaw 0)
-        const rotation = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw)
-
-        // Visual: grey boxes (no art). Long axis X (forward), a darker nose block on the +X end
-        this.model = new THREE.Group()
-        this.model.name = 'vehicle'
-        const bodyMaterial = new THREE.MeshStandardMaterial({ name: 'greyMarker', color: '#e0e0e0' })
-        const darkMaterial = new THREE.MeshStandardMaterial({ name: 'greyDark', color: '#4a4a4a' })
-        const body = new THREE.Mesh(new THREE.BoxGeometry(half.x * 2, half.y * 2, half.z * 2), bodyMaterial)
-        const cab = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.3, half.z * 1.6), bodyMaterial)
-        cab.position.set(- 0.2, half.y + 0.15, 0)
-        const nose = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.2, half.z * 2), darkMaterial)
-        nose.position.set(half.x - 0.1, half.y + 0.1, 0)
-        this.model.add(body, cab, nose)
-
-        this.wheelMeshes = []
-        for(let i = 0; i < 4; i++)
-        {
-            const pivot = new THREE.Group() // steering (Y) then rolling (Z, the axle)
-            const mesh = new THREE.Mesh(new THREE.CylinderGeometry(wheel.radius, wheel.radius, 0.22, 16), darkMaterial)
-            mesh.rotation.x = Math.PI / 2 // cylinder axis Y -> Z
-            const mark = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 0.26), bodyMaterial) // shows the rolling
-            mark.position.set(wheel.radius * 0.7, 0, 0)
-            const roll = new THREE.Group()
-            roll.add(mesh, mark)
-            pivot.add(roll)
-            pivot.userData.roll = roll
-            this.model.add(pivot)
-            this.wheelMeshes.push(pivot)
-        }
-
-        const centerY = respawn.position.y + wheel.radius + wheel.restLength - wheel.connectionY + 0.05
-        const position = { x: respawn.position.x, y: centerY, z: respawn.position.z }
-        this.model.position.set(position.x, position.y, position.z)
-        this.model.quaternion.copy(rotation)
-
-        this.object = this.game.objects.add(
-            { model: this.model },
+        this.chassis = {}
+        const object = this.game.objects.add(null, {
+            type: 'dynamic',
+            position: this.position,
+            friction: 0.4,
+            rotation: new THREE.Quaternion().setFromAxisAngle(new THREE.Euler(0, 1, 0), Math.PI * 0),
+            colliders: [
+                { shape: 'cuboid', mass: 2.5, parameters: [ 1.3, 0.4, 0.85 ], position: { x: 0, y: -0.1, z: 0 }, centerOfMass: { x: 0, y: -0.5, z: 0 } }, // Main
+                { shape: 'cuboid', mass: 0, parameters: [ 0.5, 0.15, 0.65 ], position: { x: 0, y: 0.4, z: 0 } }, // Top
+                { shape: 'cuboid', mass: 0, parameters: [ 1.5, 0.5, 0.9 ], position: { x: 0.1, y: -0.2, z: 0 }, category: 'bumper' }, // Bumper
+            ],
+            canSleep: false,
+            waterGravityMultiplier: 0,
+            onCollision: (force, position) =>
             {
-                type: 'dynamic',
-                position,
-                rotation: { x: rotation.x, y: rotation.y, z: rotation.z, w: rotation.w },
-                friction: 0.3,
-                canSleep: false,
-                linearDamping: 0.05,
-                angularDamping: 0.6,
-                colliders: [
-                    { shape: 'cuboid', parameters: [ half.x, half.y, half.z ], mass: SETTINGS.chassisMass, centerOfMass: SETTINGS.centerOfMass },
-                    { shape: 'cuboid', parameters: [ 0.35, 0.15, half.z * 0.8 ], position: { x: - 0.2, y: half.y + 0.15, z: 0 }, mass: 0 }, // cab
-                ],
+                this.game.audio.groups.get('hitDefault').playRandomNext(force, position)
             }
-        )
-        this.object.managedReset = true
-        this.chassisObject = this.object
-        this.body = this.object.physical.body
-        this.spawn = { position, rotation: { x: rotation.x, y: rotation.y, z: rotation.z, w: rotation.w } }
+        })
+        this.chassis.physical = object.physical
+        this.chassis.mass = this.chassis.physical.body.mass()
     }
 
     setWheels()
     {
-        const { wheel } = SETTINGS
-        this.controller = this.game.physics.world.createVehicleController(this.body)
+        // Setup
+        this.wheels = {}
+        this.wheels.inContactCount = 0
+        this.wheels.justTouchedCount = 0
+        this.wheels.items = []
 
-        const positions = [
-            [ wheel.offsetX, wheel.connectionY, wheel.offsetZ ], // front right (+X forward, +Z right)
-            [ wheel.offsetX, wheel.connectionY, - wheel.offsetZ ], // front left
-            [ - wheel.offsetX, wheel.connectionY, wheel.offsetZ ],
-            [ - wheel.offsetX, wheel.connectionY, - wheel.offsetZ ],
-        ]
-        this.wheelPositions = positions
+        // Create wheels
         for(let i = 0; i < 4; i++)
         {
-            const [ x, y, z ] = positions[i]
-            this.controller.addWheel({ x, y, z }, { x: 0, y: - 1, z: 0 }, { x: 0, y: 0, z: 1 }, wheel.restLength, wheel.radius)
-            this.controller.setWheelMaxSuspensionTravel(i, wheel.maxTravel)
-            this.controller.setWheelSuspensionStiffness(i, wheel.stiffness)
-            this.controller.setWheelSuspensionCompression(i, wheel.compression)
-            this.controller.setWheelSuspensionRelaxation(i, wheel.relaxation)
-            this.controller.setWheelMaxSuspensionForce(i, wheel.maxForce)
-            this.controller.setWheelFrictionSlip(i, wheel.frictionSlip)
-            this.controller.setWheelSideFrictionStiffness(i, wheel.sideFriction)
+            const wheel = {}
+
+            wheel.inContact = false
+            wheel.contactPoint = null
+            wheel.suspensionLength = null
+            wheel.suspensionState = 'low'
+            wheel.lastTouchTime = this.game.ticker.elapsed
+
+            // Default wheel with random parameters
+            this.controller.addWheel(new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), 1, 1)
+
+            // Base position
+            wheel.basePosition = new THREE.Vector3()
+
+            this.wheels.items.push(wheel)
+        }
+
+        // Settings
+        this.wheels.settings = {
+            offset: { x: 0.90, y: 0, z: 0.75 },
+            radius: 0.4,
+            directionCs: { x: 0, y: -1, z: 0 },
+            axleCs: { x: 0, y: 0, z: 1 },
+            frictionSlip: 0.9,
+            maxSuspensionForce: 150,
+            maxSuspensionTravel: 2,
+            sideFrictionStiffness: 3,
+            suspensionCompression: 10,
+            suspensionRelaxation: 2.7,
+            suspensionStiffness: 25,
+        }
+
+        this.wheels.updateSettings = () =>
+        {
+            this.wheels.perimeter = this.wheels.settings.radius * Math.PI * 2
+
+            const wheelsPositions = [
+                new THREE.Vector3(  this.wheels.settings.offset.x, this.wheels.settings.offset.y,   this.wheels.settings.offset.z),
+                new THREE.Vector3(  this.wheels.settings.offset.x, this.wheels.settings.offset.y, - this.wheels.settings.offset.z),
+                new THREE.Vector3(- this.wheels.settings.offset.x, this.wheels.settings.offset.y,   this.wheels.settings.offset.z),
+                new THREE.Vector3(- this.wheels.settings.offset.x, this.wheels.settings.offset.y, - this.wheels.settings.offset.z),
+            ]
+            
+            let i = 0
+            for(const wheel of this.wheels.items)
+            {
+                wheel.basePosition.copy(wheelsPositions[i])
+                
+                this.controller.setWheelDirectionCs(i, this.wheels.settings.directionCs)
+                this.controller.setWheelAxleCs(i, this.wheels.settings.axleCs)
+                this.controller.setWheelRadius(i, this.wheels.settings.radius)
+                this.controller.setWheelChassisConnectionPointCs(i, wheel.basePosition)
+                this.controller.setWheelFrictionSlip(i, this.wheels.settings.frictionSlip)
+                this.controller.setWheelMaxSuspensionForce(i, this.wheels.settings.maxSuspensionForce)
+                this.controller.setWheelMaxSuspensionTravel(i, this.wheels.settings.maxSuspensionTravel)
+                this.controller.setWheelSideFrictionStiffness(i, this.wheels.settings.sideFrictionStiffness)
+                this.controller.setWheelSuspensionCompression(i, this.wheels.settings.suspensionCompression)
+                this.controller.setWheelSuspensionRelaxation(i, this.wheels.settings.suspensionRelaxation)
+
+                i++
+            }
+        }
+
+        this.wheels.updateSettings()
+
+        // Debug
+        if(this.game.debug.active)
+        {
+            this.debugPanel.addBlade({ view: 'separator' })
+            this.debugPanel.addBinding(this.wheels.settings, 'offset', { min: -1, max: 2, step: 0.01 }).on('change', this.wheels.updateSettings)
+            this.debugPanel.addBinding(this.wheels.settings, 'radius', { min: 0, max: 1, step: 0.01 }).on('change', this.wheels.updateSettings)
+            this.debugPanel.addBinding(this.wheels.settings, 'frictionSlip', { min: 0, max: 1, step: 0.01 }).on('change', this.wheels.updateSettings)
+            this.debugPanel.addBinding(this.wheels.settings, 'maxSuspensionForce', { min: 0, max: 1000, step: 1 }).on('change', this.wheels.updateSettings)
+            this.debugPanel.addBinding(this.wheels.settings, 'maxSuspensionTravel', { min: 0, max: 2, step: 0.01 }).on('change', this.wheels.updateSettings)
+            this.debugPanel.addBinding(this.wheels.settings, 'sideFrictionStiffness', { min: 0, max: 10, step: 0.01 }).on('change', this.wheels.updateSettings)
+            this.debugPanel.addBinding(this.wheels.settings, 'suspensionCompression', { min: 0, max: 30, step: 0.01 }).on('change', this.wheels.updateSettings)
+            this.debugPanel.addBinding(this.wheels.settings, 'suspensionRelaxation', { min: 0, max: 10, step: 0.01 }).on('change', this.wheels.updateSettings)
+            this.debugPanel.addBinding(this.wheels.settings, 'suspensionStiffness', { min: 0, max: 100, step: 0.1 }).on('change', this.wheels.updateSettings)
         }
     }
 
-    // Input -> { throttle -1..1, steer -1..1 (+ = left), boost }. Pure function of the action state.
-    readInput()
+    setStop()
     {
-        const actions = this.game.inputs.actions
-        let throttle = (actions.get('forward').active ? 1 : 0) - (actions.get('backward').active ? 1 : 0)
-        let steer = (actions.get('left').active ? 1 : 0) - (actions.get('right').active ? 1 : 0)
+        this.stop = {}
+        this.stop.active = true
+        this.stop.lowThreshold = 0.04
+        this.stop.highThreshold = 0.7
 
-        const stick = actions.get('moveStick').value
-        if(stick && typeof stick === 'object' && stick.active)
+        this.stop.test = () =>
         {
-            if(Math.abs(stick.y) > Math.abs(throttle))
-                throttle = - stick.y
-            if(Math.abs(stick.x) > Math.abs(steer))
-                steer = - stick.x
-        }
 
-        this.control.throttle = Math.max(- 1, Math.min(1, throttle))
-        this.control.steer = Math.max(- 1, Math.min(1, steer))
-        this.control.boost = actions.get('run').active
-        return this.control
+            if(this.speed < this.stop.lowThreshold)
+            {
+                if(!this.stop.active)
+                {
+                    this.stop.active = true
+                    this.events.trigger('stop')
+                }
+            }
+            else if(this.speed > this.stop.highThreshold)
+            {
+                if(this.stop.active)
+                {
+                    this.stop.active = false
+                    this.events.trigger('start')
+                }
+            }
+        }
     }
 
-    fixedUpdate()
+    setUpsideDown()
     {
-        this.fixedSteps++
-        const dt = this.game.ticker.fixedDeltaScaled
-        const body = this.body
+        this.upsideDown = {}
+        this.upsideDown.active = false
+        this.upsideDown.ratio = 0
+        this.upsideDown.threshold = 0.3
 
-        // Fell off the course: put it back on the respawn (deterministic, fixed-step only)
-        if(body.translation().y < SETTINGS.fallLimit)
-            this.reset()
-
-        const control = this.readInput()
-
-        // Signed forward speed along the chassis +X axis
-        const q = body.rotation()
-        const v = body.linvel()
-        const fx = 1 - 2 * (q.y * q.y + q.z * q.z)
-        const fy = 2 * (q.x * q.y + q.w * q.z)
-        const fz = 2 * (q.x * q.z - q.w * q.y)
-        this.speed = v.x * fx + v.y * fy + v.z * fz
-
-        const top = control.boost ? SETTINGS.topSpeedBoost : SETTINGS.topSpeed
-        let engine = 0
-        let brake = 0
-        if(control.throttle > 0)
+        this.upsideDown.test = () =>
         {
-            if(this.speed < - 0.5)
-                brake = SETTINGS.brake
-            else if(this.speed < top)
-                engine = control.throttle * SETTINGS.engineForce * (control.boost ? SETTINGS.boostMultiplier : 1)
+            this.upsideDown.ratio = this.upward.dot(new THREE.Vector3(0, - 1, 0)) * 0.5 + 0.5
+
+            if(this.upsideDown.ratio > this.upsideDown.threshold)
+            {
+                if(!this.upsideDown.active)
+                {
+                    this.upsideDown.active = true
+                    this.events.trigger('upsideDown', [ this.upsideDown.ratio ])
+                }
+            }
+            else
+            {
+                if(this.upsideDown.active)
+                {
+                    this.upsideDown.active = false
+                    this.events.trigger('rightSideUp')
+                }
+            }
         }
-        else if(control.throttle < 0)
+    }
+
+    setStuck()
+    {
+        this.stuck = {}
+        this.stuck.durationTest = 3
+        this.stuck.durationSaved = 0
+        this.stuck.savedItems = []
+        this.stuck.distance = 0
+        this.stuck.distanceThreshold = 0.5
+        this.stuck.active = false
+
+        this.stuck.accumulate = (traveled, time) =>
         {
-            if(this.speed > 0.5)
-                brake = SETTINGS.brake
-            else if(this.speed > - SETTINGS.reverseTopSpeed)
-                engine = control.throttle * SETTINGS.engineForce * 0.6
-        }
-        else
-        {
-            brake = SETTINGS.idleBrake
+            this.stuck.savedItems.unshift([traveled, time])
+            this.stuck.distance = 0
+            this.stuck.durationSaved = 0
+
+            for(let i = 0; i < this.stuck.savedItems.length; i++)
+            {
+                const item = this.stuck.savedItems[i]
+
+                if(this.stuck.durationSaved >= this.stuck.durationTest)
+                {
+                    this.stuck.savedItems.splice(i)
+                    break
+                }
+                else
+                {
+                    this.stuck.distance += item[0]
+                    this.stuck.durationSaved += item[1]
+                }
+            }
         }
 
-        // Less steering lock at speed
-        const speedRatio = Math.min(1, Math.abs(this.speed) / SETTINGS.topSpeed)
-        const lock = SETTINGS.steering + (SETTINGS.steeringHighSpeed - SETTINGS.steering) * speedRatio
-        const steering = control.steer * lock
+        this.stuck.test = () =>
+        {
+            if(this.stuck.durationSaved >= this.stuck.durationTest && this.stuck.distance < this.stuck.distanceThreshold)
+            {
+                if(!this.stuck.active)
+                {
+                    this.stuck.active = true
+                    this.events.trigger('stuck')
+                }
+            }
+            else
+            {
+                if(this.stuck.active)
+                {
+                    this.stuck.active = false
+                    this.events.trigger('unstuck')
+                }
+            }
+        }
+    }
 
-        this.controller.setWheelSteering(0, steering)
-        this.controller.setWheelSteering(1, steering)
+    // setBackWheel()
+    // {
+    //     this.backWheel = {}
+    //     this.backWheel.active = false
+    //     this.backWheel.test = () =>
+    //     {
+    //         if(
+    //             this.zRotation > 1 && this.zRotation < 1.7 &&
+    //             this.wheels.items[2].inContact && this.wheels.items[3].inContact
+    //         )
+    //         {
+    //             if(!this.backWheel.active)
+    //             {
+    //                 this.backWheel.active = true
+    //                 this.events.trigger('backWheel', [ this.backWheel.active ])
+    //             }
+    //         }
+    //         else
+    //         {
+    //             if(this.backWheel.active)
+    //             {
+    //                 this.backWheel.active = false
+    //                 this.events.trigger('backWheel', [ this.backWheel.active ])
+    //             }
+    //         }
+    //     }
+    // }
+
+    setFlip()
+    {
+        this.flip = {}
+        this.flip.force = 5
+        let inAir = false
+        
+        let previousXAngle = 0
+        let accumulatedXAngle = 0
+
+        let previousZAngle = 0
+        let accumulatedZAngle = 0
+
+        this.flip.test = () =>
+        {
+            // Every wheel stop touching
+            if(this.wheels.inContactCount === 0)
+            {
+                // Wasn't in the air => Start
+                if(!inAir)
+                {
+                    inAir = true
+                    
+                    previousXAngle = this.xRotation
+                    accumulatedXAngle = 0
+                    
+                    previousZAngle = this.zRotation
+                    accumulatedZAngle = 0
+                }
+            }
+
+            // 4 wheels are touching
+            if(this.wheels.inContactCount >= 4)
+            {
+                // Was in the air => stop
+                if(inAir)
+                {
+                    inAir = false
+
+                    if(
+                        Math.abs(accumulatedXAngle) < 1 &&
+                        Math.abs(accumulatedZAngle) > 5
+                    )
+                    {
+                        this.events.trigger('flip', [ Math.sign(accumulatedZAngle) ])
+                    }
+                }
+            }
+            else
+            {
+                if(inAir)
+                {
+                    accumulatedXAngle += smallestAngle(previousXAngle, this.xRotation)
+                    previousXAngle = this.xRotation
+
+                    accumulatedZAngle += smallestAngle(previousZAngle, this.zRotation)
+                    previousZAngle = this.zRotation
+                }
+            }
+        }
+
+        this.flip.jump = () =>
+        {
+            accumulatedXAngle = 0
+            accumulatedZAngle = 0
+
+            const up = new THREE.Vector3(0, 1, 0)
+            const sidewardDot = up.dot(this.sideward)
+            const forwardDot = up.dot(this.forward)
+            const upwarddDot = up.dot(this.upward)
+            
+            const sidewardAbsolute = Math.abs(sidewardDot)
+            const forwardAbsolute = Math.abs(forwardDot)
+            const upwarddAbsolute = Math.abs(upwarddDot)
+
+            const impulse = new THREE.Vector3(0, 1, 0).multiplyScalar(this.flip.force * this.chassis.mass)
+            this.chassis.physical.body.applyImpulse(impulse)
+
+            // Upside down
+            if(upwarddAbsolute > sidewardAbsolute && upwarddAbsolute > forwardAbsolute)
+            {
+                const torqueX = 0.8 * this.chassis.mass
+                const torque = new THREE.Vector3(torqueX, 0, 0)
+                torque.applyQuaternion(this.chassis.physical.body.rotation())
+                this.chassis.physical.body.applyTorqueImpulse(torque)
+            }
+            // On the side
+            else
+            {
+                const torqueX = sidewardDot * 0.4 * this.chassis.mass
+                const torqueZ = - forwardDot * 0.8 * this.chassis.mass
+                const torque = new THREE.Vector3(torqueX, 0, torqueZ)
+                torque.applyQuaternion(this.chassis.physical.body.rotation())
+                this.chassis.physical.body.applyTorqueImpulse(torque)
+            }
+        }
+
+        if(this.game.debug.active)
+        {
+            this.debugPanel.addBinding(this.flip, 'force', { label: 'flipForce', min: 0, max: 10, step: 0.01 })
+        }
+    }
+
+    moveTo(position, rotation = 0)
+    {
+        const quaternion = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), rotation)
+        this.chassis.physical.body.setTranslation(position)
+        this.chassis.physical.body.setRotation(quaternion)
+        this.chassis.physical.body.setLinvel({ x: 0, y: 0, z: 0 })
+        this.chassis.physical.body.setAngvel({ x: 0, y: 0, z: 0 })
+
+        this.position.copy(position)
+    }
+
+    updatePrePhysics()
+    {
+        // Engine force
+        const topSpeed = lerp(this.topSpeed, this.topSpeedBoost, this.game.player.boosting)
+        const overflowSpeed = Math.max(0, this.speed - topSpeed)
+        let engineForce = (this.game.player.accelerating * (1 + this.game.player.boosting * this.boostMultiplier)) * this.engineForceAmplitude / (1 + overflowSpeed) * this.game.ticker.deltaScaled
+
+        // Brake
+        let brake = this.game.player.braking
+
+        if(!this.game.player.braking && Math.abs(this.game.player.accelerating) < 0.1)
+            brake = this.idleBrake
+    
+        if(
+            this.speed > 0.5 &&
+            (
+                (this.game.player.accelerating > 0 && !this.goingForward) ||
+                (this.game.player.accelerating < 0 && this.goingForward)
+            )
+        )
+        {
+            brake = this.reverseBrake
+            engineForce = 0
+        }
+
+        brake *= this.brakeAmplitude * this.game.ticker.deltaScaled
+
+        // Steer
+        const steer = this.game.player.steering * this.steeringAmplitude
+
+        // Update wheels
+        this.controller.setWheelSteering(0, steer)
+        this.controller.setWheelSteering(1, steer)
+
         for(let i = 0; i < 4; i++)
         {
-            this.controller.setWheelEngineForce(i, engine)
             this.controller.setWheelBrake(i, brake)
+            this.controller.setWheelEngineForce(i, engineForce)
+            this.controller.setWheelSuspensionRestLength(i, this.suspensionsHeights[this.game.player.suspensions[i]])
+            this.controller.setWheelSuspensionStiffness(i, this.suspensionsStiffness[this.game.player.suspensions[i]])
+
+            // Ice slip
+            const groundObject = this.controller.wheelGroundObject(i)
+
+            if(groundObject && this.game.world.waterSurface)
+            {
+                const onIce = groundObject.parent() === this.game.world.waterSurface.ice.physical.body
+                const iceFriction = lerp(this.wheels.settings.frictionSlip, 0.04, this.game.world.waterSurface.iceRatio.value)
+
+                this.controller.setWheelFrictionSlip(i, onIce ? iceFriction : this.wheels.settings.frictionSlip)
+            }
         }
 
-        this.controller.updateVehicle(dt)
+        // Update controller
+        const delta = this.game.quality.level === 1 ? 1/60 : Math.min(1/60, this.game.ticker.deltaAverage)
+        this.controller.updateVehicle(delta)
     }
 
-    reset()
+    updatePostPhysics()
     {
-        this.resets++
-        const { position, rotation } = this.spawn
-        this.body.setTranslation(position, true)
-        this.body.setRotation(rotation, true)
-        this.body.setLinvel({ x: 0, y: 0, z: 0 }, true)
-        this.body.setAngvel({ x: 0, y: 0, z: 0 }, true)
-        this.body.resetForces()
-        this.body.resetTorques()
-        if(this.object.visual)
-        {
-            this.object.visual.object3D.position.copy(position)
-            this.object.visual.object3D.quaternion.copy(rotation)
-        }
-        this.object.needsUpdate = true
-        this.game.objects.snapInterpolation(this.object)
-    }
+        // Various measures
+        const newPosition = new THREE.Vector3().copy(this.chassis.physical.body.translation())
+        this.velocity = newPosition.clone().sub(this.position)
+        this.direction = this.velocity.clone().normalize()
+        this.position.copy(newPosition)
+        this.quaternion.copy(this.chassis.physical.body.rotation())
+        this.sideward.set(0, 0, 1).applyQuaternion(this.quaternion)
+        this.upward.set(0, 1, 0).applyQuaternion(this.quaternion)
+        this.forward.set(1, 0, 0).applyQuaternion(this.quaternion)
+        // this.speed = this.controller.currentVehicleSpeed()
+        this.speed = this.velocity.length() / this.game.ticker.deltaScaled
+        this.xzSpeed = Math.hypot(this.velocity.x, this.velocity.z) / this.game.ticker.deltaScaled
+        this.forwardRatio = this.direction.dot(this.forward)
+        this.goingForward = this.forwardRatio > 0.5
+        this.forwardSpeed = this.speed * this.forwardRatio
 
-    // Visual pose between the last two physics steps (what the camera follows)
-    get position()
-    {
-        return this.model.position
-    }
+        this.xRotation = new THREE.Euler().setFromQuaternion(this.quaternion, 'XYZ').x
+        this.yRotation = new THREE.Euler().setFromQuaternion(this.quaternion, 'YXZ').y
+        this.zRotation = new THREE.Euler().setFromQuaternion(this.quaternion, 'ZYX').z
 
-    // Per frame, visual only
-    update()
-    {
-        const { wheel } = SETTINGS
+        if(Math.abs(this.game.player.accelerating) > 0.5)
+            this.stuck.accumulate(this.velocity.length(), this.game.ticker.deltaScaled)
+
+        let inContactCount = 0
         for(let i = 0; i < 4; i++)
         {
-            const pivot = this.wheelMeshes[i]
-            const length = this.controller.wheelSuspensionLength(i) ?? wheel.restLength
-            const [ x, y, z ] = this.wheelPositions[i]
-            pivot.position.set(x, y - length, z)
-            pivot.rotation.y = this.controller.wheelSteering(i) ?? 0
-            pivot.userData.roll.rotation.z = - (this.controller.wheelRotation(i) ?? 0)
+            const wheel = this.wheels.items[i]
+
+            const inContact = this.controller.wheelIsInContact(i)
+
+            if(inContact && !wheel.inContact)
+            {
+                wheel.lastTouchTime = this.game.ticker.elapsed
+            }
+
+            wheel.inContact = inContact
+            wheel.contactPoint = this.controller.wheelContactPoint(i)
+            wheel.suspensionLength = this.controller.wheelSuspensionLength(i)
+
+            if(wheel.inContact)
+                inContactCount++
         }
 
-        // Minimal camera follow (T1.6 replaces it): the view tracks the interpolated visual, not the body
-        const tracked = this.game.view.focusPoint.trackedPosition
-        tracked.x = this.model.position.x
-        tracked.z = this.model.position.z
+        let justTouchedCount = 0
+        if(inContactCount > this.wheels.inContactCount)
+        {
+            for(const wheel of this.wheels.items)
+            {
+                if(wheel.lastTouchTime > this.game.ticker.elapsed - 0.2)
+                    justTouchedCount++
+            }
+        }
+
+        this.wheels.inContactCount = inContactCount
+        this.wheels.justTouchedCount = justTouchedCount
+
+        this.stop.test()
+        this.upsideDown.test()
+        this.stuck.test()
+        // this.backWheel.test()
+        this.flip.test()
+    }
+
+    activate()
+    {
+        this.chassis.physical.body.setLinvel({ x: 0, y: 0, z: 0 })
+        this.chassis.physical.body.setAngvel({ x: 0, y: 0, z: 0 })
+        this.chassis.physical.body.setEnabled(true)
+    }
+
+    deactivate()
+    {
+        this.chassis.physical.body.setEnabled(false)
     }
 }

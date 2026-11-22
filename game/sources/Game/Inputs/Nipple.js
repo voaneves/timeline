@@ -1,7 +1,7 @@
 import { abs, atan, float, Fn, If, max, min, PI, positionGeometry, positionWorld, step, uniform, vec2, vec3, vec4 } from 'three/tsl'
 import * as THREE from 'three/webgpu'
 import { Game } from '../Game.js'
-const { clamp } = THREE.MathUtils
+import { clamp } from 'three/src/math/MathUtils.js'
 import { smallestAngle } from '../utilities/maths.js'
 import gsap from 'gsap'
 import { Events } from '../Events.js'
@@ -17,7 +17,6 @@ export class Nipple
         this.position = new THREE.Vector3()
         this.raycaster = new THREE.Raycaster()
 
-        this.enabled = true
         this.active = false
         this.animated = false
         this.angle = 0
@@ -130,13 +129,6 @@ export class Nipple
 
     updateFromPointer(pointer, action)
     {
-        if(!this.enabled)
-        {
-            this.active = false
-            this.inRadiusLow = false
-            return
-        }
-
         // Start
         if(action.trigger === 'start')
         {
@@ -238,12 +230,6 @@ export class Nipple
 
     update()
     {
-        if(!this.enabled)
-        {
-            this.group.visible = false
-            return
-        }
-
         if(this.active || this.animated)
         {
             // Smallest angle and forward

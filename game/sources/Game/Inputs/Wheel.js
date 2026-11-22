@@ -1,27 +1,17 @@
-// Change: no `normalize-wheel` dependency (unmaintained, BSD-3). One notch ≈ 1 unit (deltaY 100 px).
+import normalizeWheel from 'normalize-wheel'
 import { Events } from '../Events.js'
-
-const LINE_HEIGHT = 40
-const PAGE_HEIGHT = 800
-const NOTCH = 100
 
 export class Wheel
 {
-    constructor(element = window)
+    constructor()
     {
-        this.element = element
         this.events = new Events()
 
-        this.element.addEventListener('wheel', (_event) =>
+        addEventListener('wheel', (_event) =>
         {
-            let delta = _event.shiftKey ? _event.deltaX : _event.deltaY
+            const normalized = normalizeWheel(_event)
 
-            if(_event.deltaMode === 1)
-                delta *= LINE_HEIGHT
-            else if(_event.deltaMode === 2)
-                delta *= PAGE_HEIGHT
-
-            this.events.trigger('roll', [ delta / NOTCH ])
+            this.events.trigger('roll', [ _event.shiftKey ? normalized.spinX : normalized.spinY ])
         }, { passive: true })
     }
 }

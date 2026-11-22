@@ -6,23 +6,11 @@ export class Gamepad
     constructor()
     {
         this.events = new Events()
-        this.connected = false
         
         this.setMappings()
         this.setType()
         this.setButtons()
         this.setJoysticks()
-
-        window.addEventListener('blur', () =>
-        {
-            this.releaseAll()
-        })
-
-        document.addEventListener('visibilitychange', () =>
-        {
-            if(document.hidden)
-                this.releaseAll()
-        })
     }
 
     /**
@@ -109,10 +97,9 @@ export class Gamepad
             if(gamepad.mapping === 'standard')
                 return 'standard'
 
-            const axesLength = gamepad.axes?.length ?? 0
-            if(axesLength === 10)
+            if(gamepad.axes.length === 10)
                 return 'windowsFirefoxPS5'
-            else if(axesLength === 7)
+            else if(gamepad.axes.length === 7)
                 return 'macOSFirefoxPS5'
 
             return 'standard'
@@ -139,25 +126,25 @@ export class Gamepad
 
                     if(map.action === 'buttonRaw')
                     {
-                        const mapButton = gamepad.buttons?.[map.index]
+                        const mapButton = gamepad.buttons[map.index]
 
                         if(mapButton)
-                            button.value = typeof mapButton === 'number' ? mapButton : (mapButton.value || (mapButton.pressed ? 1 : 0))
+                            button.value = mapButton.value
                     }
 
                     else if(map.action === 'axisToTrigger')
                     {
-                        const mapAxes = gamepad.axes?.[map.index]
+                        const mapAxes = gamepad.axes[map.index]
 
-                        if(typeof mapAxes === 'number')
+                        if(mapAxes)
                             button.value = mapAxes * 0.5 + 0.5
                     }
 
                     else if(map.action === 'axisToArrow')
                     {
-                        const mapAxes = gamepad.axes?.[map.index]
+                        const mapAxes = gamepad.axes[map.index]
 
-                        if(typeof mapAxes === 'number')
+                        if(mapAxes)
                         {
                             const arrowAngle = mapAxes
                             let isInAngles = false
@@ -194,10 +181,10 @@ export class Gamepad
 
                     if(map.action === 'axesToCircle')
                     {
-                        joystick.x = gamepad.axes?.[map.indexes[0]] ?? 0
+                        joystick.x = gamepad.axes[map.indexes[0]]
                         joystick.safeX = remapClamp(Math.abs(joystick.x), joystickDeadZone, 1, 0, 1) * Math.sign(joystick.x)
 
-                        joystick.y = gamepad.axes?.[map.indexes[1]] ?? 0
+                        joystick.y = gamepad.axes[map.indexes[1]]
                         joystick.safeY = remapClamp(Math.abs(joystick.y), joystickDeadZone, 1, 0, 1) * Math.sign(joystick.y)
 
                         joystick.angle = Math.atan2(joystick.y, joystick.x)
@@ -243,10 +230,7 @@ export class Gamepad
                     name: map.name,
                     x: 0,
                     y: 0,
-                    safeX: 0,
-                    safeY: 0,
                     radius: 0,
-                    safeRadius: 0,
                     angle: 0,
                     active: false
                 }
@@ -254,63 +238,19 @@ export class Gamepad
         }
     }
 
-    releaseAll()
-    {
-        for(const buttonName in this.buttons)
-        {
-            const savedButton = this.buttons[ buttonName ]
-            const wasPressed = savedButton.pressed
-            const oldValue = savedButton.value
-            savedButton.value = 0
-            savedButton.pressed = false
-
-            if(wasPressed)
-                this.events.trigger('up', [ savedButton ])
-            if(oldValue !== 0)
-                this.events.trigger('change', [ savedButton ])
-        }
-
-        for(const joystickName in this.joysticks)
-        {
-            const savedJoystick = this.joysticks[ joystickName ]
-            const wasActive = savedJoystick.active
-            Object.assign(savedJoystick, { x: 0, y: 0, safeX: 0, safeY: 0, radius: 0, safeRadius: 0, angle: 0, active: false })
-
-            if(wasActive)
-                this.events.trigger('joystickChange', [ savedJoystick ])
-        }
-    }
-
     update()
     {
-        // Get the last non-null connected gamepad from navigator.getGamepads
-        const gamepads = typeof navigator !== 'undefined' && typeof navigator.getGamepads === 'function'
-            ? navigator.getGamepads()
-            : null
+        // Get the last non-null gamepad from navigator.getGamepads
         let gamepad = null
-
-        if(gamepads)
+        for(const _gamepad of navigator.getGamepads())
         {
-            for(let i = 0; i < gamepads.length; i++)
-            {
-                const _gamepad = gamepads[i]
-                if(_gamepad && _gamepad.connected !== false)
-                    gamepad = _gamepad
-            }
+            if(_gamepad !== null)
+                gamepad = _gamepad
         }
 
         // Didn't find gamepad
         if(gamepad === null)
-        {
-            if(this.connected)
-            {
-                this.connected = false
-                this.releaseAll()
-            }
             return
-        }
-
-        this.connected = true
 
         // Parse gamepad data
         const gamepadData = this.mappings.parseGamepad(gamepad)
@@ -351,28 +291,17 @@ export class Gamepad
             const savedJoystick = this.joysticks[ joystickName ]
             const newJoystick = gamepadData.joysticks[ joystickName ]
 
-            const changed =
-                savedJoystick.active !== newJoystick.active ||
-                (newJoystick.active && (
-                    savedJoystick.x !== newJoystick.x ||
-                    savedJoystick.y !== newJoystick.y
-                ))
-
             Object.assign(savedJoystick, newJoystick)
-
-            if(changed)
-                this.events.trigger('joystickChange', [ savedJoystick ])
         }
 
         /**
          * Type
          */
         let type = 'default'
-        const id = gamepad.id ?? ''
         
-        if(/xbox/i.test(id))
+        if(/xbox/i.test(gamepad.id))
             type = 'xbox'
-        else if(/playstation|dualshock|dualsense|ps\d/i.test(id))
+        else if(/playstation|dualshock|dualsense|ps\d/i.test(gamepad.id))
             type = 'playstation'
 
         if(type !== this.type)

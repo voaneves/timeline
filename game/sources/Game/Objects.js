@@ -1,4 +1,3 @@
-import * as THREE from 'three/webgpu'
 import { Game } from './Game.js'
 
 let i = 0
@@ -9,25 +8,9 @@ export class Objects
         this.game = Game.getInstance()
         this.list = new Map()
         this.key = 0
-        this.pendingResets = []
+        this.roundedViewPosition = { x: 0, z: 0 }
         this.tempPosition = { x: 0, y: 0, z: 0 }
         this.tempRotation = { x: 0, y: 0, z: 0, w: 1 }
-
-        // Render interpolation: the physics runs at a fixed 120 Hz, the display at 60/75/144 Hz. After every physics step
-        // the pose of each moving body is captured (previous + current); every frame the visual is placed between them
-        // with `ticker.alpha`. Visual only: the simulation (bodies, forces) is never touched, so determinism is unaffected.
-        // The visual lags the physics by up to one step (8.3 ms). Code that follows a moving body per frame (camera, UI)
-        // should read the visual's position, not `body.translation()`. Teleports (setTranslation) are smeared over one
-        // step unless `snapInterpolation(object)` is called.
-        this.game.ticker.events.on('fixedTick', () =>
-        {
-            this.capture()
-        }, 4)
-
-        this.game.ticker.events.on('fixedTick', () =>
-        {
-            this.fixedUpdate()
-        }, 5)
 
         this.game.ticker.events.on('tick', () =>
         {
@@ -41,8 +24,7 @@ export class Objects
             visual: null,
             physical: null,
             needsUpdate: false,
-            reseting: false,
-            managedReset: false,
+            reseting: false
         }
 
         /**
@@ -244,33 +226,18 @@ export class Objects
         return this.add(...this.getFromModel(_model, _visualDescription, _physicalDescription))
     }
 
-    cancelPendingReset(object)
-    {
-        for(let i = this.pendingResets.length - 1; i >= 0; i--)
-        {
-            if(this.pendingResets[i].object === object)
-                this.pendingResets.splice(i, 1)
-        }
-        object.reseting = false
-    }
-
     resetObject(object)
     {
         if(
             !object.physical ||
-            object.managedReset ||
             (object.physical.type !== 'dynamic' && object.physical.type !== 'kinematicPositionBased') ||
             object.reseting
         )
             return
 
-        const isEnabled = object.physical.body.isEnabled()
-        if(!isEnabled)
-            return
-
         object.reseting = true
-        this.snapInterpolation(object)
 
+        const isEnabled = object.physical.body.isEnabled()
         object.physical.body.setEnabled(false)
         object.physical.body.setTranslation(object.physical.initialState.position, false)
         object.physical.body.setRotation(object.physical.initialState.rotation, false)
@@ -279,11 +246,20 @@ export class Objects
         object.physical.body.resetForces()
         object.physical.body.resetTorques()
 
-        // Reactivate deterministically after 1 fixed step
-        this.pendingResets.push({
-            object,
-            isEnabled,
-            stepsLeft: 1,
+        // Wait a second and reactivate
+        this.game.ticker.wait(1, () =>
+        {
+            object.physical.body.setEnabled(isEnabled)
+
+            // Sleep
+            if(object.physical.initialState.sleeping)
+                object.physical.body.sleep()
+
+            object.reseting = false
+            this.game.ticker.wait(1, () =>
+            {
+                object.needsUpdate = true
+            })
         })
         
         if(object.visual)
@@ -327,154 +303,59 @@ export class Objects
             object.visual.parent.add(object.visual.object3D)
     }
 
-    // Next captured pose becomes both previous and current (no interpolation across a teleport)
-    snapInterpolation(object)
-    {
-        if(object.interpolation)
-        {
-            object.interpolation.valid = false
-            object.interpolation.settled = false
-            object.interpolation.snapped = false
-        }
-    }
-
-    // After the physics step (fixedTick order 3): previous <- current, current <- body
-    capture()
-    {
-        this.list.forEach((_object) =>
-        {
-            if(!_object.visual || !_object.physical || _object.physical.type === 'fixed')
-                return
-
-            const body = _object.physical.body
-            if(!body.isEnabled())
-                return
-
-            let interpolation = _object.interpolation
-            if(!interpolation)
-            {
-                interpolation = _object.interpolation = {
-                    valid: false,
-                    settled: false, // asleep and `current` is its final pose
-                    snapped: false, // visual already written with that final pose
-                    previousPosition: new THREE.Vector3(),
-                    currentPosition: new THREE.Vector3(),
-                    previousQuaternion: new THREE.Quaternion(),
-                    currentQuaternion: new THREE.Quaternion(),
-                }
-            }
-
-            const sleeping = body.isSleeping()
-            if(sleeping && interpolation.settled)
-                return
-
-            if(interpolation.valid)
-            {
-                interpolation.previousPosition.copy(interpolation.currentPosition)
-                interpolation.previousQuaternion.copy(interpolation.currentQuaternion)
-            }
-            interpolation.currentPosition.copy(body.translation(this.tempPosition))
-            interpolation.currentQuaternion.copy(body.rotation(this.tempRotation))
-            if(!interpolation.valid)
-            {
-                interpolation.previousPosition.copy(interpolation.currentPosition)
-                interpolation.previousQuaternion.copy(interpolation.currentQuaternion)
-                interpolation.valid = true
-            }
-
-            if(sleeping)
-            {
-                interpolation.previousPosition.copy(interpolation.currentPosition)
-                interpolation.previousQuaternion.copy(interpolation.currentQuaternion)
-                interpolation.settled = true
-                interpolation.snapped = false
-            }
-            else
-            {
-                interpolation.settled = false
-            }
-        })
-    }
-
-    // Deterministic physics housekeeping on fixedTick (order 5, after capture at order 4)
-    fixedUpdate()
-    {
-        for(let i = this.pendingResets.length - 1; i >= 0; i--)
-        {
-            const entry = this.pendingResets[i]
-            entry.stepsLeft--
-            if(entry.stepsLeft <= 0)
-            {
-                const { object, isEnabled } = entry
-                this.pendingResets.splice(i, 1)
-                object.physical.body.setEnabled(isEnabled)
-
-                if(object.physical.initialState.sleeping)
-                    object.physical.body.sleep()
-
-                object.reseting = false
-                object.needsUpdate = true
-                this.snapInterpolation(object)
-            }
-        }
-
-        this.list.forEach((_object) =>
-        {
-            if(!_object.physical || _object.managedReset || _object.reseting)
-                return
-
-            const body = _object.physical.body
-            if(!body.isEnabled())
-                return
-
-            const position = body.translation(this.tempPosition)
-            if(position.y < this.game.water.depthElevation)
-                this.resetObject(_object)
-        })
-    }
-
     update()
     {
+        const roundedViewPosition = {
+            x: Math.round(this.game.view.focusPoint.position.x),
+            z: Math.round(this.game.view.focusPoint.position.z)
+        }
+        let objectsNeedDistanceTest = false
+
+        if(roundedViewPosition.x !== this.roundedViewPosition.x || roundedViewPosition.z !== this.roundedViewPosition.z)
+        {
+            objectsNeedDistanceTest = true
+            this.roundedViewPosition.x = roundedViewPosition.x
+            this.roundedViewPosition.z = roundedViewPosition.z
+        }
         this.list.forEach((_object) =>
         {
-            // Apply physical to visual (visual only: no physics mutations in per-frame tick)
-            if(_object.visual && _object.physical)
-            {
-                const interpolation = _object.interpolation
-                const body = _object.physical.body
-                const position = body.translation(this.tempPosition)
+            const position = _object.physical ? _object.physical.body.translation(this.tempPosition) : null
 
-                if(_object.needsUpdate)
+            // Apply physical to visual
+            if(
+                _object.visual &&
+                _object.physical &&
+                (
+                    _object.needsUpdate ||
+                    (
+                        !_object.physical.body.isSleeping() &&
+                        _object.physical.body.isEnabled()
+                    )
+                )
+            )
+            {
+                _object.needsUpdate = false
+                _object.visual.object3D.position.copy(position)
+                _object.visual.object3D.quaternion.copy(_object.physical.body.rotation(this.tempRotation))
+            }
+
+
+            if(_object.physical)
+            {
+                // Felt in the floor => reset
+                if(position.y < this.game.water.depthElevation)
                 {
-                    // Exact pose (after a reset)
-                    _object.needsUpdate = false
-                    _object.visual.object3D.position.copy(position)
-                    _object.visual.object3D.quaternion.copy(body.rotation(this.tempRotation))
+                    this.resetObject(_object)
                 }
-                else if(body.isEnabled())
+
+                // Far from view => Reset
+                if(objectsNeedDistanceTest)
                 {
-                    if(!body.isSleeping())
+                    const distanceToView = Math.hypot(this.roundedViewPosition.x - position.x, this.roundedViewPosition.z - position.z)
+                
+                    if(_object.physical.body.isEnabled() && !_object.physical.body.isSleeping() && distanceToView > this.game.view.optimalArea.radius)
                     {
-                        if(interpolation && interpolation.valid)
-                        {
-                            // Between the last two physics steps
-                            const alpha = this.game.ticker.alpha
-                            _object.visual.object3D.position.lerpVectors(interpolation.previousPosition, interpolation.currentPosition, alpha)
-                            _object.visual.object3D.quaternion.slerpQuaternions(interpolation.previousQuaternion, interpolation.currentQuaternion, alpha)
-                            interpolation.snapped = false
-                        }
-                        else
-                        {
-                            _object.visual.object3D.position.copy(position)
-                            _object.visual.object3D.quaternion.copy(body.rotation(this.tempRotation))
-                        }
-                    }
-                    else if(interpolation && interpolation.settled && !interpolation.snapped)
-                    {
-                        // Asleep: land exactly on the final pose once, then leave the visual alone
-                        _object.visual.object3D.position.copy(interpolation.currentPosition)
-                        _object.visual.object3D.quaternion.copy(interpolation.currentQuaternion)
-                        interpolation.snapped = true
+                        _object.physical.body.sleep()
                     }
                 }
             }

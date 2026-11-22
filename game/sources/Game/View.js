@@ -1,31 +1,18 @@
 import * as THREE from 'three/webgpu'
 import CameraControls from 'camera-controls'
 import { Game } from './Game.js'
-import { clamp, lerp, remap, smallestAngle, smoothstep } from './utilities/maths.js'
+import { clamp, lerp, remap, smoothstep } from './utilities/maths.js'
 import { mix, uniform, vec4, Fn, positionGeometry, attribute } from 'three/tsl'
 import gsap from 'gsap'
 import { Pointer } from './Inputs/Pointer.js'
 import { Inputs } from './Inputs/Inputs.js'
 import { alea } from 'seedrandom'
-import { cameraConfig } from '../data/camera.js'
+import { LineGeometry } from 'three/examples/jsm/lines/LineGeometry.js'
+import { Line2 } from 'three/examples/jsm/lines/webgpu/Line2.js'
 
 CameraControls.install( { THREE: THREE } )
 
 const rng = new alea('speedLines')
-
-const DEG = Math.PI / 180
-const LN2_4 = 4 * Math.LN2
-
-// Critically damped spring toward `goal` (exact integration, frame-rate independent). `state` = { x, v }.
-function springStep(state, goal, halfLife, dt)
-{
-    const y = LN2_4 / halfLife / 2
-    const x = state.x - goal
-    const j1 = state.v + x * y
-    const e = Math.exp(- y * dt)
-    state.x = goal + e * (x + j1 * dt)
-    state.v = e * (state.v - j1 * y * dt)
-}
 
 export class View
 {
@@ -65,11 +52,9 @@ export class View
             })
         }
 
-        this.setFraming()
         this.setFocusPoint()
         this.setZoom()
         this.setSpherical()
-        this.setManualOrbit()
         this.setRoll()
         this.setCameras()
         this.setOptimalArea()
@@ -77,13 +62,6 @@ export class View
         this.setCinematic()
         this.setSpeedLines()
         this.setMapControls()
-
-        // Control yaw: computed on the fixed step only (before the Player at 2), so the camera-relative input is
-        // deterministic. Only the rendering reads the per-frame smoothed state.
-        this.game.ticker.events.on('fixedTick', () =>
-        {
-            this.fixedUpdate()
-        }, 1)
 
         this.game.ticker.events.on('tick', () =>
         {
@@ -133,181 +111,6 @@ export class View
         this.freeMode.enabled = this.mode === View.MODE_FREE
         this.freeMode.setTarget(this.focusPoint.position.x, this.focusPoint.position.y, this.focusPoint.position.z)
         this.freeMode.setPosition(this.camera.position.x, this.camera.position.y, this.camera.position.z)
-    }
-
-    // Landscape framing (T1.6): vFov follows the target horizontal FOV; distance and pitch are the landscape values
-    setFraming()
-    {
-        const cfg = cameraConfig
-        this.framing = {}
-        this.framing.computeVFov = (aspect) => clamp(2 * Math.atan(Math.tan(cfg.hFov * DEG / 2) / aspect) / DEG, cfg.vFovMin, cfg.vFovMax)
-
-        // Aspect-reactive framing (T1.7): landscape values at aspect >= 1, portrait values at aspect <= 0.5, interpolated between
-        this.framing.apply = (aspect) =>
-        {
-            if(!(aspect > 0) || !Number.isFinite(aspect))
-                return
-            const portrait = clamp((1 - aspect) / 0.5, 0, 1)
-            const vFov = this.framing.computeVFov(aspect)
-            const hFovEff = 2 * Math.atan(Math.tan(vFov * DEG / 2) * aspect)
-            this.framing.vFov = vFov
-            this.framing.distance = Math.max(lerp(cfg.distance, cfg.distancePortrait, portrait), cfg.minWidth / (2 * Math.tan(hFovEff / 2)))
-            this.framing.phi = (90 - lerp(cfg.pitch, cfg.pitchPortrait, portrait)) * DEG
-            this.framing.focusOffsetY = lerp(cfg.focusOffsetY, cfg.focusOffsetYPortrait, portrait)
-            this.framing.lookAhead = lerp(cfg.lookAhead, cfg.lookAheadPortrait, portrait)
-            if(this.spherical?.radius)
-            {
-                this.spherical.phi = this.framing.phi
-                this.spherical.radius.edges.min = this.framing.distance
-                this.spherical.radius.edges.max = this.framing.distance
-                this.spherical.radius.current = this.framing.distance
-            }
-        }
-        this.framing.apply(this.game.viewport.ratio)
-
-        this.controlYaw = Math.PI * 0.25 // what the Player reads (through spherical.theta); changes on the fixed step only
-        this.controlYawPrevious = this.controlYaw
-
-        // Smoothed follow state (render only)
-        this.follow = {
-            initialized: false,
-            hasSubject: false,
-            x: { x: 0, v: 0 },
-            y: { x: 0, v: 0 },
-            z: { x: 0, v: 0 },
-            lockedY: 0,
-            fallFollowing: false,
-            lastX: 0,
-            lastZ: 0,
-            ahead: new THREE.Vector2(),
-            velocity: new THREE.Vector2(),
-        }
-    }
-
-    // The followed thing: the on-foot player or the vehicle (both expose `model` and `object.physical.body`)
-    getSubject()
-    {
-        return this.game.world?.player ?? this.game.world?.vehicle ?? null
-    }
-
-    // Authored yaw blend between refCamera1 and refCamera2 (empties with the custom prop `lookAt`), by progress along
-    // the segment lookAt1 -> lookAt2 on the ground plane. Returns null while the references are not loaded.
-    getAuthoredYaw(x, z)
-    {
-        if(!this.authored)
-        {
-            const references = this.game.world?.references
-            const a = references?.get('refCamera1')
-            const b = references?.get('refCamera2')
-            if(!a || !b || !a.userData.lookAt || !b.userData.lookAt)
-                return null
-
-            const make = (reference) =>
-            {
-                const lookAt = reference.userData.lookAt
-                // Offset from the target to the camera is (sin theta, cos theta) on x, z (spherical coordinates)
-                return { yaw: Math.atan2(reference.position.x - lookAt[0], reference.position.z - lookAt[2]), x: lookAt[0], z: lookAt[2] }
-            }
-            this.authored = { a: make(a), b: make(b) }
-        }
-
-        const { a, b } = this.authored
-        const dx = b.x - a.x
-        const dz = b.z - a.z
-        const t = clamp(((x - a.x) * dx + (z - a.z) * dz) / (dx * dx + dz * dz || 1), 0, 1)
-        const s = t * t * (3 - 2 * t)
-        return a.yaw + smallestAngle(a.yaw, b.yaw) * s
-    }
-
-    // Fixed step: control yaw from the SIMULATED position (rigid body), never from the interpolated visual or the frame delta
-    fixedUpdate()
-    {
-        this.updateManualOrbit(this.game.ticker.fixedDelta)
-
-        let x = 0
-        let z = 0
-        const body = this.getSubject()?.object?.physical?.body
-        if(body)
-        {
-            const translation = body.translation()
-            x = translation.x
-            z = translation.z
-        }
-        else
-        {
-            x = this.focusPoint.trackedPosition.x
-            z = this.focusPoint.trackedPosition.z
-        }
-
-        const yaw = this.getAuthoredYaw(x, z)
-        if(yaw === null)
-            return
-
-        this.controlYawPrevious = this.controlYaw
-        this.controlYaw = yaw
-        this.spherical.theta = yaw
-    }
-
-    // Per frame: focus point (critical springs, y locked in the air, look-ahead). Writes focusPoint.smoothedPosition/position.
-    updateFollow(delta)
-    {
-        const cfg = cameraConfig
-        const follow = this.follow
-        const subject = this.getSubject()
-        const source = subject?.model?.position ?? this.focusPoint.trackedPosition
-        const grounded = subject?.controller?.grounded ?? true
-
-        // Y lock: only follows while grounded, or once it fell more than `fallFollow` below the last platform
-        if(!follow.initialized || (subject && !follow.hasSubject) || grounded)
-        {
-            follow.lockedY = source.y
-            follow.fallFollowing = false
-        }
-        else if(source.y < follow.lockedY - cfg.fallFollow)
-        {
-            follow.fallFollowing = true
-        }
-        const targetY = follow.fallFollowing ? source.y : follow.lockedY
-
-        // Velocity (frame based, render only) -> look-ahead
-        const k = 1 - Math.pow(0.5, delta / cfg.lookAheadHalfLife)
-        if(delta > 0 && follow.initialized)
-        {
-            follow.velocity.x += ((source.x - follow.lastX) / delta - follow.velocity.x) * k
-            follow.velocity.y += ((source.z - follow.lastZ) / delta - follow.velocity.y) * k
-        }
-        follow.lastX = source.x
-        follow.lastZ = source.z
-
-        const speed = follow.velocity.length()
-        const scale = speed > 1e-4 ? this.framing.lookAhead * Math.min(speed / cfg.lookAheadSpeed, 1) / speed : 0
-        follow.ahead.x += (follow.velocity.x * scale - follow.ahead.x) * k
-        follow.ahead.y += (follow.velocity.y * scale - follow.ahead.y) * k
-
-        const subjectAppeared = subject && !follow.hasSubject // the camera was placed on the respawn marker before the subject existed
-        follow.hasSubject = !!subject
-        const snap = !follow.initialized || subjectAppeared || Math.hypot(source.x - follow.x.x, source.z - follow.z.x) > cfg.snapDistance
-        if(snap)
-        {
-            follow.initialized = true
-            follow.x.x = source.x
-            follow.x.v = 0
-            follow.y.x = targetY
-            follow.y.v = 0
-            follow.z.x = source.z
-            follow.z.v = 0
-            follow.ahead.set(0, 0)
-            follow.velocity.set(0, 0)
-        }
-        else
-        {
-            springStep(follow.x, source.x, cfg.halfLifeXZ, delta)
-            springStep(follow.z, source.z, cfg.halfLifeXZ, delta)
-            springStep(follow.y, targetY, cfg.halfLifeY, delta)
-        }
-
-        this.focusPoint.smoothedPosition.set(follow.x.x + follow.ahead.x, follow.y.x + this.framing.focusOffsetY, follow.z.x + follow.ahead.y)
-        this.focusPoint.position.copy(this.focusPoint.smoothedPosition)
     }
 
     setFocusPoint()
@@ -407,8 +210,6 @@ export class View
         // this.optimalArea.quad2Helper.computeLineDistances()
         // this.game.scene.add(this.optimalArea.quad2Helper)
 
-        const OPTIMAL_AREA_MAX_RADIUS = 120
-
         this.optimalArea.update = () =>
         {
             // Save state
@@ -429,39 +230,27 @@ export class View
             this.defaultCamera.updateProjectionMatrix()
             this.defaultCamera.updateWorldMatrix()
 
-            const intersectFloor = (ndcX, ndcY, target) =>
-            {
-                this.optimalArea.raycaster.setFromCamera(new THREE.Vector2(ndcX, ndcY), this.defaultCamera)
-                const hit = this.optimalArea.raycaster.ray.intersectPlane(this.optimalArea.floorPlane, target)
-                if(!hit || !Number.isFinite(target.x) || !Number.isFinite(target.z) || target.length() > OPTIMAL_AREA_MAX_RADIUS)
-                {
-                    const dir = this.optimalArea.raycaster.ray.direction
-                    const horizLen = Math.hypot(dir.x, dir.z)
-                    if(horizLen > 1e-4)
-                        target.set((dir.x / horizLen) * OPTIMAL_AREA_MAX_RADIUS, 0, (dir.z / horizLen) * OPTIMAL_AREA_MAX_RADIUS)
-                    else
-                        target.set(0, 0, 0)
-                }
-                return target
-            }
-
             // First near/far diagonal
-            intersectFloor(1, -1, this.optimalArea.nearPosition)
+            this.optimalArea.raycaster.setFromCamera(new THREE.Vector2(1, -1), this.defaultCamera)
+            this.optimalArea.raycaster.ray.intersectPlane(this.optimalArea.floorPlane, this.optimalArea.nearPosition)
             this.optimalArea.quad2[0].base.x = this.optimalArea.nearPosition.x
             this.optimalArea.quad2[0].base.y = this.optimalArea.nearPosition.z
 
-            intersectFloor(-1, 1, this.optimalArea.farPosition)
+            this.optimalArea.raycaster.setFromCamera(new THREE.Vector2(-1, 1), this.defaultCamera)
+            this.optimalArea.raycaster.ray.intersectPlane(this.optimalArea.floorPlane, this.optimalArea.farPosition)
             this.optimalArea.quad2[2].base.x = this.optimalArea.farPosition.x
             this.optimalArea.quad2[2].base.y = this.optimalArea.farPosition.z
 
             const centerA = this.optimalArea.nearPosition.clone().lerp(this.optimalArea.farPosition, 0.5)
 
             // Second near/far diagonal
-            intersectFloor(-1, -1, this.optimalArea.nearPosition)
+            this.optimalArea.raycaster.setFromCamera(new THREE.Vector2(-1, -1), this.defaultCamera)
+            this.optimalArea.raycaster.ray.intersectPlane(this.optimalArea.floorPlane, this.optimalArea.nearPosition)
             this.optimalArea.quad2[3].base.x = this.optimalArea.nearPosition.x
             this.optimalArea.quad2[3].base.y = this.optimalArea.nearPosition.z
 
-            intersectFloor(1, 1, this.optimalArea.farPosition)
+            this.optimalArea.raycaster.setFromCamera(new THREE.Vector2(1, 1), this.defaultCamera)
+            this.optimalArea.raycaster.ray.intersectPlane(this.optimalArea.floorPlane, this.optimalArea.farPosition)
             this.optimalArea.quad2[1].base.x = this.optimalArea.farPosition.x
             this.optimalArea.quad2[1].base.y = this.optimalArea.farPosition.z
 
@@ -471,12 +260,14 @@ export class View
             this.optimalArea.basePosition = centerA.clone().lerp(centerB, 0.5)
 
             // Radius
-            const rawRadius = this.optimalArea.basePosition.distanceTo(this.optimalArea.farPosition)
-            this.optimalArea.radius = Number.isFinite(rawRadius) ? clamp(rawRadius, 1, OPTIMAL_AREA_MAX_RADIUS) : OPTIMAL_AREA_MAX_RADIUS
+            this.optimalArea.radius = this.optimalArea.basePosition.distanceTo(this.optimalArea.farPosition)
 
             // Distances
-            intersectFloor(0, -1, this.optimalArea.nearPosition)
-            intersectFloor(0, 1, this.optimalArea.farPosition)
+            this.optimalArea.raycaster.setFromCamera(new THREE.Vector2(0, -1), this.defaultCamera)
+            this.optimalArea.raycaster.ray.intersectPlane(this.optimalArea.floorPlane, this.optimalArea.nearPosition)
+
+            this.optimalArea.raycaster.setFromCamera(new THREE.Vector2(0, 1), this.defaultCamera)
+            this.optimalArea.raycaster.ray.intersectPlane(this.optimalArea.floorPlane, this.optimalArea.farPosition)
             
             this.optimalArea.nearDistance = this.defaultCamera.position.distanceTo(this.optimalArea.nearPosition)
             this.optimalArea.farDistance = this.defaultCamera.position.distanceTo(this.optimalArea.farPosition)
@@ -496,19 +287,11 @@ export class View
         this.zoom.baseRatio = 0.6
         this.zoom.ratio = this.zoom.baseRatio
         this.zoom.smoothedRatio = this.zoom.baseRatio
-        this.zoom.speedAmplitude = 0 // T1.6: no speed zoom
+        this.zoom.speedAmplitude = - 0.4
         this.zoom.speedEdge = { min: 5, max: 40 }
         this.zoom.sensitivity = 0.05
         this.zoom.toggle = 0
         this.zoom.toggleLast = -1
-        this.zoom.minMultiplier = 0.60
-        this.zoom.maxMultiplier = 1.65
-        this.zoom.wheelSensitivity = 0.08
-        this.zoom.halfLife = 0.08
-        this.zoom.multiplier = 1.0
-        this.zoom.targetMultiplier = 1.0
-        this.zoom.multiplierSpring = { x: 1.0, v: 0 }
-        this.zoomMultiplier = 1.0
 
         this.game.inputs.addActions([
             { name: 'zoom',    categories: [ 'wandering', 'racing' ], keys: [ 'Wheel.roll' ] },
@@ -519,13 +302,6 @@ export class View
         {
             this.zoom.baseRatio -= action.value * this.zoom.sensitivity
             this.zoom.baseRatio = clamp(this.zoom.baseRatio, 0, 1)
-
-            this.zoom.targetMultiplier = clamp(
-                this.zoom.targetMultiplier + action.value * this.zoom.wheelSensitivity,
-                this.zoom.minMultiplier,
-                this.zoom.maxMultiplier
-            )
-            this.zoomMultiplier = this.zoom.targetMultiplier
         })
 
         this.game.inputs.events.on('zoomToggle', (action) =>
@@ -556,14 +332,13 @@ export class View
     setSpherical()
     {
         this.spherical = {}
-        this.spherical.phi = this.framing.phi
-        this.spherical.theta = this.controlYaw // what the Player reads; only changed on the fixed step
+        this.spherical.phi = Math.PI * (this.game.quality.level === 0 ? 0.31 : 0.27)
+        this.spherical.theta = Math.PI * 0.25
 
-        // T1.6: fixed distance (min = max: no wheel zoom, no ratio compensation until T1.7)
         this.spherical.radius = {}
-        this.spherical.radius.edges = { min: this.framing.distance, max: this.framing.distance }
-        this.spherical.radius.current = this.framing.distance
-        this.spherical.radius.nonIdealRatioOffset = 0
+        this.spherical.radius.edges = { min: 15, max: 30 }
+        this.spherical.radius.current = lerp(this.spherical.radius.edges.min, this.spherical.radius.edges.max, 1 - this.zoom.smoothedRatio)
+        this.spherical.radius.nonIdealRatioOffset = 9
 
         this.spherical.offset = new THREE.Vector3()
         this.spherical.offset.setFromSphericalCoords(this.spherical.radius.current, this.spherical.phi, this.spherical.theta)
@@ -578,202 +353,6 @@ export class View
             sphericalDebugPanel.addBinding(this.spherical, 'theta', { min: - Math.PI, max: Math.PI, step: 0.001 })
             sphericalDebugPanel.addBinding(this.spherical.radius, 'edges', { min: 0, max: 100, step: 0.001 })
         }
-    }
-
-    // Manual orbit (plan 3.3 & 3.4): Q/E or right analog stick, clamped to +-25 deg yaw and +-8 deg pitch,
-    // springs back to 0 within 1.2 s after input stops. Applied on top of the authored yaw without altering controlYaw.
-    setManualOrbit()
-    {
-        this.orbit = {
-            yaw: 0,
-            yawPrevious: 0,
-            pitch: 0,
-            pitchPrevious: 0,
-            yawSpring: { x: 0, v: 0 },
-            pitchSpring: { x: 0, v: 0 },
-            maxYaw: 25 * DEG,
-            maxPitch: 8 * DEG,
-            yawRate: 50 * DEG,
-            pitchRate: 24 * DEG,
-            nudgeAngle: 15 * DEG,
-            nudgeLatch: 0,
-            returnDuration: 1.2,
-            returnHalfLife: 0.25,
-            active: false,
-            mouseDragYaw: 0,
-            mouseDragPitch: 0,
-            mouseDragYawTarget: 0,
-            mouseDragPitchTarget: 0,
-            mouseDragYawSpring: { x: 0, v: 0 },
-            mouseDragPitchSpring: { x: 0, v: 0 },
-            mouseDragMinPitch: -12 * DEG,
-            mouseDragMaxPitch: 22 * DEG,
-            mouseDragHalfLife: 0.055,
-            mouseDragging: false,
-            mouseLastX: 0,
-            mouseLastY: 0,
-        }
-        this.mouseDragYaw = 0
-        this.mouseDragPitch = 0
-
-        this.game.inputs.addActions([
-            { name: 'cameraOrbitLeft',       categories: [ 'wandering' ], keys: [ 'Keyboard.KeyQ', 'Touch.cameraOrbitLeft' ] },
-            { name: 'cameraOrbitRight',      categories: [ 'wandering' ], keys: [ 'Keyboard.KeyE', 'Touch.cameraOrbitRight' ] },
-            { name: 'cameraOrbitNudgeLeft',  categories: [ 'wandering' ], keys: [ 'Touch.cameraOrbitNudgeLeft' ] },
-            { name: 'cameraOrbitNudgeRight', categories: [ 'wandering' ], keys: [ 'Touch.cameraOrbitNudgeRight' ] },
-            { name: 'cameraOrbitStick',      categories: [ 'wandering' ], keys: [ 'Gamepad.joystickRight' ] },
-        ])
-
-        this.game.inputs.events.on('cameraOrbitNudgeLeft', (action) =>
-        {
-            if(action.trigger === 'start')
-                this.orbit.nudgeLatch -= this.orbit.nudgeAngle
-        })
-
-        this.game.inputs.events.on('cameraOrbitNudgeRight', (action) =>
-        {
-            if(action.trigger === 'start')
-                this.orbit.nudgeLatch += this.orbit.nudgeAngle
-        })
-
-        const canvas = this.game.canvasElement
-        if(canvas)
-        {
-            const endMouseDrag = () =>
-            {
-                if(!this.orbit.mouseDragging)
-                    return
-                this.orbit.mouseDragging = false
-                canvas.classList.remove('is-dragging')
-            }
-
-            canvas.addEventListener('mousedown', (_event) =>
-            {
-                if(this.mode !== View.MODE_DEFAULT || this.game.inputs.locked)
-                    return
-                if(_event.button !== 0 && _event.button !== 2)
-                    return
-
-                this.orbit.mouseDragging = true
-                this.orbit.mouseLastX = _event.clientX
-                this.orbit.mouseLastY = _event.clientY
-                canvas.classList.add('is-dragging')
-            })
-
-            window.addEventListener('mousemove', (_event) =>
-            {
-                if(!this.orbit.mouseDragging)
-                    return
-                if(this.mode !== View.MODE_DEFAULT || this.game.inputs.locked || (_event.buttons & 3) === 0)
-                {
-                    endMouseDrag()
-                    return
-                }
-
-                const dx = _event.clientX - this.orbit.mouseLastX
-                const dy = _event.clientY - this.orbit.mouseLastY
-                this.orbit.mouseLastX = _event.clientX
-                this.orbit.mouseLastY = _event.clientY
-
-                const refSize = Math.max(320, Math.min(this.game.viewport.width || 1280, this.game.viewport.height || 720))
-                const yawDelta = - (dx / refSize) * Math.PI * 1.35
-                const pitchDelta = - (dy / refSize) * (34 * DEG)
-
-                this.orbit.mouseDragYawTarget += yawDelta
-                this.orbit.mouseDragPitchTarget = clamp(
-                    this.orbit.mouseDragPitchTarget + pitchDelta,
-                    this.orbit.mouseDragMinPitch,
-                    this.orbit.mouseDragMaxPitch
-                )
-            })
-
-            window.addEventListener('mouseup', endMouseDrag)
-            window.addEventListener('blur', endMouseDrag)
-
-            canvas.addEventListener('dblclick', () =>
-            {
-                if(this.mode !== View.MODE_DEFAULT || this.game.inputs.locked)
-                    return
-                this.resetMouseCamera()
-            })
-        }
-    }
-
-    resetMouseCamera()
-    {
-        // Collapse accumulated multi-turn target to shortest angle to 0 so spring unwinds smoothly
-        this.orbit.mouseDragYawSpring.x = smallestAngle(0, this.orbit.mouseDragYawSpring.x)
-        this.orbit.mouseDragYawTarget = 0
-        this.orbit.mouseDragPitchTarget = 0
-        this.zoom.targetMultiplier = 1.0
-        this.zoomMultiplier = 1.0
-    }
-
-    updateManualOrbit(dt)
-    {
-        const orbit = this.orbit
-        orbit.yawPrevious = orbit.yaw
-        orbit.pitchPrevious = orbit.pitch
-
-        const actions = this.game.inputs.actions
-        const left = actions.get('cameraOrbitLeft')?.active ? 1 : 0
-        const right = actions.get('cameraOrbitRight')?.active ? 1 : 0
-        let yawInput = right - left
-        let pitchInput = 0
-
-        const stick = actions.get('cameraOrbitStick')?.value
-        if(stick && typeof stick === 'object' && stick.active)
-        {
-            if(Math.abs(stick.x) > Math.abs(yawInput))
-                yawInput = clamp(stick.x, -1, 1)
-            pitchInput = clamp(stick.y, -1, 1)
-        }
-
-        let nudged = false
-        if(orbit.nudgeLatch !== 0)
-        {
-            orbit.yawSpring.x = clamp(orbit.yawSpring.x + orbit.nudgeLatch, -orbit.maxYaw, orbit.maxYaw)
-            orbit.yawSpring.v = 0
-            orbit.nudgeLatch = 0
-            nudged = true
-        }
-
-        const hasYawInput = Math.abs(yawInput) > 1e-4
-        const hasPitchInput = Math.abs(pitchInput) > 1e-4
-        orbit.active = hasYawInput || hasPitchInput || nudged
-
-        if(hasYawInput)
-        {
-            orbit.yawSpring.x = clamp(orbit.yawSpring.x + yawInput * orbit.yawRate * dt, -orbit.maxYaw, orbit.maxYaw)
-            orbit.yawSpring.v = 0
-        }
-        else if(!nudged && (orbit.yawSpring.x !== 0 || orbit.yawSpring.v !== 0))
-        {
-            springStep(orbit.yawSpring, 0, orbit.returnHalfLife, dt)
-            if(Math.abs(orbit.yawSpring.x) < 1e-4 && Math.abs(orbit.yawSpring.v) < 1e-4)
-            {
-                orbit.yawSpring.x = 0
-                orbit.yawSpring.v = 0
-            }
-        }
-
-        if(hasPitchInput)
-        {
-            orbit.pitchSpring.x = clamp(orbit.pitchSpring.x + pitchInput * orbit.pitchRate * dt, -orbit.maxPitch, orbit.maxPitch)
-            orbit.pitchSpring.v = 0
-        }
-        else if(orbit.pitchSpring.x !== 0 || orbit.pitchSpring.v !== 0)
-        {
-            springStep(orbit.pitchSpring, 0, orbit.returnHalfLife, dt)
-            if(Math.abs(orbit.pitchSpring.x) < 1e-4 && Math.abs(orbit.pitchSpring.v) < 1e-4)
-            {
-                orbit.pitchSpring.x = 0
-                orbit.pitchSpring.v = 0
-            }
-        }
-
-        orbit.yaw = clamp(orbit.yawSpring.x, -orbit.maxYaw, orbit.maxYaw)
-        orbit.pitch = clamp(orbit.pitchSpring.x, -orbit.maxPitch, orbit.maxPitch)
     }
 
     setRoll()
@@ -812,7 +391,7 @@ export class View
 
     setCameras()
     {
-        this.camera = new THREE.PerspectiveCamera(this.framing.vFov, this.game.viewport.ratio, 0.1, 200)
+        this.camera = new THREE.PerspectiveCamera(25, this.game.viewport.ratio, 0.1, 200)
         this.camera.position.setFromSphericalCoords(this.spherical.radius.current, this.spherical.phi, this.spherical.theta)
 
         this.defaultCamera = this.camera.clone()
@@ -869,16 +448,14 @@ export class View
             }
 
             gsap.to(this.cinematic, { progress: 1, duration: 1.5, ease: 'power2.inOut', overwrite: true })
-            if(this.game.rendering.cheapDOFPass)
-                gsap.to(this.game.rendering.cheapDOFPass.strength, { value: 0, duration: 1.5, ease: 'power2.inOut', overwrite: true })
+            gsap.to(this.game.rendering.cheapDOFPass.strength, { value: 0, duration: 1.5, ease: 'power2.inOut', overwrite: true })
         }
 
         this.cinematic.end = () =>
         {
             this.cinematic.active = false
             gsap.to(this.cinematic, { progress: 0, duration: 1, ease: 'power2.inOut', overwrite: true })
-            if(this.game.rendering.cheapDOFPass)
-                gsap.to(this.game.rendering.cheapDOFPass.strength, { value: 1.5, duration: 1.5, ease: 'power2.inOut', overwrite: true })
+            gsap.to(this.game.rendering.cheapDOFPass.strength, { value: 1.5, duration: 1.5, ease: 'power2.inOut', overwrite: true })
         }
     }
 
@@ -987,20 +564,16 @@ export class View
 
     resize()
     {
-        const aspect = this.game.viewport.width / this.game.viewport.height
-        if(!(aspect > 0) || !Number.isFinite(aspect))
-            return
+        this.ratioOverflow = Math.max(1, this.idealRatio / this.game.viewport.ratio) - 1
 
-        this.ratioOverflow = Math.max(1, this.idealRatio / aspect) - 1
-        this.framing.apply(aspect)
-        this.optimalArea.needsUpdate = true
+        this.camera.aspect = this.game.viewport.width / this.game.viewport.height
+        this.camera.updateProjectionMatrix()
 
-        for(const camera of [ this.camera, this.defaultCamera, this.freeCamera ])
-        {
-            camera.aspect = aspect
-            camera.fov = this.framing.vFov
-            camera.updateProjectionMatrix()
-        }
+        this.defaultCamera.aspect = this.game.viewport.width / this.game.viewport.height
+        this.defaultCamera.updateProjectionMatrix()
+
+        this.freeCamera.aspect = this.game.viewport.width / this.game.viewport.height
+        this.freeCamera.updateProjectionMatrix()
     }
 
     throttleResize()
@@ -1016,15 +589,13 @@ export class View
 
         this.game.inputs.events.on('viewMapPointer', (action) =>
         {
-            if(this.game.inputs.mode === Inputs.MODE_TOUCH && this.game.inputs.touchControls?.enabled && this.getSubject())
-                return
-
             if(this.mode === View.MODE_DEFAULT)
             {
-                // Two-finger touch pan & pinch when no touchControls subject override is active
+                // Focus point
                 if(action.active)
                 {
-                    if(this.game.inputs.pointer.touches.length >= 2)
+                    // Map
+                    if(this.game.inputs.pointer.mode === Pointer.MODE_MOUSE || this.game.inputs.pointer.touches.length >= 2)
                     {
                         this.focusPoint.isTracking = false
                         
@@ -1048,40 +619,93 @@ export class View
 
     update()
     {
-        const dt = Math.min(this.game.ticker.delta, cameraConfig.maxDelta)
-
-        // Focus point: critical springs, y locked in the air, look-ahead (T1.6)
-        this.updateFollow(dt)
-
-        // Smooth mouse-drag 360° yaw / clamped pitch & mouse-wheel zoom multiplier (render only)
-        if(dt > 0)
+        // Gamepad Joystick map controls
+        if(this.mode === View.MODE_DEFAULT && this.game.inputs.gamepad.joysticks.right.active && !this.cinematic.active)
         {
-            springStep(this.orbit.mouseDragYawSpring, this.orbit.mouseDragYawTarget, this.orbit.mouseDragHalfLife, dt)
-            springStep(this.orbit.mouseDragPitchSpring, this.orbit.mouseDragPitchTarget, this.orbit.mouseDragHalfLife, dt)
-            springStep(this.zoom.multiplierSpring, this.zoom.targetMultiplier, this.zoom.halfLife, dt)
+            this.focusPoint.isTracking = false
+
+            const mapMovement = new THREE.Vector2(this.game.inputs.gamepad.joysticks.right.x, this.game.inputs.gamepad.joysticks.right.y)
+            mapMovement.rotateAround(new THREE.Vector2(), -this.spherical.theta)
+            mapMovement.multiplyScalar(20 * this.game.ticker.delta)
+
+            this.focusPoint.position.x += mapMovement.x
+            this.focusPoint.position.z += mapMovement.y
         }
-        else
+        
+        // Focus point
+        if(this.focusPoint.isTracking)
         {
-            this.orbit.mouseDragYawSpring.x = this.orbit.mouseDragYawTarget
-            this.orbit.mouseDragPitchSpring.x = this.orbit.mouseDragPitchTarget
-            this.zoom.multiplierSpring.x = this.zoom.targetMultiplier
+            this.focusPoint.position.x = this.focusPoint.trackedPosition.x
+            this.focusPoint.position.z = this.focusPoint.trackedPosition.z
         }
 
-        this.orbit.mouseDragYaw = this.orbit.mouseDragYawSpring.x
-        this.orbit.mouseDragPitch = clamp(this.orbit.mouseDragPitchSpring.x, this.orbit.mouseDragMinPitch, this.orbit.mouseDragMaxPitch)
-        this.mouseDragYaw = this.orbit.mouseDragYaw
-        this.mouseDragPitch = this.orbit.mouseDragPitch
+        if(this.focusPoint.magnet.active)
+        {
+            const magnetDelta = { x: this.focusPoint.trackedPosition.x - this.focusPoint.position.x, z: this.focusPoint.trackedPosition.z - this.focusPoint.position.z }
+            const distanceToMagnet = Math.hypot(magnetDelta.x, magnetDelta.z)
+            const magnetStrength = distanceToMagnet * this.focusPoint.magnet.multiplier
+            this.focusPoint.position.x += magnetStrength * magnetDelta.x * this.game.ticker.delta
+            this.focusPoint.position.z += magnetStrength * magnetDelta.z * this.game.ticker.delta
+            // console.log(magnetStrength)
+            
 
-        this.zoom.multiplier = clamp(this.zoom.multiplierSpring.x, this.zoom.minMultiplier, this.zoom.maxMultiplier)
-        this.zoomMultiplier = this.zoom.multiplier
+            // console.log('---')
+            // console.log(distanceToMagnet)
+            // console.log(magnetStrength)
 
-        // Radius and visual yaw: the control yaw only changes on the fixed step; the render interpolates between steps
-        this.spherical.radius.current = this.framing.distance * this.zoom.multiplier
-        const orbitYaw = lerp(this.orbit.yawPrevious, this.orbit.yaw, this.game.ticker.alpha) + this.orbit.mouseDragYaw
-        const orbitPitch = lerp(this.orbit.pitchPrevious, this.orbit.pitch, this.game.ticker.alpha) + this.orbit.mouseDragPitch
-        const yaw = this.controlYawPrevious + smallestAngle(this.controlYawPrevious, this.controlYaw) * this.game.ticker.alpha + orbitYaw
-        const phi = clamp(this.spherical.phi + orbitPitch, 0.15, Math.PI * 0.48)
-        this.spherical.offset.setFromSphericalCoords(this.spherical.radius.current, phi, yaw)
+        }
+
+        const easing = remap(this.focusPoint.easing, 0, 1, 1, this.game.ticker.delta * 10)
+        
+        const newSmoothFocusPoint = this.focusPoint.smoothedPosition.clone().lerp(this.focusPoint.position, easing)
+
+        // if(this.game.inputs.mode === Inputs.MODE_TOUCH && this.focusPoint.isTracking)
+        // {
+        //     if(this.focusPoint.isEased)
+        //     {
+        //         this.focusPoint.isEased = false
+        //         gsap.to(this.focusPoint, { overwrite: true, easing: 0, duration: 1.5, ease: 'power4.out' })
+        //     }
+        // }
+        // else
+        // {
+        //     if(!this.focusPoint.isEased)
+        //     {
+        //         this.focusPoint.isEased = true
+        //         gsap.to(this.focusPoint, { overwrite: true, easing: 1, duration: 1.5, ease: 'power4.out' })
+        //     }
+        // }
+
+        const smoothFocusPointDelta = newSmoothFocusPoint.clone().sub(this.focusPoint.smoothedPosition)
+        const focusPointSpeed = Math.hypot(smoothFocusPointDelta.x, smoothFocusPointDelta.z) / this.game.ticker.delta
+        this.focusPoint.smoothedPosition.copy(newSmoothFocusPoint)
+
+        if(this.focusPoint.helper.visible)
+            this.focusPoint.helper.position.copy(newSmoothFocusPoint)
+        
+        // Default mode
+        if(this.mode === View.MODE_DEFAULT)
+        {
+            // Zoom
+            if(this.zoom.toggle !== 0)
+            {
+                this.zoom.baseRatio += this.zoom.toggle * 0.01
+                this.zoom.baseRatio = clamp(this.zoom.baseRatio, 0, 1)
+            }
+
+            const zoomSpeedRatio = smoothstep(focusPointSpeed, this.zoom.speedEdge.min, this.zoom.speedEdge.max)
+            this.zoom.ratio = this.zoom.baseRatio
+
+            if(this.focusPoint.isTracking && this.game.quality.level === 0)
+                this.zoom.ratio += this.zoom.speedAmplitude * zoomSpeedRatio
+
+            this.zoom.smoothedRatio = lerp(this.zoom.smoothedRatio, this.zoom.ratio, this.game.ticker.delta * 10)
+        }
+
+        // Radius
+        const radiusMax = this.spherical.radius.edges.max + this.ratioOverflow * this.spherical.radius.nonIdealRatioOffset
+        this.spherical.radius.current = lerp(this.spherical.radius.edges.min, radiusMax, 1 - this.zoom.smoothedRatio)
+        this.spherical.offset.setFromSphericalCoords(this.spherical.radius.current, this.spherical.phi, this.spherical.theta)
 
         // Position
         this.position.copy(this.focusPoint.smoothedPosition).add(this.spherical.offset)
@@ -1139,6 +763,21 @@ export class View
         {
             point.offseted.x = point.base.x + this.focusPoint.position.x
             point.offseted.y = point.base.y + this.focusPoint.position.z
+        }
+
+        // Helper
+        if(this.optimalArea.quad2Helper && this.optimalArea.quad2Helper.visible)
+        {
+            const geometry = new LineGeometry()
+            geometry.setPositions([
+                this.optimalArea.quad2[0].offseted.x, 0.5, this.optimalArea.quad2[0].offseted.y,
+                this.optimalArea.quad2[1].offseted.x, 0.5, this.optimalArea.quad2[1].offseted.y,
+                this.optimalArea.quad2[2].offseted.x, 0.5, this.optimalArea.quad2[2].offseted.y,
+                this.optimalArea.quad2[3].offseted.x, 0.5, this.optimalArea.quad2[3].offseted.y,
+                this.optimalArea.quad2[0].offseted.x, 0.5, this.optimalArea.quad2[0].offseted.y,
+            ])
+
+            this.optimalArea.quad2Helper.geometry = geometry
         }
 
         // Speed lines

@@ -52,8 +52,10 @@ export class Pointer
             this.upcoming.y = _event.clientY
         })
 
-        addEventListener('mouseup', () =>
+        addEventListener('mouseup', (_event) =>
         {
+            _event.preventDefault()
+
             this.upcomingDown = false
         })
 
@@ -63,8 +65,6 @@ export class Pointer
 
             this.mode = Pointer.MODE_TOUCH
             this.upcomingTouches = [ ..._event.touches ]
-            if(this.upcomingTouches.length === 0)
-                return
             
             // Calculate average
             let x = 0
@@ -89,8 +89,6 @@ export class Pointer
             this.mode = Pointer.MODE_TOUCH
             this.upcomingDown = true
             this.upcomingTouches = [ ..._event.touches ]
-            if(this.upcomingTouches.length === 0)
-                return
 
             // Calculate average
             let x = 0
@@ -120,14 +118,6 @@ export class Pointer
                 this.upcomingDown = false
         })
 
-        this.element.addEventListener('touchcancel', (_event) =>
-        {
-            this.upcomingTouches = [ ..._event.touches ]
-
-            if(this.upcomingTouches.length === 0)
-                this.upcomingDown = false
-        })
-
         this.element.addEventListener('contextmenu', (_event) =>
         {
             _event.preventDefault()
@@ -153,7 +143,7 @@ export class Pointer
                 {
                     const dX = this.upcomingTouches[i].clientX - this.upcomingTouches[j].clientX
                     const dY = this.upcomingTouches[i].clientY - this.upcomingTouches[j].clientY
-                    const distance = Math.hypot(dX, dY)
+                    const distance = Math.sqrt(dX * dX, dY * dY)
 
                     if(distance > maxDistance)
                         maxDistance = distance
@@ -169,16 +159,13 @@ export class Pointer
                 this.pinch.baseDistance = this.pinch.distance
             }
         
-            if(this.pinch.baseDistance > 0)
-            {
-                const pinchRatio = this.pinch.distance / this.pinch.baseDistance
+            const pinchRatio = this.pinch.distance / this.pinch.baseDistance
 
-                if(pinchRatio !== this.pinch.ratio)
-                {
-                    this.pinch.ratioDelta = pinchRatio - this.pinch.ratio
-                    this.pinch.ratio = pinchRatio
-                    this.events.trigger('pinch')
-                }
+            if(pinchRatio !== this.pinch.ratio)
+            {
+                this.pinch.ratioDelta = pinchRatio - this.pinch.ratio
+                this.pinch.ratio = pinchRatio
+                this.events.trigger('pinch')
             }
         }
         else

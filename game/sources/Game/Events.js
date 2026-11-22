@@ -1,35 +1,22 @@
-// Change: callbacks are grouped by order in a Map and triggered in numeric ascending order,
-// so fractional orders (5.5) run between 5 and 7. Upstream used a sparse array + for...in,
-// which enumerates integer keys first and string keys (5.5) last (after the render at 998).
 export class Events
 {
     constructor()
     {
-        this.callbacks = new Map() // name => { byOrder: Map(order => [ callbacks ]), orders: [ sorted order numbers ] }
+        this.callbacks = {}
     }
 
     on(_name, _callback, _order = 1)
     {
-        // Create entry if needed
-        let entry = this.callbacks.get(_name)
-        if(!entry)
-        {
-            entry = { byOrder: new Map(), orders: [] }
-            this.callbacks.set(_name, entry)
-        }
+        // Create callbacks array if needed
+        if(!(this.callbacks[_name] instanceof Array))
+            this.callbacks[_name] = []
 
         // Create order array if needed
-        let callbacks = entry.byOrder.get(_order)
-        if(!callbacks)
-        {
-            callbacks = []
-            entry.byOrder.set(_order, callbacks)
-            entry.orders.push(_order)
-            entry.orders.sort((a, b) => a - b)
-        }
+        if(!(this.callbacks[_name][_order] instanceof Array))
+            this.callbacks[_name][_order] = []
 
         // Save callback
-        callbacks.push(_callback)
+        this.callbacks[_name][_order].push(_callback)
 
         return this
     }
@@ -39,24 +26,22 @@ export class Events
         // Remove specific
         if(typeof _callback === 'function')
         {
-            const entry = this.callbacks.get(_name)
-
-            if(entry)
+            for(const order in this.callbacks[_name])
             {
-                for(const callbacks of entry.byOrder.values())
-                {
-                    const index = callbacks.indexOf(_callback)
+                // Find
+                const callbacks = this.callbacks[_name][order]
+                const index = callbacks.indexOf(_callback)
 
-                    if(index !== -1)
-                        callbacks.splice(index, 1)
-                }
+                if(index !== -1)
+                    callbacks.splice(index, 1)
             }
         }
 
         // Remove all
         else
         {
-            this.callbacks.delete(_name)
+            if(this.callbacks[_name] instanceof Array)
+                delete this.callbacks[_name]
         }
 
         return this
@@ -64,19 +49,17 @@ export class Events
 
     trigger(_name, _arguments = [])
     {
-        const entry = this.callbacks.get(_name)
-
-        if(entry)
+        if(this.callbacks[_name] instanceof Array)
         {
-            for(const order of entry.orders)
+            for(const order in this.callbacks[_name])
             {
-                for(const _callbackFunction of entry.byOrder.get(order))
+                for(const _callbackFunction of this.callbacks[_name][order])
                 {
                     _callbackFunction.apply(this, _arguments)
                 }
             }
         }
-
+        
         return this
     }
 }

@@ -1,32 +1,39 @@
-// Change: respawns are defined in code (upstream read them from a GLB of reference empties).
 import * as THREE from 'three/webgpu'
 import { Game } from './Game.js'
 
-const DEFAULT_RESPAWNS = [
-    { name: 'origin', x: 0, y: 4, z: 0, rotation: 0 },
-]
-
 export class Respawns
 {
-    constructor(defaultName = 'origin', definitions = DEFAULT_RESPAWNS)
+    constructor(defaultName = 'landing')
     {
         this.game = Game.getInstance()
         this.defaultName = defaultName
 
-        this.setItems(definitions)
+        this.setItems()
     }
 
-    setItems(definitions)
+    setItems()
     {
         this.items = new Map()
 
-        for(const definition of definitions)
+        for(const child of this.game.resources.respawnsReferencesModel.scene.children)
         {
-            this.items.set(definition.name, {
-                name: definition.name,
-                position: new THREE.Vector3(definition.x, definition.y, definition.z),
-                rotation: definition.rotation
-            })
+            child.rotation.reorder('YXZ')
+
+            let name = child.name.replace(/^respawn(.+)$/i, '$1')
+
+            name = name.charAt(0).toLowerCase() + name.slice(1)
+
+            const item = {
+                name: name,
+                position: new THREE.Vector3(
+                    child.position.x,
+                    4,
+                    child.position.z
+                ),
+                rotation: child.rotation.y
+            }
+
+            this.items.set(name, item)
         }
     }
 

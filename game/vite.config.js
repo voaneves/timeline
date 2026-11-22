@@ -1,51 +1,31 @@
-// Build config (see LICENSES.md for third-party attributions).
-// Changes: no dotenv / restart / basic-ssl / node-polyfills (server-only), no publicDir
-// (assets will come from scripts/hash-assets.mjs, plan T0.15), no auto-open.
+import 'dotenv/config'
+import restart from 'vite-plugin-restart'
 import wasm from 'vite-plugin-wasm'
-import { computeBuildId } from './scripts/hash-assets.mjs'
+import basicSsl from '@vitejs/plugin-basic-ssl'
+import { nodePolyfills } from 'vite-plugin-node-polyfills'
 
-// `__DEBUG_PANEL__`: Tweakpane is bundled only outside production (dev server, `npm run build:debug`).
-// The production build contains no "tweakpane" string at all (plan T0.9, checked by `npm run check:no-tweakpane`).
-export default ({ mode }) => ({
-    root: 'sources/', // Sources files (where index.html is)
-    publicDir: false, // No static assets copied as-is
-    base: './', // Relative public path
+export default {
+    root: 'sources/', // Sources files (typically where index.html is)
+    envDir: '../',  // Directory where the env file is located
+    publicDir: '../static/', // Path from "root" to static assets (files that are served as they are)
+    base: './', // Public path (what's after the domain)
     server:
     {
-        host: '127.0.0.1',
-        open: false
-    },
-    define:
-    {
-        __DEV_TOOLS__: JSON.stringify(mode !== 'production'), // debug-only chunks (Inspector, PerfHud, PhysicsSmoke): dropped from production
-        __DEBUG_PANEL__: JSON.stringify(mode !== 'production'),
-        __BUILD_ID__: JSON.stringify(computeBuildId('static', mode !== 'production')) // T0.15: embedded in the JS, names the manifest
-    },
-    // Dev server only: Rapier's wasm glue must not be pre-bundled (the optimized copy breaks wasm-bindgen's
-    // `getObject(...).now is not a function` on the first world.step()); vite-plugin-wasm handles it from source.
-    optimizeDeps:
-    {
-        exclude: [ '@dimforge/rapier3d' ]
+        // https: true,
+        host: true, // Open to local network and display URL
+        open: true // Open in browser
     },
     build:
     {
-        outDir: '../dist',
-        emptyOutDir: true,
-        sourcemap: false,
-        // Keep three.js in its own long-lived chunk (it changes rarely; game code changes often).
-        rolldownOptions:
-        {
-            output:
-            {
-                codeSplitting:
-                {
-                    groups: [ { name: 'three.webgpu', test: /[\\/]node_modules[\\/]three[\\/]/ } ]
-                }
-            }
-        }
+        outDir: '../dist', // Output in the dist/ folder
+        emptyOutDir: true, // Empty the folder first
+        sourcemap: false // Add sourcemap
     },
     plugins:
     [
-        wasm()
+        wasm(),
+        restart({ restart: [ '../static/**', ] }), // Restart server on static file change
+        nodePolyfills(),
+        // basicSsl()
     ]
-})
+}

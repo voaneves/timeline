@@ -1,51 +1,23 @@
 import * as THREE from 'three/webgpu'
+import { Pane } from 'tweakpane'
+import * as EssentialsPlugin from '@tweakpane/plugin-essentials'
+import * as CamerakitPlugin from '@tweakpane/plugin-camerakit'
 
 export class Debug
 {
-    static isRequested()
-    {
-        return !!(location.hash.match(/debug/i) || location.search.match(/[?&]debug(?:[=&]|$)/i))
-    }
-
-    // Value of `?debug=<value>` or `#debug=<value>` ('' for a bare flag, null when absent)
-    static getParam(name)
-    {
-        const match = (location.search + '&' + location.hash.slice(1)).match(new RegExp('(?:^|[?&#])' + name + '(?:=([^&#]*))?(?:[&#]|$)', 'i'))
-        return match ? (match[1] ?? '') : null
-    }
-
-    // Tweakpane is only fetched (separate chunk) when debug is requested.
-    // Must be awaited before the first `new Debug()`.
-    static async load()
-    {
-        // __DEBUG_PANEL__ is false in production: this block and its imports are removed from the bundle
-        if(__DEBUG_PANEL__ && Debug.isRequested())
-        {
-            const [ tweakpane, essentials, camerakit ] = await Promise.all([
-                import('tweakpane'),
-                import('@tweakpane/plugin-essentials'),
-                import('@tweakpane/plugin-camerakit'),
-            ])
-
-            Debug.modules = { Pane: tweakpane.Pane, EssentialsPlugin: essentials, CamerakitPlugin: camerakit }
-        }
-    }
-
     constructor()
     {
-        this.active = Debug.isRequested() && !!Debug.modules
+        
+        this.active = location.hash.match(/debug/i)
 
         if(this.active)
         {
-            this.panel = new Debug.modules.Pane()
-            this.panel.registerPlugin(Debug.modules.EssentialsPlugin)
-            this.panel.registerPlugin(Debug.modules.CamerakitPlugin)
+            this.panel = new Pane()
+            this.panel.registerPlugin(EssentialsPlugin)
+            this.panel.registerPlugin(CamerakitPlugin)
 
             addEventListener('keydown', (event) =>
             {
-                const target = event.target
-                if(target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable))
-                    return
                 if(event.code === 'KeyH')
                     this.panel.hidden = !this.panel.hidden
             })

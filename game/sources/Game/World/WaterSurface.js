@@ -1,219 +1,468 @@
-// Adapted from dgreenheck/tidewater (MIT, (c) 2026 DRG Software Solutions LLC)
 import * as THREE from 'three/webgpu'
-import { color, cos, float, length, mix, positionLocal, positionWorld, sin, smoothstep, step, texture, uniform, vec2, vec3 } from 'three/tsl'
 import { Game } from '../Game.js'
+import { blendOverlay, color, float, Fn, hash, linearDepth, max, mix, output, positionGeometry, positionLocal, positionWorld, screenUV, select, sin, smoothstep, step, texture, uniform, uv, vec2, vec3, vec4, viewportLinearDepth, viewportSharedTexture } from 'three/tsl'
+import { lerp, remap, remapClamp } from '../utilities/maths.js'
+import { hashBlur } from 'three/examples/jsm/tsl/display/hashBlur.js'
 import { MeshDefaultMaterial } from '../Materials/MeshDefaultMaterial.js'
-import { OceanFFT } from './OceanFFT.js'
+import { boxBlur } from 'three/examples/jsm/tsl/display/boxBlur.js'
 
-/**
- * Stylized Tidewater-tech ocean horizon + cerrado foliage wind sway.
- * - Q0 (WebGPU): 2-cascade JONSWAP FFT displacement + Jacobian foam texture + analytical shore swash
- * - Q1/Q2 (WebGL2): analytical JONSWAP wave synthesis + shore swash
- * - Extends seamlessly 420 m x 420 m into horizon fog so background void is never exposed.
- */
 export class WaterSurface
 {
-    constructor(options = {})
+    constructor()
     {
         this.game = Game.getInstance()
-        this.uTime = uniform(0)
-        this.waterMesh = options.waterMesh || null
-        this.foliageMesh = options.foliageMesh || null
-        this.terrainTexture = options.terrainTexture || null
-        this.bounds = options.bounds || { minX: -37.3, maxX: 37.3, minZ: -49, maxZ: 24 }
-        const level = this.game.quality?.level ?? 0
-        this.qualityTier = options.qualityTier || `Q${level}`
-        this.useFFT = this.qualityTier === 'Q0'
-        this.fft = this.useFFT ? new OceanFFT() : null
-        this._fftAccum = 0
 
-        if(this.waterMesh)
-            this.waterMesh.visible = false
+        this.hasRipples = false
+        this.hasIce = false
+        this.hasSplashes = false
 
-        this.horizonOcean = this.createHorizonOceanMesh()
+        // Debug
+        if(this.game.debug.active)
+        {
+            this.debugPanel = this.game.debug.panel.addFolder({
+                title: '🌊 Water surface',
+                expanded: false,
+            })
 
-        if(this.foliageMesh)
-            this.attachFoliageWind(this.foliageMesh)
+            this.ripplesDebugPanel = this.debugPanel.addFolder({
+                title: 'Ripples',
+                expanded: true,
+            })
 
-        this._onTick = () => this.update()
-        this.game.ticker.events.on('tick', this._onTick, 7)
+            this.iceDebugPanel = this.debugPanel.addFolder({
+                title: 'Ice',
+                expanded: true,
+            })
+
+            this.splashesDebugPanel = this.debugPanel.addFolder({
+                title: 'Splashes',
+                expanded: true,
+            })
+
+            this.shoreDebugPanel = this.debugPanel.addFolder({
+                title: 'shore',
+                expanded: true,
+            })
+
+            this.blurDebugPanel = this.debugPanel.addFolder({
+                title: 'blur',
+                expanded: true,
+            })
+        }
+
+        this.setGeometry()
+        this.setNodes()
+        this.setMaterial()
+        this.setMesh()
+        this.setIce()
+
+        this.game.ticker.events.on('tick', () =>
+        {
+            this.update()
+        }, 10)
     }
 
-    createHorizonOceanMesh()
+    setGeometry()
     {
-        const isQ0 = this.qualityTier === 'Q0'
-        const segs = isQ0 ? 72 : 16
-        const size = isQ0 ? 420 : 240
-        const geometry = new THREE.PlaneGeometry(size, size, segs, segs)
-        geometry.rotateX(-Math.PI * 0.5)
+        this.geometry = new THREE.PlaneGeometry(1, 1, 1, 1)
+        this.geometry.rotateX(- Math.PI * 0.5)
+    }
 
-        const deepOcean = color('#1e6fa8')
-        const midLagoon = color('#2f96c8')
-        const shallowTurquoise = color('#5ac7d6')
-        const foamCream = color('#f4ead4')
-        const horizonTint = color('#cde3f2')
+    setNodes()
+    {
+        /**
+         * Ripples
+         */
+        this.ripplesRatio = uniform(1)
+        const ripplesSlopeFrequency = uniform(10)
+        const ripplesNoiseFrequency = uniform(0.1)
+        const ripplesNoiseOffset = uniform(0.345)
 
-        // Circular cove distance around island center (0, -18) for natural shore foam & shallows
-        const cx = positionWorld.x.div(35.0)
-        const cz = positionWorld.z.add(18.0).div(30.0)
-        const rawR = cx.mul(cx).add(cz.mul(cz)).add(0.0001).sqrt().mul(32.5)
-        const coastApprox = float(28.5).add(sin(positionWorld.x.mul(0.16)).mul(1.9)).add(cos(positionWorld.z.mul(0.19)).mul(1.6))
-        const edgeDist = rawR.sub(coastApprox).max(0.0)
-
-        let waveDispY
-        let finalWaterColor
-        let nearMask
-
-        if(isQ0)
-        {
-            const p1 = positionWorld.x.mul(0.24).add(positionWorld.z.mul(0.16)).add(this.uTime.mul(1.35))
-            const p2 = positionWorld.x.mul(-0.19).add(positionWorld.z.mul(0.33)).sub(this.uTime.mul(1.15))
-            const p3 = positionWorld.x.mul(0.52).sub(positionWorld.z.mul(0.44)).add(this.uTime.mul(1.75))
-            const p4 = positionWorld.x.mul(0.85).add(positionWorld.z.mul(0.72)).sub(this.uTime.mul(2.2))
-            const w1 = sin(p1)
-            const w2 = cos(p2)
-            const w3 = sin(p3)
-            const w4 = cos(p4)
-            waveDispY = w1.mul(0.14).add(w2.mul(0.09)).add(w3.mul(0.05))
-
-            // Analytical wave slopes -> sun-lit wave facets & specular glints (visible even when camera is still)
-            const dHx = cos(p1).mul(0.045).add(sin(p2).mul(0.025)).add(cos(p3).mul(0.038)).sub(sin(p4).mul(0.032))
-            const dHz = cos(p1).mul(0.030).sub(sin(p2).mul(0.042)).sub(cos(p3).mul(0.032)).sub(sin(p4).mul(0.028))
-            const waveLit = dHx.mul(2.4).add(dHz.mul(2.1)).add(0.5).clamp(0.0, 1.0)
-            const crestHighlight = smoothstep(float(0.64), float(0.90), waveLit)
-
-            let fftFoam = float(0)
-            if(this.fft)
+        this.ripplesRatioBinding = this.game.debug.addManualBinding(
+            this.ripplesDebugPanel,
+            this.ripplesRatio,
+            'value',
+            { label: 'ripplesRatio', min: 0, max: 1, step: 0.001 },
+            () =>
             {
-                const fftUv = positionWorld.xz.div(float(46.0))
-                const fftSample = texture(this.fft.displacementTexture, fftUv)
-                fftFoam = fftSample.w
+                return remapClamp(this.game.weather.temperature.value, 0, -3, 1, 0)
             }
-
-            const shallowBand = float(1).sub(smoothstep(float(0.0), float(16.0), edgeDist))
-            const swashPhase = sin(edgeDist.mul(1.65).sub(this.uTime.mul(1.9))).mul(0.5).add(0.5)
-            const shoreFoamBand = float(1).sub(smoothstep(float(0.0), float(3.8), edgeDist))
-            const stylizedShoreFoam = step(float(0.54), shoreFoamBand.mul(0.74).add(swashPhase.mul(0.46)))
-
-            const crestFoamWave = w1.mul(0.45).add(w3.mul(0.35)).add(w4.mul(0.2)).mul(0.5).add(0.5)
-            const whitecapFoam = smoothstep(float(0.56), float(0.84), fftFoam.add(crestFoamWave.mul(0.38)))
-            const totalFoam = stylizedShoreFoam.max(whitecapFoam.mul(0.8))
-
-            const oceanBase = mix(deepOcean, midLagoon, waveLit.mul(0.68).add(shallowBand.mul(0.32)))
-            const withShallow = mix(oceanBase, shallowTurquoise, shallowBand.mul(0.65))
-            const withHighlight = mix(withShallow, color('#9aeaf3'), crestHighlight.mul(0.48))
-            const withFoam = mix(withHighlight, foamCream, totalFoam.mul(0.88))
-            const horizonBlend = smoothstep(float(75.0), float(190.0), rawR)
-            finalWaterColor = mix(withFoam, horizonTint, horizonBlend.mul(0.85))
-            nearMask = float(1).sub(smoothstep(float(90.0), float(180.0), rawR))
-        }
-        else
-        {
-            // Lightweight Q1/Q2 analytical ocean for mobile WebGL2 60fps
-            const w1 = sin(positionWorld.x.mul(0.26).add(this.uTime.mul(1.2)))
-            const w2 = cos(positionWorld.z.mul(0.30).sub(this.uTime.mul(1.0)))
-            waveDispY = w1.mul(0.06).add(w2.mul(0.04))
-            const shallowBand = float(1).sub(smoothstep(float(0.0), float(16.0), edgeDist))
-            const shoreFoam = float(1).sub(smoothstep(float(0.0), float(3.2), edgeDist))
-            const waterTone = mix(deepOcean, shallowTurquoise, shallowBand.mul(0.65).add(w1.mul(0.12).add(0.12)))
-            finalWaterColor = mix(waterTone, foamCream, shoreFoam.mul(0.75))
-            nearMask = float(1).sub(smoothstep(float(55.0), float(105.0), rawR))
-        }
-
-        const material = isQ0
-            ? new MeshDefaultMaterial({
-                colorNode: finalWaterColor,
-                hasCoreShadows: false,
-                hasDropShadows: false,
-                hasLightBounce: false,
-                hasVertexAo: false,
-                hasWater: false,
-                hasFog: true,
-                hasReveal: true,
-            })
-            : new THREE.MeshBasicNodeMaterial({
-                colorNode: finalWaterColor,
-            })
-
-        // Dampen vertical displacement near horizon so fog edge stays calm
-        if(isQ0)
-        {
-            material.positionNode = vec3(
-                positionLocal.x,
-                positionLocal.y.add(waveDispY.mul(nearMask)),
-                positionLocal.z
-            )
-        }
-
-        const mesh = new THREE.Mesh(geometry, material)
-        mesh.name = 'OrigensHorizonOcean'
-        mesh.position.set(0, -0.35, -18.0)
-        mesh.renderOrder = 10
-        mesh.castShadow = false
-        mesh.receiveShadow = false
-        mesh.userData.preventMaterialOverride = true
-        this.game.scene.add(mesh)
-        return mesh
-    }
-
-    attachFoliageWind(mesh)
-    {
-        if(!mesh.material || !mesh.material._colorNode)
-            return
-
-        const baseMat = mesh.material
-        const windMat = new MeshDefaultMaterial({
-            colorNode: baseMat._colorNode,
-            hasCoreShadows: true,
-            hasDropShadows: true,
-            hasLightBounce: true,
-            hasVertexAo: true,
-            hasWater: false,
-            hasFog: true,
-            hasReveal: true,
-        })
-
-        // Coherent directional breeze across whole canopy (no circular Lissajous / twisting)
-        const swayWeight = smoothstep(float(2.2), float(5.0), positionWorld.y)
-        const windWave = sin(this.uTime.mul(0.55).add(positionWorld.x.mul(0.05)).add(positionWorld.z.mul(0.05)))
-        const sway = windWave.mul(0.022).mul(swayWeight)
-
-        windMat.positionNode = vec3(
-            positionLocal.x.add(sway.mul(0.85)),
-            positionLocal.y,
-            positionLocal.z.add(sway.mul(0.35))
         )
 
-        mesh.material = windMat
-        mesh.userData.preventMaterialOverride = true
+        const ripplesNode = Fn(([terrainData]) =>
+        {           
+            const baseRipple = terrainData.b.add(this.game.wind.localTime.mul(0.5)).mul(ripplesSlopeFrequency)
+            const rippleIndex = baseRipple.floor()
+
+            const ripplesNoise = texture(
+                this.game.noises.perlin,
+                positionWorld.xz.add(rippleIndex.div(ripplesNoiseOffset)).mul(ripplesNoiseFrequency)
+            ).r
+            
+            const ripples = terrainData.b
+                .add(this.game.wind.localTime.mul(0.5))
+                .mul(ripplesSlopeFrequency)
+                .mod(1)
+                .sub(terrainData.b.remap(0, 1, -0.3, 1).oneMinus())
+                .add(ripplesNoise)
+
+            ripples.assign(this.ripplesRatio.remap(0, 1, -1, -0.4).step(ripples))
+
+            return ripples
+        })
+
+        // Debug
+        if(this.game.debug.active)
+        {
+            this.ripplesDebugPanel.addBinding(ripplesSlopeFrequency, 'value', { label: 'ripplesSlopeFrequency', min: 0, max: 50, step: 0.01 })
+            this.ripplesDebugPanel.addBinding(ripplesNoiseFrequency, 'value', { label: 'ripplesNoiseFrequency', min: 0, max: 1, step: 0.01 })
+            this.ripplesDebugPanel.addBinding(ripplesNoiseOffset, 'value', { label: 'ripplesNoiseOffset', min: 0, max: 1, step: 0.001 })
+        }
+
+        /**
+         * Ice
+         */
+        this.iceRatio = uniform(0)
+        const iceNoiseFrequency = uniform(0.3)
+
+        this.iceRatioBinding = this.game.debug.addManualBinding(
+            this.iceDebugPanel,
+            this.iceRatio,
+            'value',
+            { label: 'iceRatio', min: 0, max: 1, step: 0.001 },
+            () =>
+            {
+                return remapClamp(this.game.weather.temperature.value, 0, -5, 0, 1)
+            }
+        )
+
+        const iceNode = Fn(([terrainData]) =>
+        {
+            const iceVoronoi = texture(
+                this.game.noises.voronoi,
+                positionWorld.xz.mul(iceNoiseFrequency)
+            ).g
+
+            const ice = terrainData.b.remapClamp(0, this.iceRatio, 0, 1).toVar()
+            ice.assign(iceVoronoi.step(ice))
+
+            return ice
+        })
+
+        // Debug
+        if(this.game.debug.active)
+        {
+            this.iceDebugPanel.addBinding(iceNoiseFrequency, 'value', { label: 'iceNoiseFrequency', min: 0, max: 1, step: 0.01 })
+        }
+
+        /**
+         * Splashes
+         */
+        this.splashesRatio = uniform(0)
+        const splashesNoiseFrequency = uniform(0.33)
+        const splashesTimeFrequency = uniform(6)
+        const splashesThickness = uniform(0.3)
+        const splashesEdgeAttenuationLow = uniform(0.14)
+        const splashesEdgeAttenuationHigh = uniform(1)
+
+        this.splashesRatioBinding = this.game.debug.addManualBinding(
+            this.splashesDebugPanel,
+            this.splashesRatio,
+            'value',
+            { label: 'splashesRatio', min: 0, max: 1, step: 0.001 },
+            () =>
+            {
+                return Math.pow(this.game.weather.rain.value, 2)
+            }
+        )
+
+        const splashesNode = Fn(() =>
+        {
+            // Noises
+            const splashesVoronoi = texture(
+                this.game.noises.voronoi,
+                positionWorld.xz.mul(splashesNoiseFrequency)
+            )
+            const splashPerlin = texture(
+                this.game.noises.perlin,
+                positionWorld.xz.mul(splashesNoiseFrequency.mul(0.25))
+            ).r
+
+            // Base
+            const splash = splashesVoronoi.r
+
+            // Time
+            const splashTimeRandom = hash(splashesVoronoi.b.mul(123456)).add(splashPerlin)
+            const splashTime = this.game.wind.localTime.mul(splashesTimeFrequency).add(splashTimeRandom)
+            splash.assign(splash.sub(splashTime).mod(1))
+            
+            // Thickness
+            const edgeMutliplier = splashesVoronoi.g.remapClamp(splashesEdgeAttenuationLow, splashesEdgeAttenuationHigh, 0, 1)
+            const thickness = splashesThickness.mul(edgeMutliplier)
+            splash.assign(splash.step(thickness).oneMinus())
+            
+            // Visibility
+            const splashVisibilityRandom = hash(splashesVoronoi.b.mul(654321))
+            const visible = splashVisibilityRandom.add(splashPerlin).mod(1)
+            visible.assign(this.splashesRatio.step(visible))
+            splash.assign(splash.mul(visible))
+            
+            return splash
+        })
+
+        // Debug
+        if(this.game.debug.active)
+        {
+            this.splashesDebugPanel.addBinding(splashesNoiseFrequency, 'value', { label: 'splashesNoiseFrequency', min: 0, max: 1, step: 0.01 })
+            this.splashesDebugPanel.addBinding(splashesTimeFrequency, 'value', { label: 'splashesTimeFrequency', min: 0, max: 100, step: 0.1 })
+            this.splashesDebugPanel.addBinding(splashesThickness, 'value', { label: 'splashesThickness', min: 0, max: 1, step: 0.01 })
+            this.splashesDebugPanel.addBinding(splashesEdgeAttenuationLow, 'value', { label: 'splashesEdgeAttenuationLow', min: 0, max: 1, step: 0.01 })
+            this.splashesDebugPanel.addBinding(splashesEdgeAttenuationHigh, 'value', { label: 'splashesEdgeAttenuationHigh', min: 0, max: 1, step: 0.01 })
+        }
+
+        /**
+         * Shore
+         */
+        const shoreEdge = uniform(0.17)
+        
+        const shoreNode = Fn(([terrainData]) =>
+        {
+            return shoreEdge.step(terrainData.b)
+        })
+
+        // Debug
+        if(this.game.debug.active)
+        {
+            this.shoreDebugPanel.addBinding(shoreEdge, 'value', { label: 'shoreEdge', min: 0, max: 0.3, step: 0.001 })
+        }
+
+        /**
+         * Details mask
+         */
+        this.detailsMask = () =>
+        {
+            return Fn(() =>
+            {
+                // Terrain data
+                // const terrainUv = this.game.terrain.worldPositionToUvNode(positionWorld.xz)
+                const terrainData = this.game.terrain.terrainNode(positionWorld.xz)
+                const value = float(0)
+
+                // Ripples
+                if(this.hasRipples)
+                    value.assign(max(value, ripplesNode(terrainData)))
+
+                // Ice
+                if(this.hasIce)
+                    value.assign(max(value, iceNode(terrainData)))
+            
+                // Splashes
+                if(this.hasSplashes)
+                    value.assign(max(value, splashesNode()))
+
+                // Shore
+                value.assign(max(value, shoreNode(terrainData)))
+
+                return value
+            })()
+        }
+
+        /**
+         * Blur Output
+         */
+         const blurStrength = uniform(0.01)
+
+         this.blurOutputNode = Fn(() =>
+         {
+            // const blurOutput = boxBlur(viewportSharedTexture(screenUV), {
+			// 	size: 1.5,
+			// 	separation: 3
+			// }).rgb
+
+            // Hash blur
+            const blurOutput = hashBlur(viewportSharedTexture(screenUV), 0.01, {
+                repeats: 25,
+                premultipliedAlpha: true
+            })
+
+            return vec3(blurOutput)
+         })
+
+        // Debug
+        if(this.game.debug.active)
+        {
+            this.blurDebugPanel.addBinding(blurStrength, 'value', { label: 'blurStrength', min: 0, max: 0.1 })
+        }
+    }
+
+    setMaterial()
+    {
+        const material = new MeshDefaultMaterial({
+            depthWrite: false,
+            colorNode: color(0xffffff),
+            alphaNode: this.detailsMask(),
+            alphaTest: 0,
+            hasCoreShadows: false,
+            hasDropShadows: true,
+            hasLightBounce: false,
+            hasFog: true,
+            hasWater: false,
+            transparent: true
+        })
+
+        const baseOutput = material.outputNode
+        const blurredOutput = Fn(() =>
+        {
+            const blurOutput = this.blurOutputNode()
+            const surfaceAlpha = baseOutput.a
+            const surfaceOutput = vec4(baseOutput.rgb, 1)
+
+            const finalOuput = select(
+                surfaceAlpha.lessThan(0.5),
+                blurOutput,
+                surfaceOutput
+            )
+
+            return finalOuput
+        })()
+
+        // Quality
+        const qualityChange = (level) =>
+        {
+            if(level === 0)
+            {
+                material.outputNode = blurredOutput
+            }
+            else if(level === 1)
+            {
+                material.outputNode = baseOutput
+            }
+            
+            material.needsUpdate = true
+        }
+        qualityChange(this.game.quality.level)
+        this.game.quality.events.on('change', qualityChange)
+
+
+        // const baseOutput = material.outputNode
+        // material.outputNode = Fn(() =>
+        // {
+        //     const blurOutput = this.blurOutputNode()
+        //     const surfaceAlpha = baseOutput.a
+        //     const surfaceOutput = vec4(baseOutput.rgb, 1)
+
+        //     const finalOuput = select(
+        //         surfaceAlpha.lessThan(0.5),
+        //         blurOutput,
+        //         surfaceOutput
+        //     )
+
+        //     return finalOuput
+        // })()
+        
+        material.maskShadowNode = this.detailsMask().greaterThan(0.5)
+
+        // Already exist
+        if(this.material)
+        {
+            this.material.dispose()
+            this.material = material
+            this.mesh.material = this.material
+        }
+
+        // Don't exist yet
+        else
+        {
+            this.material = material
+        }
+    }
+
+    setMesh()
+    {
+        this.mesh = new THREE.Mesh(this.geometry, this.material)
+        
+        const halfExtent = this.game.view.optimalArea.radius
+        this.mesh.scale.setScalar(halfExtent * 2)
+
+        this.mesh.position.y = this.game.water.surfaceElevation
+        this.mesh.castShadow = true
+        this.mesh.receiveShadow = true
+        // this.mesh.renderOrder = -1
+        this.game.scene.children.unshift(this.mesh)
+
+        this.game.viewport.events.on('throttleChange', () =>
+        {
+            const halfExtent = this.game.view.optimalArea.radius
+            this.mesh.scale.setScalar(halfExtent * 2)
+        }, 2)
+    }
+
+    setIce()
+    {
+        this.ice = {}
+
+        this.ice.halfThickness = 0.5
+        this.ice.physical = this.game.physics.getPhysical({
+            type: 'kinematicPositionBased',
+            position: new THREE.Vector3(0, this.game.water.surfaceElevation - this.ice.halfThickness, 0),
+            frictionRule: 'min',
+            friction: 0.02,
+            enabled: false,
+            colliders:
+            [
+                { shape: 'cuboid', parameters: [ 256, this.ice.halfThickness, 256 ] },
+            ]
+        })
     }
 
     update()
     {
-        const elapsed = this.game.ticker.elapsed
-        this.uTime.value = elapsed
-        if(this.fft)
+        // Apply weather
+        this.ripplesRatioBinding.update()
+        this.iceRatioBinding.update()
+        this.splashesRatioBinding.update()
+
+        // Mesh
+        this.mesh.position.x = this.game.view.optimalArea.position.x
+        this.mesh.position.z = this.game.view.optimalArea.position.z
+        this.mesh.renderOrder = 1
+
+        // Material
+        const hasRipples = this.ripplesRatio.value > 0.0001
+        const hasIce = this.iceRatio.value > 0.0001
+        const hasSplashes = this.splashesRatio.value > 0.0001
+
+        if(
+            hasRipples !== this.hasRipples ||
+            hasIce !== this.hasIce ||
+            hasSplashes !== this.hasSplashes
+        )
         {
-            this._fftAccum += this.game.ticker.delta || 0.016
-            if(this._fftAccum >= 0.033)
+            this.hasRipples = hasRipples
+            this.hasIce = hasIce
+            this.hasSplashes = hasSplashes
+            
+            this.setMaterial()
+        }
+
+        // Ice
+        const friction = lerp(0.5, 0.02, this.iceRatio.value)
+        this.ice.physical.body.collider(0).setFriction(friction)
+        this.ice.physical.body.setNextKinematicTranslation({ x: 0, y: lerp(- 1.5 - this.ice.halfThickness, this.game.water.surfaceElevation - this.ice.halfThickness, this.iceRatio.value), z: 0})
+
+        if(this.iceRatio.value > 0)
+        {
+            if(!this.ice.physical.body.isEnabled())
             {
-                this._fftAccum = 0
-                this.fft.update(elapsed)
+                this.game.objects.enable(this.ice)
             }
         }
-    }
-
-    dispose()
-    {
-        this.game?.ticker?.events?.off?.('tick', this._onTick)
-        if(this.horizonOcean)
+        else
         {
-            this.horizonOcean.removeFromParent()
-            this.horizonOcean.geometry?.dispose()
-            this.horizonOcean.material?.dispose()
-            this.horizonOcean = null
+            if(this.ice.physical.body.isEnabled())
+            {
+                this.game.objects.disable(this.ice)
+            }
         }
-        this.fft?.dispose()
-        this.fft = null
     }
 }

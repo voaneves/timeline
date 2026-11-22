@@ -1,5 +1,6 @@
 import * as THREE from 'three/webgpu'
 import { Game } from './Game.js'
+import MeshGridMaterial, { MeshGridMaterialLine } from './Materials/MeshGridMaterial.js'
 import { color, Fn, mix, round, smoothstep, texture, uniform, uv, vec2 } from 'three/tsl'
 
 export class Terrain
@@ -19,7 +20,6 @@ export class Terrain
             })
         }
 
-        this.setDataTexture()
         this.setGradient()
         this.setNodes()
 
@@ -27,44 +27,6 @@ export class Terrain
         {
             this.update()
         }, 10)
-    }
-
-    // Procedural stand-in for upstream's hand-painted terrain.png (not copied).
-    // Channels read by terrainNode / colorNode: g = grass amount, b = dirt/water gradient index.
-    setDataTexture()
-    {
-        const resolution = 64
-        const data = new Uint8Array(resolution * resolution * 4)
-
-        for(let y = 0; y < resolution; y++)
-        {
-            for(let x = 0; x < resolution; x++)
-            {
-                const i = (y * resolution + x) * 4
-
-                // Radial distance from the center: 0 at the center, 1 at the border of the texture
-                const dx = (x + 0.5) / resolution * 2 - 1
-                const dy = (y + 0.5) / resolution * 2 - 1
-                const radius = Math.hypot(dx, dy)
-
-                const grass = 1 - Math.min(Math.max((radius - 0.45) / 0.35, 0), 1) // full grass inside, fades out
-                const gradient = 0.12 + Math.min(Math.max((radius - 0.7) / 0.3, 0), 1) * 0.6 // dirt (low) to deep water (high)
-
-                data[i    ] = 0
-                data[i + 1] = Math.round(grass * 255)
-                data[i + 2] = Math.round(gradient * 255)
-                data[i + 3] = 255
-            }
-        }
-
-        this.dataTexture = new THREE.DataTexture(data, resolution, resolution, THREE.RGBAFormat, THREE.UnsignedByteType)
-        this.dataTexture.minFilter = THREE.LinearFilter
-        this.dataTexture.magFilter = THREE.LinearFilter
-        this.dataTexture.wrapS = THREE.ClampToEdgeWrapping
-        this.dataTexture.wrapT = THREE.ClampToEdgeWrapping
-        this.dataTexture.generateMipmaps = false
-        this.dataTexture.flipY = false
-        this.dataTexture.needsUpdate = true
     }
 
     setGradient()
@@ -131,7 +93,7 @@ export class Terrain
         this.terrainNode = Fn(([position]) =>
         {
             const textureUv = worldPositionToUvNode(position)
-            const data = texture(this.dataTexture, textureUv)
+            const data = texture(this.game.resources.terrainTexture, textureUv)
 
             // Wheel tracks
             const groundDataColor = texture(

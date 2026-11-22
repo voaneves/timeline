@@ -33,46 +33,14 @@ export class Materials
         this.createGradient('redGradient', '#ff3a3a', '#721551', this.debugPanel?.addFolder({ title: 'redGradient' }))
     }
 
-    // Procedural 16x1 placeholder palette (upstream loads a hand-made palette.png, not copied).
-    // The real palette texture arrives with the art pipeline (plan 5.5).
-    createPaletteTexture()
-    {
-        const hexes = [
-            '#f4ead5', '#d9c7a0', '#b98f5f', '#7a5a3a', '#e8734a', '#c2412d', '#f2b84b', '#8fb86a',
-            '#4f8a5b', '#2f5d50', '#5fa8b5', '#3b6ea8', '#7a6fb5', '#4a3f6b', '#2b2b38', '#111118',
-        ]
-        const data = new Uint8Array(hexes.length * 4)
-        const tempColor = new THREE.Color()
-
-        hexes.forEach((hex, index) =>
-        {
-            tempColor.set(hex) // sRGB hex => linear working space
-            tempColor.getRGB(tempColor, THREE.SRGBColorSpace) // back to sRGB bytes (texture is tagged sRGB)
-            data[index * 4    ] = Math.round(tempColor.r * 255)
-            data[index * 4 + 1] = Math.round(tempColor.g * 255)
-            data[index * 4 + 2] = Math.round(tempColor.b * 255)
-            data[index * 4 + 3] = 255
-        })
-
-        const paletteTexture = new THREE.DataTexture(data, hexes.length, 1, THREE.RGBAFormat, THREE.UnsignedByteType)
-        paletteTexture.colorSpace = THREE.SRGBColorSpace
-        paletteTexture.minFilter = THREE.NearestFilter
-        paletteTexture.magFilter = THREE.NearestFilter
-        paletteTexture.generateMipmaps = false
-        paletteTexture.needsUpdate = true
-
-        return paletteTexture
-    }
-
     createPalette()
     {
-        this.paletteTexture = this.createPaletteTexture()
-
         const material = new MeshDefaultMaterial({
-            colorNode: texture(this.paletteTexture).rgb
+            colorNode: texture(this.game.resources.paletteTexture).rgb
         })
         
         this.save('palette', material)
+
     }
 
     setGradient()
@@ -342,6 +310,20 @@ export class Materials
             // Transparent
             let transparent = baseMaterial.transparent
 
+            // Premultiplied alpha
+            let premultipliedAlpha = false
+
+            // Exceptions
+            if(
+                baseMaterial.name === 'projectsLabels' ||
+                baseMaterial.name === 'blackboardLabels'
+            )
+            {
+                premultipliedAlpha = true
+                transparent = true
+                alphaNode = texture(baseMaterial.map).r
+            }
+
             // Material
             const material = new MeshDefaultMaterial({
                 colorNode: baseColor,
@@ -350,6 +332,7 @@ export class Materials
                 hasDropShadows: true,
                 transparent: transparent
             })
+            material.premultipliedAlpha = premultipliedAlpha
             material.map = baseMaterial.map
             
             return material

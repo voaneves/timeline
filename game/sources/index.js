@@ -1,8 +1,13 @@
 import './threejs-override.js'
 import { Game } from './Game/Game.js'
+import consoleLog from './data/consoleLog.js'
 
-// `?expose` (or VITE_GAME_PUBLIC) exposes the singleton as window.game for tests and measurements
-if(import.meta.env.VITE_GAME_PUBLIC || location.search.match(/[?&]expose(?:[=&]|$)/i))
+if(import.meta.env.VITE_LOG)
+    console.log(
+        ...consoleLog
+    )
+
+if(import.meta.env.VITE_GAME_PUBLIC)
     window.game = new Game()
 else
     new Game()

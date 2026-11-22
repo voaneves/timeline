@@ -1,5 +1,4 @@
 import { Game } from '../Game.js'
-import { Debug } from '../Debug.js'
 import * as THREE from 'three/webgpu'
 
 export class PhysicsWireframe
@@ -7,10 +6,7 @@ export class PhysicsWireframe
     constructor()
     {
         this.game = Game.getInstance()
-
-        // On from the start with `?wireframe` or `?debug=physics` (works in the production build too, no panel needed);
-        // otherwise toggled from the Tweakpane panel (Physics > Wireframe > debug)
-        this.active = Debug.getParam('wireframe') !== null || Debug.getParam('debug') === 'physics'
+        this.active = false
 
         this.geometry = new THREE.BufferGeometry()
         this.geometry.setAttribute('position', new THREE.Float32BufferAttribute([], 3))
@@ -19,7 +15,6 @@ export class PhysicsWireframe
         this.material = new THREE.LineBasicNodeMaterial({ vertexColors: true })
 
         this.lineSegments = new THREE.LineSegments(this.geometry, this.material)
-        this.lineSegments.frustumCulled = false // the geometry is rebuilt every frame, a cached bounding sphere would be stale
 
         if(this.active)
             this.game.scene.add(this.lineSegments)
@@ -53,20 +48,12 @@ export class PhysicsWireframe
 
         const { vertices, colors } = this.game.physics.world.debugRender()
 
-        // A WebGPU vertex buffer cannot be resized: when the segment count changes, replace the attributes (debug only)
-        if(this.geometry.attributes.position.array.length !== vertices.length)
-        {
-            this.geometry.attributes.position.dispose?.()
-            this.geometry.attributes.color.dispose?.()
-            this.geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3))
-            this.geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 4))
-            return
-        }
-
-        this.geometry.attributes.position.array.set(vertices)
+        this.geometry.attributes.position.array = vertices
+        this.geometry.attributes.position.count = vertices.length / 3
         this.geometry.attributes.position.needsUpdate = true
 
-        this.geometry.attributes.color.array.set(colors)
+        this.geometry.attributes.color.array = colors
+        this.geometry.attributes.color.count = colors.length / 4
         this.geometry.attributes.color.needsUpdate = true
     }
 }
