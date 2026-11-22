@@ -1,1194 +1,1148 @@
-# Linha do Tempo 3D: plano de reconstrução (reset da fundação)
+# Plano de Transformação 3D — Portfólio & Timeline Interativa (Victor Neves)
 
-Repositório: `D:\GitHub\_kit-clones\timeline` (origin `voaneves/timeline`, GitHub Pages legado a partir da raiz de `main`, URL `https://voaneves.github.io/timeline/`).
-Data: 2026-11-20. Base atual: commit `02b6260` (rodada 4: portais de era, base da fita, água/folhagem, camadas de áudio). Medido a 75 fps na RX 6750 XT em 1280×720.
-Status: só plano. Nada daqui foi implementado.
-
-Meta do dono: "11/10, onde o bruno-simon.com é 10/10", **também no celular**. Nota atual dada pelo dono depois de jogar: **2/10 no máximo**.
-
-Direção técnica (pedido do dono): construir **sobre o código aberto do Bruno Simon** (`brunosimon/folio-2025`, licença MIT, "Copyright (c) 2025 Bruno Simon") como base de engenharia. Em cima disso, superar o original com **tudo o que se vê e se ouve 100% original**.
-
-Sumário:
-0. Fatos verificados (leitura do código e medições)
-1. Diagnóstico: por que o build atual é 2/10
-2. Visão e direção criativa para 11/10
-3. Jogabilidade e controles
-4. Level design
-5. Pipeline de arte
-6. Arquitetura técnica (reuso do motor folio-2025, fronteira de originalidade, repo e deploy)
-7. Gates de qualidade e avaliação (nova rubrica)
-8. Roadmap com tarefas numeradas
-9. Riscos, mitigações e decisões do dono
-10. Definição de 11/10 (checklist)
+- **Repositório:** `D:\GitHub\_kit-clones\timeline` (origin `voaneves/timeline`, GitHub Pages em `https://voaneves.github.io/timeline/`)
+- **Projeto 3D:** `D:\GitHub\_kit-clones\timeline\game` (base completa do `folio-2025` instalada, dependências em `node_modules`, `.env` criado a partir de `.env.example`, build base validado)
+- **Site raiz (intacto durante toda a evolução):** `D:\GitHub\_kit-clones\timeline` (`index.html`, `src/`, `assets/`, `docs/`)
+- **Backup de referência (somente consulta eventual de textos/ideias; não usar como base):** `D:\GitHub\pode_apagar\timeline\game_20261122`
+- **Licença da base:** MIT (`game/license.md`, Copyright © 2025 Bruno Simon) e músicas CC0 (`game/static/sounds/musics/license.md`, Kounine). Todos os créditos técnicos e de licença são mantidos de forma transparente em *Bastidores* (`Behind the Scene`) e no `consoleLog.js`.
 
 ---
 
-## 0. Fatos verificados
+## Sumário
 
-### 0.1 Build atual (`02b6260`)
+- [0. Fatos Verificados e Auditoria Completa da Base](#0-fatos-verificados-e-auditoria-completa-da-base)
+- [1. Princípios, Fronteira de Adaptação e Regra de Ouro de Assets](#1-princípios-fronteira-de-adaptação-e-regra-de-ouro-de-assets)
+- [2. Direção Criativa e "Spin Próprio" (*Roadtrip Costeira Tátil*)](#2-direção-criativa-e-spin-próprio-roadtrip-costeira-tátil)
+- [3. Jogabilidade, Física do Veículo, Câmera, Controles e Modo Offline-First](#3-jogabilidade-física-do-veículo-câmera-controles-e-modo-offline-first)
+- [4. Mapeamento Cirúrgico das 14 Áreas e Level Design (Atual vs Novo Layout)](#4-mapeamento-cirúrgico-das-14-áreas-e-level-design-atual-vs-novo-layout)
+- [5. Especificação Completa de Conteúdo (Bruno Simon → Victor Neves) e I18n](#5-especificação-completa-de-conteúdo-bruno-simon--victor-neves-e-i18n)
+- [6. Pipeline de Assets (`.glb` / `.ktx` / `.png` / `compress.js`) e Convenções Blender](#6-pipeline-de-assets-glb--ktx--png--compressjs-e-convenções-blender)
+- [7. Arquitetura Técnica, Performance e Integração com o Site Raiz](#7-arquitetura-técnica-performance-e-integração-com-o-site-raiz)
+- [8. Gates de Qualidade, Verificação Automatizada e Playtest](#8-gates-de-qualidade-verificação-automatizada-e-playtest)
+- [9. Roadmap Granular com Tarefas Numeradas (`T0.0` a `T6.3`)](#9-roadmap-granular-com-tarefas-numeradas-t00-a-t63)
+- [10. Matriz de Riscos, Decisões do Dono (`D1`–`D12`) e Checklist Final](#10-matriz-de-riscos-decisões-do-dono-d1d12-e-checklist-final)
 
-| Área | Fato | Onde |
+---
+
+## 0. Fatos Verificados e Auditoria Completa da Base
+
+Todos os dados abaixo foram verificados diretamente no código-fonte de `D:\GitHub\_kit-clones\timeline\game`, nos binários `.glb` em `game/static/`, nos metadados de imagem via `sharp` e no DOM semântico de `D:\GitHub\_kit-clones\timeline\index.html`.
+
+### 0.1 Núcleo do motor em `game/`
+| Subsistema | Arquivos principais | Fatos verificados no código |
 |---|---|---|
-| Física | Corpo AABB contra caixas estáticas, resolução separada por eixo e chão plano em `y = 0` (`if (b.y <= 0)`). Não tem rampa, degrau nem colisão com malha. | `src/world/physics.js` |
-| Controle | Entrada em eixos de **tela**, não relativa à câmera (`s.x`, `s.z`). `maxv 7.2`, aceleração 75 no chão e 45 no ar, `vy` do pulo 15.2, gravidade 38 (×1.45 na queda), coyote 0.1 s, buffer 0.12 s. | `src/world/main.js` l. ~1080–1110 |
-| Câmera | Yaw fixo, pitch 23°, distância 14, FOV 36, amortecimento 0.28 e look-ahead de 0.3 × velocidade. O avatar ocupa cerca de 1/8 da altura da tela. Intro em grua de 3.8 s. | `src/world/camera.js` |
-| Render | `WebGLRenderer` + ACES, sombra PCFSoft de 2048², EffectComposer (MSAA RT → Unreal bloom → grade com god rays, vinheta e blur). | `renderer.js`, `post.js` |
-| Material | Toon de 4 degraus + contorno por casco invertido em tudo, mais grama em lâminas com shader próprio. | `materials.js`, `terrain.js` |
-| Avatar | Primitivas (esferas e caixas arredondadas), sem esqueleto. Animação procedural por código. | `avatar.js` |
-| Som | Síntese WebAudio (bipes, ruído) mudo por padrão, sem música. | `sfx.js` |
-| Tamanho | Chunk do mundo `assets/js/world/world.min.js` = **181 KB gz**. 2D: Lighthouse 100×4. | medido |
-| Arquivo-deus | `main.js` com 1.4 mil linhas mistura layout, regras, UI e loop. | `src/world/main.js` |
+| Bootstrap & Recursos | `sources/Game/Game.js`, `ResourcesLoader.js` | Singleton `Game.getInstance()`. Carrega lote 0 (`respawnsReferencesModel`, `behindTheSceneStarsTexture`, `soundTexture`, `paletteTexture`), inicializa `WebGPURenderer` + `RenderPipeline`, depois carrega lote 1 (39 recursos) em paralelo com `@dimforge/rapier3d`. |
+| Modo comprimido vs dev | `Game.js` l. 97–100, `game/.env` | `const compressed = !!import.meta.env.VITE_COMPRESSED`. Hoje `.env` tem `VITE_COMPRESSED=` (vazio), logo `Game.js` carrega `.glb` e `.png` brutos de `static/`. Com `VITE_COMPRESSED=1`, troca para `-compressed.glb` e `.ktx`. |
+| Loop de prioridades | `Ticker.js`, `game/readme.md` | Prioridades determinísticas: `0` Time/Inputs → `1` Player pre → `2` PhysicsVehicle pre → `3` Physics → `4` Objects/Wireframe → `5` PhysicsVehicle post → `6` Player post → `7` View → `8` Intro/DayCycles/YearCycles/Weather/Zones/VisualVehicle → `9` Wind/Lighting/Tornado/InteractivePoints/Tracks → `10` Areas/Foliage/Fog/Reveal/Terrain/Trails/Floor/Grass/Leaves/Lightnings/Rain/Snow/WaterSurface/Props → `13` InstancedGroup → `14` Audio/Notifications/Title/Map → `998` Rendering → `999` Monitoring. |
+| Render & Qualidade | `Rendering.js`, `Quality.js` | `THREE.WebGPURenderer` (com fallback automático para WebGL2). `Quality.level = 0` no desktop (`cheapDOF` + `bloom` 5 mips + shadow map `2048²` + hashBlur na água) e `1` no mobile via User-Agent (sem DOF + `bloom` 2 mips + shadow map `512²` + água sem blur). |
+| Material & Iluminação | `MeshDefaultMaterial.js`, `Ligthing.js`, `Fog.js`, `Materials.js` | `MeshDefaultMaterial` (subclasse de `MeshLambertNodeMaterial` em TSL): aplica `paletteTexture` (`NearestFilter`), bounce da cor do terreno (`lightBounceDistance = 1.5`), linha branca na borda da água (`hasWater`), core shadow (`smoothstep` N·L), shadow map projetado (`receivedShadowNode`), cor de sombra tingida (`shadowColor`), névoa radial (`Fog.js`) e dissolve radial (`Reveal.js`). |
+| Terreno & Água | `Terrain.js`, `Floor.js`, `Water.js`, `WaterSurface.js` | Mundo finito de `192 × 192 m` (`subdivision = 128`, `size = 192`). `terrain.png` (`512×512` RGBA): canal `R` = lajes (`slabs`), `G` = grama + sombra de grama (multiplicado pelas trilhas de pneu de `Tracks.js`), `B` = depressão/profundidade de água (`newPosition.y += terrainData.b * -1.5`). Colisão física do chão usa `heightfield` extraído de `terrain.glb` + `bedRock` cinemático para bordas externas. |
+| Física & Veículo | `Physics.js`, `PhysicsVehicle.js`, `Player.js`, `VisualVehicle.js` | Rapier `@dimforge/rapier3d` `^0.19.3` (wasm via `vite-plugin-wasm`). Chassi dinâmico (`mass: 2.5`) com 3 cuboids (`Main`, `Top`, `Bumper`) + `world.createVehicleController` com 4 rodas, boost, freio, pulo, suspensão hidráulica, setas, luz de freio/ré, antena direcional, trails de boost, trilhas no solo e 6 pinturas desbloqueáveis. |
+| Câmera | `View.js` | Câmera diorama suavizada com `focusPoint` + imã leve, zoom, modo cinemático (para `ProjectsArea` e `LabArea`), linhas de velocidade e modo livre (`#debug` + tecla `V` via `camera-controls`). |
+| Áudio | `Audio.js`, `static/sounds/` | `Howler.js` com grupos (`playRandomNext`), anti-spam, atenuação espacial (`distanceFade`), variação de pitch (`rate`) e playlist CC0 (Kounine: `Baguira`, `Boy`, `Sudo`). |
+| UI & Progresso | `Menu.js`, `Modals.js`, `Map.js`, `Options.js`, `Achievements.js`, `Notifications.js`, `InteractivePoints.js`, `Title.js` | Interface HTML/Stylus sobre o canvas com suporte a mouse/teclado, toque (`Nipple` + `InteractiveButtons`) e gamepad (Xbox/PS). Progresso de conquistas salvo em `localStorage` (`achievements`). |
+| Build & Dependências | `package.json`, `vite.config.js` | Vite 8 (`root: 'sources/'`, `publicDir: '../static/'`, `outDir: '../dist'`, `base: './'`), Three.js `^0.187.0`, Rapier `^0.19.3`, GSAP `^3.15.1`, Howler `^2.2.4`, Stylus `^0.64.0`, Sharp `^0.34.5`, `@gltf-transform/cli` `^4.1.0`. |
 
-### 0.2 Motor folio-2025 (lido de um clone temporário no commit `70764a9`, 2026-11-04; o clone durável `D:\GitHub\_vendor\folio-2025` é criado na T0.3)
+### 0.2 Anomalias reais encontradas na auditoria (prioridade zero na Fase 0)
+1. **BUG BLOQUEADOR — `game/sources/Game/World/Grass.js` está corrompido/misturado com o build antigo:**
+   - Linhas 1–6 do arquivo atual: `// Adapted from dgreenheck/tidewater & mesqme/infinite-terrain (MIT)` e `import { sampleIslandSurface } from './TerrainHeight.js'`.
+   - `TerrainHeight.js` **não existe** em `game/sources/Game/World/` (confirmado por listagem completa do diretório). Além disso, o arquivo usa coordenadas hardcoded da antiga ilha *Origens* (`sampleExactTerraceY`, `OrigensGrassInstanced`).
+   - **Impacto:** impede o `npm run dev` e `npm run build` de funcionarem corretamente.
+   - **Solução (`T0.0`):** substituir `Grass.js` imediatamente por uma implementação limpa, 100% integrada ao `this.game.terrain.terrainNode` e `this.game.tracks` do `folio-2025`, e validar build + runtime antes de iniciar qualquer outra tarefa.
+2. **Analytics de terceiros em `game/sources/index.html` (linhas 45–52):**
+   - Contém `<script async src="https://www.googletagmanager.com/gtag/js?id=G-JMSN30BQ5J"></script>` do upstream. Remover na `T0.1`.
+3. **Carregamento `.ktx` hardcoded ignorando `VITE_COMPRESSED` em 3 arquivos:**
+   - `ProjectsArea.js` (l. 482): `this.game.resourcesLoader.getLoader('textureKtx')` + `projects.js` usando sufixo `.ktx`.
+   - `LabArea.js`: mesmo padrão carregando `image` e `imageMini` em `.ktx`.
+   - `Intro.js` (l. 151–153): `getLoader('textureKtx')` + `intro/${name}Label.ktx`.
+   - **Impacto:** impede visualizar texturas `.png` editadas localmente em dev sem depender de `toktx`. Corrigir na `T0.3`.
+4. **~136 MB de `.wav` não utilizados dentro de `game/static/sounds/musics/`:**
+   - `Baguira.wav` (44,6 MB), `Boy.wav` (46,8 MB) e `Sudo.wav` (44,4 MB) estão no `publicDir` ao lado dos `.mp3` (~6,2 MB cada) realmente carregados por `Audio.js`. O Vite copia tudo isso para `game/dist/` no build! Mover para `game/resources/sounds/musics/` na `T0.1`.
+5. **Bugs de compatibilidade Windows no `game/scripts/compress.js`:**
+   - Chama `spawn('gltf-transform', ...)` e `spawn('toktx', ...)` esperando binários no PATH global (hoje `blender` e `toktx` não estão instalados/no PATH; `gltf-transform` está apenas em `game/node_modules/.bin/`).
+   - Regexes de presets (linhas 82–96, ex.: `/palette.png$/`, `/terrain\/terrain.png$/`, `/career\/.+png$/`) usam `/` literal e **falham no Windows** porque `glob` / `path.join` produzem `\`, fazendo texturas críticas (`terrain.png`, `career/*.png`, `palette.png`) caírem no preset `etc1s` lossy errado!
+   - Dispara todos os processos `spawn` simultaneamente em loop `for` sem limite de concorrência.
+   - Tudo será corrigido na `T0.3`.
+6. **Dependência visual de servidor WebSocket (`Server.js`):**
+   - Com `VITE_SERVER_URL=` vazio, `CookieArea` nunca inicializa o contador 3D (`this.counter.init()` só dispara em `server.connected`), `AltarArea` fica preso em `"..."` e nunca dispara cataclismo, `CircuitArea` bloqueia salvamento de recordes, e a UI exibe banners vermelhos `"Server currently offline"`. Resolvido integralmente na `T0.2`.
 
-| Item | Fato |
-|---|---|
-| Licença | MIT, `license.md` "Copyright (c) 2025 Bruno Simon". (O `package.json` declara "ISC", mas o que vale é o `license.md`, MIT.) O site credita mr.doob/Sunag (three/TSL), Kounine (música CC0), Rapier, Howler e as fontes Amatic SC e Nunito. |
-| Render | `three/webgpu` + TSL (`WebGPURenderer`, com fallback automático para WebGL2), `RenderPipeline` com bloom (TSL) e `cheapDOF`. `Quality.level`: 0 no desktop, 1 no celular, escolhido pelo user agent. |
-| Visual | **Não é luz bakeada.** A paleta é uma textura (`palette.ktx`, filtro nearest), e cada malha aponta as UVs para um swatch. `MeshDefaultMaterial` (Lambert em TSL) faz sombra de núcleo por `smoothstep(N·L)`, cor de sombra tingida, "light bounce" com a cor do terreno, sombra projetada de 1 shadow map (2048 no nível 0, 512 no nível 1), névoa e "reveal" (dissolve radial). Ciclos de dia e ano interpolam os presets de luz. |
-| Física | `@dimforge/rapier3d` (^0.19.3, **não-compat**, wasm separado via `vite-plugin-wasm`), importado em paralelo aos assets. O jogador é **um veículo** (`world.createVehicleController`). **Não existe** controlador de personagem a pé (nenhum uso de `KinematicCharacterController`). |
-| Loop | `Ticker` com prioridades numeradas (0 entrada → 3 física → 7 view → 10 mundo → 14 áudio → 998 render). Singleton `Game.getInstance()`. |
-| Conteúdo | Um `areas.glb` cujos filhos têm prefixo de nome (`career…`, `projects…`), cada um instanciando uma subclasse de `Area`. Empties `ref<Nome><n>` viram referências (`References.js`). Colisores vêm de filhos nomeados `trimesh*`, `hull*`, `cuboid*`, `cylinder*` e `ball*`, mais custom props (`mass`, `friction`, `restitution`, `category`). |
-| Câmera | `View.js`: ponto de foco suavizado com ângulo esférico fixo (estilo isométrico), zoom, modo cinemático, linhas de velocidade e `camera-controls` só no modo livre/debug. |
-| Entrada | `Inputs/` com Keyboard, Gamepad, Pointer, Wheel, `Nipple` (joystick de toque) e InteractiveButtons, num mapa de ações com filtros. |
-| Áudio | `Audio.js`: wrapper de Howler com `register({path, loop, volume, antiSpam, onPlay, onPlaying})`, variação de `rate` e playlist de música. |
-| Carga | **Tudo carrega de uma vez**, sem streaming por área. Só há culling por frustum de área. |
-| Assets | GLB comprimidos: cerca de 1.1 MB. KTX: cerca de 3.2 MB. `static/sounds` = 151 MB de fonte, com nomes de bibliotecas comerciais (`Robotic_Lifeforms…`, `Source Stone Loop…`). |
-| Extras de servidor | `Server.js` (WebSocket), Whispers, placar do circuito, BlackFriday, Easter/Christmas, Konami e Google Analytics (`gtag`) no `index.html`. |
-| Deps | three ^0.187.0, rapier3d ^0.19.3, vite ^8.3.5, gsap ^3.15.1, howler ^2.2.4, camera-controls, tweakpane, stats-gl, stylus, msgpack-lite, uuid, seedrandom, glob, sharp, gltf-transform. Usa ranges `^`, o que fere a política de pin exato. |
-
-### 0.3 Medições de peso (gzip -9, nesta máquina)
-
-| Peça | Bruto | gz | Observação |
-|---|---|---|---|
-| `three/webgpu` + `three/tsl` (bundle esbuild com namespace) | 1.13 MB | **311 KB** | Teto superior; tree-shaking real deve ficar perto de 250 KB. |
-| Rapier wasm (`rapier_wasm3d_bg.wasm` 0.21.0) | 3.08 MB | **1.17 MB** | O compat (base64 inline) dá 1.65 MB gz. |
-| Basis transcoder (wasm + js) | 527 KB + 58 KB | **245 KB + 15 KB** | Necessário só para KTX2, que **fica fora da fatia** (6.5). |
-| Decoder meshopt | 29 KB | 7.7 KB | Bem mais leve que Draco. |
-| Chunk 3D atual | — | 181 KB | Para referência. |
-
-Versões (npm, hoje): `three 0.187.0` (2026-10-30), `@dimforge/rapier3d(-compat) 0.21.0` (2026-09-25), `@gltf-transform/cli 4.5.1` (2026-09-28), `meshoptimizer 1.3.0`, `howler 2.2.4` (2023). Todas passam do resfriamento de 7 dias.
-Ferramentas ausentes na máquina: **Blender** e **ffmpeg**. O **KTX-Software** só entra se a KTX2 voltar ao plano. Presentes: Node 26.13.0, Playwright 1.65.1, Python 3.12 e Chrome.
-
----
-
-## 1. Diagnóstico: por que o build atual é 2/10
-
-O problema não é falta de polimento. Faltou **autoria**. Tudo foi gerado por código com primitivas e foi avaliado por quadros estáticos. Ninguém jogou o controle antes de empilhar efeitos por cima dele.
-
-### 1.1 Arte e cor
-- **Quatro estilos brigando no mesmo quadro** (`desk-06-spawn.png`, `desk-10-block-bump.png`): avatar toon com contorno, grama em lâminas semi-realistas, pedras low-poly facetadas sem contorno e ciprestes-cilindro. Falta uma linguagem de forma.
-- **Paleta lamacenta.** O grade "golden hour" (split tone + god rays em `post.js`) puxa tudo para amarelo-oliva. O vermelho de sinal da marca só aparece em bandeirinhas e confete. O creme da marca virou um "chão bege" sem papel.
-- **Sombras duras gigantes** do sol baixo (`SUN_OFF (24.5, 11.8, −4.2)`, 25° de elevação) cruzam metade da tela e escurecem o caminho. Ficou bonito em frame estático e ilegível em jogo.
-- **Sem bevel nem AO.** As peças são primitivas `BoxGeometry`/`CylinderGeometry`, e o que dá o "brinquedo premium" do Bruno é justamente bevel que pega luz mais contato escuro.
-- **Texto no mundo como placa de papel** (`desk-16`, `desk-17`). Os rótulos boiam, cortam o avatar e ficam borrados pelo DOF.
-
-### 1.2 Controles
-- Entrada em eixo de tela com câmera de yaw fixo. Funciona na reta, mas o mundo é uma ilha aberta, e na curva da estrada (`roadZ`) "cima" deixa de ser "para frente".
-- O pulo vai a cerca de 3.0 m de apex em 0.4 s com corpo de 1.5 m: **2× a altura do corpo, flutuante**. A queda a 1.45× não compensa. A aceleração de 75 com teto de 7.2 m/s dá resposta seca e sem curva, sem derrapagem nem inércia que se sinta.
-- A colisão AABB sem rampa ou degrau faz o personagem "colar" em quinas. O chão é plano: o terreno "esculpido" é só visual.
-- No toque, o joystick só aparece na metade esquerda e o pulo é um botão vermelho genérico (`mob-07`). Não dá para jogar com um polegar.
-
-### 1.3 Câmera
-- Distância 14 com FOV 36 deixa o avatar minúsculo e o horizonte domina. A suavização de 0.28 sem zona morta vertical faz a câmera "boiar" a cada pulo.
-- Em retrato (`mob-07`) metade da tela é grama em primeiro plano. Não há enquadramento autoral por trecho.
-- O dolly do card desloca a cena e aplica blur, e o mundo vira borrão (`desk-16`).
-
-### 1.4 Level design
-- **Corredor linear em +x** com um bloco a cada 7 unidades (`cx += 7`), moedas entre eles, e nada para fazer no meio. As eras se distinguem só pela cor do céu (`SKY_Z`).
-- Não há marco visível de longe nem objetivo no horizonte, e o hub "Cruzamento" é um círculo bege com dois canos e uma placa.
-- Os segredos (caixotes) não têm pista. Não há ritmo de tensão e recompensa.
-
-### 1.5 Personagem
-- Corpo de primitivas, olhos de 6 cm, sem boca nem expressão, sem esqueleto e sem clipes. A animação é soma de senos. A silhueta lê como "boneco de lego vermelho", não como o Victor.
-
-### 1.6 Imersão, som e ritmo
-- Mudo por padrão, sem música. Os sons sintetizados soam como bipes de protótipo.
-- O HUD tem 7 elementos fixos (`0/15 marcos · 0/30 moedas`, zona, Projetos, Contato, mudo, ajuda, sair) e compete com a cena.
-- Tela de título com card sobre o mundo, cortina, grua de 3.8 s: o visitante leva cerca de 6 s para ter controle.
-
-### 1.7 Performance e processo
-- 75 fps a 1280×720 numa RX 6750 XT é pouco para uma cena tão simples. A conta é bloom + grade de 12 taps + MSAA RT + sombra PCFSoft de 2048 + grama densa. Num celular médio isso seria 15–25 fps.
-- As notas internas de 8–9/10 vieram de quadros headless parados. Não houve vídeo, playtest nem métrica de controle. **Esse processo de avaliação também é parte do reset** (seção 7).
-
----
-
-## 2. Visão e direção criativa
-
-### 2.1 A fantasia central
-
-> **"Eu ando pela minha linha do tempo."**
-> O mundo é a linha do tempo de Victor, desenhada a tinta vermelha sobre papel creme, e ela é literal: uma **fita vermelha contínua** (a Linha) sai do berço em Araguaína/TO, atravessa as cinco eras e termina no **ponto final** gigante da marca (o "." de `VOANEVES.`). Esse ponto é o contato.
-> Assinatura: **"O ponto final é o começo da conversa."**
-
-Por que é do Victor e não do Bruno:
-- O Bruno dirige um carrinho num parque de diversões de portfólio. Aqui a pessoa **anda e pula dentro da biografia**, e cada marco é um evento físico (bater num bloco, ligar um monitor, pegar um capelo).
-- Identidade brasileira concreta: cerrado tocantinense (terra vermelha de laterita, buriti, ipê-amarelo, pequi, cupinzeiro, seriema, Rio Tocantins), baião na trilha da era 1, campus, fábrica, dados.
-- Identidade da marca: tinta (`#0a0a0a`), papel (`#f4ead4`), sinal (`#f50000`). O vermelho tem **um papel só**: a Linha, o ponto e o que é "sinal" (blocos de marco, a jaqueta do Victor). Nunca decoração aleatória.
-- Homenagem retrô-platformer reinterpretada: canos de **cobre e tinta com anel de ponto vermelho** (longe do cano verde clássico; o verde fica como opção do dono, D15), blocos que se batem por baixo, pontos colecionáveis. Os blocos são de papel com um ponto vermelho em relevo. As moedas são "sinais", pequenos pontos vermelhos de tinta. Nada de personagem, som ou melodia reconhecível de terceiros.
-
-### 2.2 Bíblia de direção de arte
-
-**Conceito visual: "diorama de papel e brinquedo".** Formas de brinquedo de madeira/plástico macio com bevel generoso, materiais foscos, paleta chapada por textura (técnica do motor), AO de contato escuro e névoa de cor por era. Cada era é uma ilha-diorama com borda cortada, como uma página de livro pop-up apoiada na mesa. A borda mostra o "corte" do terreno em camadas: terra, rocha, papel.
-
-**Linguagem de forma.**
-- Volumes primários arredondados (raio de bevel de 8–15% da menor dimensão, 2–3 segmentos).
-- Proporção "chunky": nada mais fino que 0.08 m na escala do personagem de 1.2 m.
-- Formas orgânicas (árvores, nuvens) em blobs de 3–5 lóbulos. Formas humanas (prédios, máquinas) em caixas com quinas arredondadas.
-- A Linha vermelha é a única forma "desenhada": uma fita contínua de 0.35 m de largura, levemente elevada (0.02 m) e com ondulação.
-
-**Materiais.**
-- Uma paleta de 16×16 swatches (`palette.png`, nearest). Fosco por padrão.
-- Brilho só em três coisas: a Linha (leve emissivo + bloom no desktop), o ponto final (emissivo pulsante) e os blocos de marco ativos.
-- Contorno a tinta **só** no personagem e nos interativos (casco invertido fino, 0.015 m). O mundo não leva contorno, e isso resolve a briga de estilos da seção 1.1.
-
-**Paleta mestre** (decorativa, 3D). Texto nunca vai sobre ela sem o gate de contraste.
-
-| Papel | Hex | Uso |
-|---|---|---|
-| Tinta | `#0a0a0a` | Contornos, detalhes, letreiros. Nunca área grande de dia. |
-| Papel | `#f4ead4` / `#efe4c5` | Blocos de marco, nuvens, trilhas de pedra, bordas pop-up |
-| Sinal | `#f50000` / `#ff2a2a` (emissivo) | Linha, ponto final, jaqueta do Victor, sinais colecionáveis |
-| Cano | cobre `#b8733a` / sombra `#8a5228`, borda tinta `#0a0a0a`, anel sinal `#f50000` | Canos (homenagem reinterpretada, D15) |
-| Tijolo | `#b5562c` | Blocos de tijolo, prédios UNICAMP |
-| Ouro de ipê | `#f7c531` | Ipê, faixas de segurança da Indústria, faíscas |
-
-**Luz e humor por era.** Os presets entram no sistema de ciclos adaptado (seção 6), interpolados pela posição do jogador ao longo da Linha, nunca pelo relógio.
-
-| Era | Hora | Céu topo → horizonte | Luz (cor, int.) | Cor de sombra | Névoa | Terreno |
-|---|---|---|---|---|---|---|
-| 1 Origens (1994–2011) | Amanhecer | `#6fa8dc` → `#ffd9a8` | `#ffe2b8`, 1.05 | `#6a3d5c` | `#f2c9a0` | Laterita `#c4532d`/`#a8432a`, capim seco `#d6b85a`, verde cerrado `#9aa84a` |
-| 2 UNICAMP (2012–2016) | Meio-dia | `#5fb3f0` → `#e3f4ff` | `#ffffff`, 1.15 | `#3d5a80` | `#dcefff` | Grama `#5fae4e`, concreto `#d9d2c3`, tijolo `#b5562c` |
-| 3 Indústria (2017–2019) | Tarde âmbar | `#f29e4c` → `#ffe0b0` | `#ffd08a`, 1.0 | `#5b4a7a` | `#f6c99a` | Aço `#8d99a6`, esteira `#3a3f44`, faixa `#f2c230` |
-| 3b Alemanha (ilha) | Tarde fria | `#9bb7d4` → `#eef3f8` | `#f4f7ff`, 0.95 | `#4a5670` | `#e6edf5` | Enxaimel creme e tinta, telhado `#a8432a` |
-| 4 Dados (2019–2021) | Crepúsculo azul | `#2b6f8f` → `#9fd9d2` | `#cfe9ff`, 0.85 | `#1f3b57` | `#7fb8c4` | Barras papel/sinal/tinta, pontos de dados `#ffd75a` emissivos |
-| 5 Transformação digital (2022–hoje) | Pôr do sol → noite quente | `#ff8a5c` → `#3b2a6b` | `#ffb48a`, 0.9 | `#3a2550` | `#c98aa0` | Praça de projetos, luzinhas `#ffd75a`, o ponto final emissivo |
-
-**Painel de referências** (em palavras, sem copiar nada):
-- A Short Hike: câmera próxima, ilha com objetivo sempre visível no topo.
-- Captain Toad: dioramas que cabem na tela.
-- Astro's Playroom: alegria de cada contato com o chão.
-- Tearaway: o mundo é papel.
-- Super Mario 3D World: clareza de leitura de plataformas (a homenagem é de gênero, não de personagem).
-- Folio-2019/2025 do Bruno: bevel com sombra de contato, física em tudo, som em cada interação.
-- Ilustração de cordel e xilogravura: tinta preta chapada sobre papel, para letreiros e o mapa.
-
-### 2.3 Personagem: Victor
-
-- **Silhueta:** 1.20 m, 2.6 cabeças. Cabelo preto com topete para frente (a marca da silhueta), jaqueta vermelho-sinal aberta sobre camiseta papel com um ponto de tinta no peito, calça tinta, tênis papel com cadarço vermelho e mochila tinta pequena.
-- **Cachecol-fita:** uma tira de papel vermelho que **é um pedaço da Linha**. Ela tremula, cresce um pouco a cada era concluída e brilha ao "grindar".
-- **Evitar trade dress:** sem boné vermelho, macacão azul, bigode ou luvas brancas.
-- **Traços de semelhança** (cabelo, óculos, barba, tom de pele): decisão do dono D3. Padrão: sem óculos, sem barba, pele `#c98d6a`.
-- **Rosto:** olhos ovais grandes (decal na textura de paleta), sobrancelhas que animam (2 bones), boca em 3 formas por troca de UV (neutra, sorriso, "o").
-- **Personalidade:** curioso, otimista, "engenheiro que mexe em tudo". No idle longo ele olha o celular e depois abre um notebook sentado.
-- **Orçamento:** ≤ 6 mil triângulos, 1 material de paleta + 1 de olhos, 24 bones.
-- **Clipes:** `idle`, `idleLong` (celular), `sitLaptop` (AFK 20 s), `walk`, `run`, `skid`, `jumpUp`, `flutter` (planada da fita no 2º toque), `fall`, `landSoft`, `landHard`, `stamp` (saca um carimbo de borracha e desce com ele à frente), `push`, `grind`, `wave`, `interact`, `celebrate` e `hurtBump` (bate a cabeça num bloco sólido).
-- **Camada procedural** em runtime: inclinação na curva, squash and stretch, olhar para o interativo mais próximo, cachecol em cadeia de molas, pés que respeitam o chão (raycast curto).
-
-### 2.4 Linguagem de câmera
-- 3ª pessoa "diorama": **yaw autoral por trecho** (empties `refCamera<n>` exportados do Blender com yaw, pitch e distância), com blend suave entre trechos. A entrada é sempre relativa ao yaw atual. Arrastar orbita ±25° e volta com mola.
-- O avatar ocupa **12–16% da altura da tela** em paisagem e **10–13%** em retrato. Enquadramento em retrato: pitch maior e o foco deslocado para cima (o avatar no terço inferior, o caminho à frente visível).
-- Em momentos (marco, card, ponto final), a câmera faz um enquadramento de "foto": o objeto à esquerda e o card no lado direito ou embaixo, **sem blur**. O mundo fica levemente dessaturado (−20%) em vez de borrado.
-
-### 2.5 Som
-- **Camadas:** ambiência por era (cigarras e vento do cerrado; burburinho de campus; zumbido de fábrica; chuva leve digital; cidade ao entardecer) + música por era em stems (base + melodia), com crossfade pela Linha + efeitos com variação de pitch de ±8–15% e antiSpam (técnica do `Audio.js`).
-- **Música:** Origens em baião/pé-de-serra (zabumba, triângulo, sanfona), UNICAMP em lo-fi acústico, Indústria em percussão de máquina, Dados em arpejos synth e Transformação em pop eletrônico quente. Fonte da trilha: decisão D4.
-- **Grind na Linha:** loop tonal cujo pitch acompanha a velocidade, com um "pluck" afinado na escala da música da era a cada marco que passa. A Linha é uma pauta musical.
-- **Proibido:** qualquer melodia ou contorno de efeito reconhecível de jogos. Nenhum arquivo de áudio do folio-2025.
-
-### 2.6 UI e HUD
-- **Mínima e com marca:**
-  - Canto superior esquerdo: um chip com a era e o progresso ("Origens · 1/3").
-  - Canto superior direito: três botões redondos de 44 px (Menu, Som, Sair para a versão acessível).
-  - O botão sinal **Contato** é o único vermelho da vista e aparece no menu e no chip quando aberto.
-- **Cards:** `<dialog>` nativo com o mesmo conteúdo do `<article>` do 2D, painel lateral no desktop e bottom sheet no celular. Fontes da marca (Schibsted Grotesk, JetBrains Mono para números/ano, Fraunces 900 itálico só para o ano grande do card).
-- **Prompt de interação:** tecla e ícone desenhados a tinta sobre papel, renderizados no mundo (técnica do `InteractivePoints`), com espelho no `aria-live`.
-
-### 2.7 Os primeiros 10 segundos (storyboard)
-
-| t | Visual | Som | Estado |
-|---|---|---|---|
-| 0.0 s | Na página 2D, o visitante aperta **Jogar**. A tela de papel creme fica; uma linha vermelha começa a se desenhar da esquerda e é a barra de progresso real (bytes). | Clique de papel | Carregando motor + Origens |
-| ~1.5–3 s (desktop) / ≤ 6 s (celular) | A linha chega ao fim, vira o ponto final, e o ponto "cai" como gota de tinta. O papel se abre em pop-up (dissolve radial do motor, `Reveal`) e revela Araguaína ao amanhecer. | Acorde de sanfona + cigarras | Câmera já na posição de jogo |
-| +0.6 s | Victor está sentado no meio-fio, levanta e acena para a câmera (`wave`). O primeiro bloco de marco "1994" flutua a 4 m dele, pulsando. | Passarinho, vento | **Controle liberado em ≤ 0.8 s após o reveal** (o aceno é cancelável) |
-| +1 s | Primeiro toque no direcional: poeira vermelha sobe, o capim se curva, pegadas ficam na laterita (técnica de `Tracks`). | Passos na terra | Primeiro deleite < 5 s |
-| +3–5 s | O primeiro pulo é alto e redondo, e o cachecol-fita tremula. A cabeça bate no bloco 1994, que salta, solta um sinal vermelho que voa para o HUD, e uma casinha pop-up se ergue com um ipê florindo. | "Plim" afinado + papel se dobrando | |
-| +5–8 s | Card "Setembro de 1994 · Nasci em Araguaína/TO" desliza (sem blur). Esc, B ou um toque fora fecha. | Música entra (stem base) | Primeiro marco < 15 s |
-| +8–10 s | A Linha vermelha nasce na porta da casa e corre para o horizonte, onde o ponto final gigante brilha no topo do morro central. Uma placa de cordel diz "Contato →" junto de um cano com ponto vermelho. | Pluck da Linha | Objetivo e atalho visíveis |
-
-### 2.8 Momentos "uau" (alvo: ≥ 1 por era + 3 de assinatura)
-
-Assinatura:
-- **A Linha que se desenha** no carregamento e vira o mundo.
-- **O grind na Linha:** subir na fita e deslizar com música, passando pelos anos.
-- **O ponto final:** pular no ponto gigante faz ele "carimbar" a tela e abrir o contato.
-
-Por era:
-1. **Origens:** o ipê explode em flores amarelas quando o marco abre. O **monitor CRT gigante** (o blog Ponto Interativo de 2005) liga ao levar um carimbo no botão e mostra uma página pixelada do blog. O capelo da formatura (2011) voa e cai na cabeça do Victor.
-2. **UNICAMP:** a **floresta de nanotubos de titânio** são pilares hexagonais que sobem e descem como teclas de piano ao pisar. Os sites para ONGs são casinhas cujas janelas viram "páginas web" iluminadas.
-3. **Indústria:** esteira de garrafas genéricas (sem logos) que o Victor pode chutar em dominó físico. O **voo para a Alemanha** é uma travessia de dirigível de papel até uma ilha enxaimel.
-4. **Dados:** **gráfico de barras vivo**, barras que crescem conforme se aproxima e viram escada. Uma constelação de pontos de dados forma a regressão quando todos os sinais são coletados.
-5. **Transformação digital:** a **praça de cartuchos**, onde cada projeto é um cartucho gigante que se encaixa num console-pedestal e projeta a demo. O casamento é um arco de luzinhas sob um ipê. O ponto final fecha a jornada.
-
----
-
-## 3. Jogabilidade e controles
-
-### 3.1 Locomoção: decisão
-
-| Opção | Prós | Contras | "Divertido em 3 s"? |
-|---|---|---|---|
-| A. Veículo (reusar `PhysicsVehicle`/`Player`/`VisualVehicle` do folio) | Física pronta e provada. Mobile com um dedo já existe. | É **a assinatura do Bruno**, o que torna o reskin mais provável. Esconde o personagem que o dono criticou. Não combina com blocos batidos por baixo nem com canos. | Sim, mas é o mesmo "sim" do Bruno |
-| B. **A pé, plataforma 3D + grind na Linha** | Original. Casa com a homenagem retrô que o dono ama e põe o Victor em primeiro plano. Reusa Physics, Objects, Inputs, View, Audio, Zones e InteractivePoints. | Controlador novo (Rapier `KinematicCharacterController`) e clipes de animação, que é o maior risco de qualidade. | Sim, se o pulo for perfeito e o primeiro bloco estiver a 4 m |
-| C. Híbrido: B + 1 trecho de veículo (empilhadeira/carrinho na Indústria, reusando `PhysicsVehicle`) | Variedade, e usa o melhor código do Bruno num lugar só | Escopo | Idem B |
-
-**Recomendação: B como base e C como opcional da Fase 3.** É a decisão D1 do dono, tomada no **Gate G1** depois de um spike gravado em vídeo: dois greyboxes (a pé e veículo) no mesmo percurso de 30 s.
-
-Física: **Rapier `@dimforge/rapier3d` 0.21.0** (não-compat, wasm separado e streamado), como no motor.
-- Corpo do Victor: cápsula raio 0.28 m, meia-altura 0.32 m (altura total 1.2 m), cinemática, movida por `KinematicCharacterController`:
-  - `offset 0.02`, `maxSlopeClimbAngle 50°`, `minSlopeSlideAngle 55°`;
-  - `autostep 0.35 m (minWidth 0.15, dynamic: true)`, `snapToGround 0.3 m`;
-  - `applyImpulsesToDynamicBodies: true` (o personagem empurra caixotes, garrafas e cercas do sistema `Objects`).
-- O platformer é uma camada nossa sobre o KCC: velocidade desejada → `computeColliderMovement` → `computedMovement` → `setNextKinematicTranslation`. Gravidade, pulo, coyote e buffer ficam no nosso código, não na gravidade do mundo.
-
-### 3.2 Metas de sensação (valores iniciais; todos no painel `?debug`)
-
-| Parâmetro | Valor | Justificativa |
-|---|---|---|
-| Velocidade de andar (stick < 50%) | 3.0 m/s | Mira fina perto de blocos |
-| Velocidade de correr | 7.0 m/s | ~6 corpos/s, mundo de 60–80 m por era atravessável em ~10 s |
-| Aceleração no chão | 0 → 7 m/s em **0.14 s** (curva ease-out: 50% em 0.05 s) | Resposta imediata com "peso" |
-| Desaceleração no chão | 7 → 0 em **0.10 s** | Para onde o jogador quer |
-| Controle no ar | aceleração 26 m/s², desaceleração 8 m/s² | Corrige o pulo sem "patinar no ar" |
-| Giro do corpo | slerp de yaw a 900°/s, inclinação de até 12° proporcional à curvatura | Leitura de direção |
-| Derrapagem | inverter > 135° acima de 4.5 m/s → `skid` 0.12 s + poeira + som | Sensação física |
-| Pulo | apex **2.0 m** em **0.34 s** → `g_subida = 34.6 m/s²`, `v0 = 11.8 m/s` | 1.7× o corpo, legível |
-| Queda | `g_queda = 1.7 × g_subida = 58.8 m/s²`, velocidade terminal 20 m/s | Arco redondo, aterrissagem decidida |
-| Pulo variável | soltar → `vy = min(vy, 4.5)`, pulo mínimo ~0.55 m | Controle fino |
-| Planada da fita (2º toque no ar) | o cachecol-fita abre como pipa: impulso de +0.6 m e gravidade ×0.35 por até 0.6 s, com `flutter` | Exploração e segredos, sem o giro clássico de pulo duplo |
-| Coyote / buffer | 0.10 s / 0.12 s | Tolerância moderna |
-| Carimbo (no ar) | Victor saca um carimbo de borracha gigante: trava 0.12 s → desce a 26 m/s com o carimbo à frente → marca o "ponto" no chão | Liga botões e quebra caixotes, com leitura de "carimbar" e não de "sentar" |
-| Grind na Linha | entra encostando na fita no ar; velocidade 9–14 m/s (+ ladeira); pular sai com +20% de velocidade | Assinatura e atalho de travessia |
-| Latência entrada → movimento (simulação) | O comando é aplicado no próximo passo fixo (≤ 8.3 ms) e aparece no frame seguinte | O ghost injeta no mapa de ações, então mede **só** a latência da simulação. A latência real (SO, navegador, compositor, tela) não é medida aqui, e o "feel" humano vem do playtest. |
-
-### 3.3 Câmera (adaptação do `View.js`)
-
-| Parâmetro | Regra / valor |
-|---|---|
-| FOV horizontal-alvo | **63°** (equivale a 38° de FOV vertical em 16:9) |
-| FOV vertical | `vFov = clamp(2·atan(tan(63°/2) / aspect), 38°, 55°)`. Em 16:9 dá 38°. Em 390×844 (aspect 0.46) o valor bruto seria ~106°, então **trava em 55°**: nada de FOV vertical extremo. |
-| Distância ao foco | `d = max(10.5 m, W_min / (2·tan(hFovEf/2)))`, com `hFovEf = 2·atan(tan(vFov/2)·aspect)` e `W_min = 6 m` de largura útil no plano do foco. Em 16:9: 10.5 m (avatar ≈ 16% da altura). Em 390×844: hFovEf ≈ 27°, d ≈ 12.5 m (avatar ≈ 9%). **Remedido na T1.7.** |
-| Pitch | 28° em paisagem, 36° em retrato (interpolado pelo aspect entre 1.0 e 0.5) |
-| Offset do foco | +0.9 m em y (paisagem) a +1.6 m (retrato, avatar no terço inferior) |
-| Suavização XZ | Mola crítica, meia-vida 0.10 s |
-| Suavização Y | Meia-vida 0.25 s. **Y travado no ar**: só segue ao pousar ou se cair > 1 m abaixo da última plataforma. |
-| Look-ahead | 1.5 m × (v/vmax), meia-vida 0.35 s (1.0 m em retrato) |
-| Órbita manual | ±25° de yaw e ±8° de pitch, volta em 1.2 s. Opcional (botões de 44 px, Q/E ou dois dedos). |
-| Shake | Só no carimbo e na aterrissagem forte (≤ 0.08 m, 0.15 s). Desligado em movimento reduzido. |
-
-### 3.4 Entradas
-
-| Ação | Teclado | Gamepad | Toque (um polegar) |
-|---|---|---|---|
-| Mover | WASD / setas (relativo à câmera) | analógico esquerdo | **arrastar em qualquer lugar da metade esquerda (60%)**: joystick flutuante (`Nipple`), raio 64 px, zona morta 10 px, velocidade máxima a 48 px, haste curta desenhada a tinta. **Alternativa de ponteiro único (WCAG 2.5.7):** tocar no chão ou num marco = andar até lá. |
-| Pular / planada (2º toque) | Espaço | A / Cruz | **tocar em qualquer lugar da metade direita** (sem botão minúsculo); botão visível de 76 px como dica nos primeiros 20 s |
-| Carimbo | Shift / C (no ar) | B / Círculo | botão contextual "Carimbar" (64 px, aparece no ar). Deslizar para baixo é só atalho opcional. |
-| Interagir | E / Enter | X / Quadrado | botão contextual de 64 px que só aparece perto de interativo |
-| Câmera | arrastar com mouse ou Q/E | analógico direito | botões ⟲ ⟳ de 44 px (ponteiro único). Dois dedos é opcional, e a câmera automática dispensa a órbita. |
-| Menu / sair | Esc | Start | botão do HUD |
-| Mapa | M | Select | botão do menu |
-| Ir até (acessibilidade e um dedo) | Tab cicla os marcos, Enter caminha até eles (auto-walk) | — | tocar num marco distante → caminho automático (navmesh simples sobre a Linha) |
-
-- Vibração: `navigator.vibrate(12)` no carimbo e no marco, só no Android, com opção de desligar.
-- Teclas só são capturadas com o canvas focado (regra mantida do build atual, `input.js`).
-
-### 3.5 Afinação
-- `?debug` carrega o Tweakpane de forma preguiçosa (o padrão do `Debug.js`), com uma pasta **Feel** contendo todos os valores de 3.2 e 3.3, um preset salvo em `localStorage` e um botão "copiar JSON".
-- `?debug&ghost=<nome>` reproduz uma sequência de entradas gravada (formato `[{t, action, value}]`) para medir e gravar vídeo de forma determinística.
-- O valor final vai para `sources/data/feel.js`, versionado.
-
----
-
-## 4. Level design
-
-### 4.1 Topologia: "anel com ponto central"
-
-```
-                 [4 Dados]
-        [3 Indústria]      [5 Transformação + Praça de projetos]
-              \                 /
-   [3b Alemanha]   ( PONTO FINAL )   <- morro central, visível de todo lugar
-   (ilha, dirigível)  \      /
-                 [2 UNICAMP]
-                        \
-                     [1 Origens]  <- spawn (Araguaína ao amanhecer)
-```
-
-- As 5 eras ficam num **anel** ao redor de um morro central. No topo do morro está o **ponto final** (esfera vermelha de 6 m, emissiva): o marco de navegação, visível de todo o mundo.
-- **A Linha** percorre o anel em ordem cronológica, passa por todos os 15 marcos, e no fim da era 5 sobe o morro em espiral até o ponto.
-- Atalhos:
-  - Cada era tem um **cano-atalho** (cobre com anel vermelho) que leva ao ponto final.
-  - O HUD tem "Contato" e "Projetos".
-  - O grind na Linha atravessa uma era em ~6 s.
-- Cada era tem 60–80 m de diâmetro, é uma ilha-diorama com borda de papel cortado e se liga às vizinhas por pontes da própria Linha. O streaming é por era (seção 6.5).
-
-### 4.2 Metas de ritmo (testadas por ghost run e playtest)
-
-| Meta | Alvo | Como |
-|---|---|---|
-| Primeiro deleite | < 5 s após o reveal | Poeira, capim e pegadas no primeiro passo; bloco 1994 a 4 m |
-| Primeiro marco | < 15 s | Bloco 1994 sem obstáculo |
-| Contato pelo atalho | < 30 s desde o Start (desktop e celular com rede boa) | Cano do spawn a 6 m → warp 1.5 s → ponto final → card |
-| Contato só com teclado | ≤ 4 teclas na página `play/` (Tab → "Contato" → Enter) | Botão do HUD |
-| Era completa (3–4 marcos + metade dos sinais) | 60–120 s | Teste com 3 pessoas |
-| Jornada completa | 8–12 min (exploração), 3 min (grind direto) | |
-
-### 4.3 Origens (fatia vertical): planta e batidas
-
-Área de 70 × 55 m. Amanhecer. Rio Tocantins ao sul (faixa de água com `WaterSurface`).
-
-| # | Batida | Local | Mecânica | Recompensa |
+### 0.3 Inventário verificado de texturas, dimensões e canais (`game/static/`)
+| Caminho em `game/static/` | Dimensão real | Formato / Canais | Preset KTX2 (`compress.js`) | Papel no motor |
 |---|---|---|---|---|
-| O1 | Spawn no meio-fio da rua de laterita, com casas baixas ao fundo | centro-sul | Primeiros passos (poeira, pegadas) | Deleite |
-| O2 | **Marco 1994: "Nasci em Araguaína/TO"** | 4 m a nordeste do spawn | Bloco de papel batido por baixo | Casinha pop-up + ipê florindo + card |
-| O3 | Placa de cordel "Contato →" + cano-atalho | 6 m a oeste do spawn | Entrar no cano (↓ / toque) | Warp ao ponto final (na fatia: mini-ilha provisória) |
-| O4 | Subida de cupinzeiros (degraus naturais) com 3 sinais no ar | leste | Pulos em sequência (tutorial implícito do pulo variável) | Sinais |
-| O5 | **Marco 2005: "Fiz o meu primeiro blog, Ponto Interativo"** | morrinho a nordeste | CRT gigante (3 m) sobre a mesa de madeira. Subir pela cadeira e pelo teclado (plataformas). Carimbar o botão de power. | Tela liga com a página pixelada "Ponto Interativo" (arte original) + card |
-| O6 | Pomar de pequizeiros com caixotes de pequi | norte | Empurrar e quebrar caixotes (Rapier dinâmico) | Sinais e um segredo |
-| O7 | **Segredo:** cupinzeiro oco com cano escondido | noroeste, atrás de buritis | Carimbo no topo abre | Quartinho dos anos 2000 com um console genérico e um sinal raro |
-| O8 | **Marco 2011: "Terminei o ensino médio"** | escola a oeste | Pátio com mastro. Subir pelos telhados. | O capelo voa, cai na cabeça do Victor (acessório até o fim da era) + card |
-| O9 | Seriema atravessa correndo (vida ambiente) | aleatório no norte | Persegue se o jogador corre atrás | Conquista "Corredor do cerrado" |
-| O10 | Ponto de ônibus "Araguaína → Campinas" | saída norte | Na fatia, placa "Em breve". No jogo completo, o ônibus de papel leva à era 2 (transição de 4 s com pulo para cancelar). | Transição |
-| O11 | A Linha | da porta da casa (O2) passando por O5 e O8 até O10 | Grind | Atalho e música |
+| `palette.png` | `128 × 4` | PNG RGB (3) | `uastc --genmipmap srgb RGB` | Swatches globais de cor (`NearestFilter`) |
+| `terrain/terrain.png` | `512 × 512` | PNG RGBA (4) | `uastc --genmipmap linear RGB` | `R`=lajes, `G`=grama/sombra, `B`=profundidade água |
+| `career/careerHetic.png` | `316 × 60` | PNG RGBA (4) | `uastc srgb RG` | Bloco `refLine` (`R`=texto emissivo, `G`=contorno) |
+| `career/careerUzik.png` | `168 × 60` | PNG RGBA (4) | `uastc srgb RG` | Bloco `refLine.001` |
+| `career/careerImmersiveGarden.png` | `340 × 60` | PNG RGBA (4) | `uastc srgb RG` | Bloco `refLine.002` |
+| `career/careerOnlineTeacher.png` | `332 × 92` | PNG RGBA (4) | `uastc srgb RG` | Bloco `refLine.003` |
+| `career/careerFreelancer.png` | `240 × 60` | PNG RGBA (4) | `uastc srgb RG` | Bloco `refLine.004` |
+| `career/careerIRLTeacher.png` | `268 × 92` | PNG RGBA (4) | `uastc srgb RG` | Bloco `refLine.005` |
+| `projects/images/*.png` (31 arq.) | `960 × 540` | PNG RGBA (4) | `etc1s --qlevel 255 srgb RGB` | Slides de projetos na tela principal (`ProjectsArea`) |
+| `lab/images/*.png` (14 full) | `960 × 540` | PNG RGBA (4) | `etc1s --qlevel 255 srgb RGB` | Preview grande na esteira do `LabArea` |
+| `lab/images/*-mini.png` (14 mini) | `240 × 136` | PNG RGBA (4) | `etc1s --qlevel 255 srgb RGB` | Miniaturas nos cartões pendurados na corrente (`LabArea`) |
+| `timeMachine/timeMachineScreenFolio.png` | `140 × 124` | PNG RGBA (4) | `etc1s --qlevel 255 srgb RGB` | Tela 1 da TV CRT (`NearestFilter`, scanlines) |
+| `timeMachine/timeMachineScreenMGS.png` | `140 × 124` | PNG RGBA (4) | `etc1s --qlevel 255 srgb RGB` | Tela 2 da TV CRT (alterna ao colidir com a TV) |
+| `areas/satanStar.png` | `128 × 128` | PNG RGB (3) | `etc1s linear R --swizzle r001` | Desenho no chão do `AltarArea` (canal `R`) |
+| `intro/*Label.png` (4 arq.) | `256 × 128` | PNG RGBA (4) | `etc1s linear R --swizzle r001` | Dica inicial no chão/ar (teclado, toque, Xbox, PS) |
+| `ui/map/map-day.png` & `map-night.png` | `1024 × 1024` | PNG RGBA → `.webp` | WebP (`sharp`, q=80) | Fundo do modal de Mapa interativo |
+| `ui/previews/*.png` (8 arq.) | `600 × 600` | PNG RGBA → `.webp` | WebP (`sharp`, q=80) | Ilustração esquerda de cada aba do Menu |
+| `social/share-image.png` | `1200 × 630` | PNG RGBA (4) | N/A (servido direto) | Preview de compartilhamento (OpenGraph / Twitter) |
 
-Sinais (colecionáveis) na Origens: 20, com 3 escondidos. Os sinais só alimentam o HUD e uma conquista: **nada de conteúdo fica trancado atrás de habilidade**. Todo marco também abre por interação simples no modo de movimento reduzido ou de assistência.
+### 0.4 Materiais embutidos em `static/areas/areas.glb` (27 materiais verificados)
+- **Compartilhados / Emissivos (9):** `palette`, `darkGray`, `redGradient`, `emissiveOrangeRadialGradient`, `emissivePurpleRadialGradient`, `emissiveBlueRadialGradient`, `emissiveWhiteRadialGradient`, `emissiveGreenRadialGradient`, `waterfall`.
+- **Com textura/identidade específica de área (18):**
+  - `Landing`: `stylizedMap` (mapa no quiosque)
+  - `Career`: `careerTextHetic`, `careerTextUzik`, `careerTextImmersive`, `careerTextOnlineTeacher`, `careerTextFreelancer`, `careerTextIRLTeacher` (sobrescritos em runtime por `CareerArea.js`)
+  - `Projects`: `projectsCarpet`, `projectsLabels`, `blackboardLabels`
+  - `Lab`: `labCarpet` (e `blackboardLabels`)
+  - `Cookie`: `cookieBanner`
+  - `Bowling`: `bowlingLabelStrike`
+  - `Circuit`: `circuitBrand` *(marca do Bruno/Three.js Journey — substituir!)*, `circuitWebgl`, `circuitWebgpu`, `circuitThreejs`, `airDancer`
 
-### 4.4 Eras 2–5 (para a Fase 3)
-
-| Era | Marcos (do DOM) | Set pieces | Segredo |
-|---|---|---|---|
-| 2 UNICAMP | 2012-01 entrei na UNICAMP · 2012-07 sites para ONGs · 2012-12 IC em nanotubos de titânio · 2014-07 Empresa Jr. MTE | Portão do campus. Floresta de nanotubos (pilares hexagonais que oscilam). Rua das ONGs (janelas que viram páginas). Sala da empresa júnior com mesa de reunião (plataformas). | Laboratório no subsolo |
-| 3 Indústria | 2017-01 Coca-Cola FEMSA · 2018-07 estágio na KRONES/AG (Alemanha) · 2019-01 Trainee | Fábrica com esteiras móveis (plataformas cinemáticas), garrafas genéricas físicas, dirigível de papel até a **ilha Alemanha** (enxaimel). Opcional: empilhadeira dirigível (opção C). | Caixa-forte de engrenagens |
-| 4 Dados | 2019-10 volta ao Tocantins / Damásio · 2021-06 Ciência de Dados na IBM | Gráfico de barras vivo (escada que cresce), dispersão de pontos que forma a regressão. Rio Tocantins volta (rima visual com a era 1). | Matriz de confusão (labirinto 2×2) |
-| 5 Transformação digital | 2022-01 sites e apps profissionalmente · 2022-09 ALI do SEBRAE · 2022-09 casamento | Praça de cartuchos (6 projetos), arco do casamento sob ipê com luzinhas, balcão do SEBRAE (pequenos negócios = vitrines). Espiral final até o ponto. | Sala de bastidores com o mapa do pipeline Blender (créditos, inclusive o MIT do motor) |
-
-Nomes de empresas aparecem **só como texto** nos cards, nunca como logo ou trade dress no mundo.
-
-### 4.5 Projetos e contato como momentos
-- **Projetos** (6 do DOM: dtcg-contrast, xbox-sales, snake-arena, Meu Poupig, js-games, Financial Sample Analysis):
-  - Cada um é um **cartucho gigante** com rótulo desenhado a tinta: nome e ícone simples original por tema (ex.: paleta de contraste, gráfico, cobra de pixel, porquinho, joystick, pizza de gráfico).
-  - Ao carimbar o pedestal, o cartucho encaixa, a tela grande projeta a imagem e o card abre com "Ver projeto" e "Código".
-- **Contato:**
-  - Pular no ponto final faz um carimbo de tela inteira (papel e tinta) e abre o card de contato (o mesmo `#contato` do 2D, com o único botão sinal "Falar com Victor").
-  - Depois do card, a câmera recua e mostra **o anel inteiro com a Linha acesa**: o "créditos" da vida.
+### 0.5 Inventário de conteúdo real de Victor Neves (`D:\GitHub\_kit-clones\timeline\index.html`)
+- **Identidade:** Victor Neves (`@voaneves`), Especialista em Transformação Digital · `https://voaneves.com/#contato` · `github.com/voaneves` · `linkedin.com/in/voaneves` · `youtube.com/c/voaneves`.
+- **15 marcos em 5 zonas:**
+  1. **Origens (1994–2011):** `1994-09` Nasci em Araguaína/TO · `2005-01` Fiz o meu primeiro blog, Ponto Interativo · `2011-12` Terminei o ensino médio.
+  2. **UNICAMP (2012–2014):** `2012-01` Entrei na UNICAMP · `2012-07` Comecei a desenvolver sites para ONGs · `2012-12` Minha iniciação científica em nanotubos de titânio · `2014-07` Entrei na empresa Jr. MTE, na UNICAMP.
+  3. **Indústria (2017–2019):** `2017-01` Comecei a trabalhar na Coca-Cola FEMSA · `2018-07` Viajei para a Alemanha para um estágio na KRONES/AG · `2019-01` Virei Trainee na Coca-Cola FEMSA.
+  4. **Dados (2019–2021):** `2019-10` Voltei pro Tocantins e comecei a trabalhar no Damásio · `2021-06` Aprofundei meus conhecimentos em Ciências de Dados na IBM.
+  5. **Transformação digital (2022–hoje):** `2022-01` Comecei a desenvolver sites e criar apps profissionalmente · `2022-09` Virei ALI do SEBRAE · `2022-09` Casei com o amor da minha vida.
+- **6 projetos open-source:** `dtcg-contrast`, `xbox-sales`, `snake-arena`, `Meu Poupig`, `js-games`, `Financial Sample Analysis`.
 
 ---
 
-## 5. Pipeline de arte (Blender 5.3 scriptado, `bpy`)
+## 1. Princípios, Fronteira de Adaptação e Regra de Ouro de Assets
 
-### 5.1 Decisão de iluminação (D2): paleta + luz estilizada em tempo real + AO no vértice
+### 1.1 O que mantemos do `folio-2025`
+1. **Arquitetura e Game Loop:** `Game.js`, `Ticker.js`, `Objects.js`, `References.js`, `Zones.js`, `InstancedGroup.js`, `InteractivePoints.js`.
+2. **Locomoção e Física do Veículo:** `PhysicsVehicle.js`, `Player.js`, `VisualVehicle.js` — dirigir o carrinho com suspensão, boost, pulo, trilhas e física em tudo já é divertido nos primeiros 3 segundos.
+3. **Motor Gráfico WebGPU + TSL:** `Rendering.js`, `MeshDefaultMaterial.js`, `WaterSurface.js`, `Fog.js`, `DayCycles.js`, `YearCycles.js`, `Weather.js`, `Reveal.js`.
+4. **Os Mini-games:** `CircuitArea`, `BowlingArea`, `CookieArea`, `AltarArea`, `ToiletArea` e brinquedos físicos globais (`Bricks`, `Fences`, `Benches`, `Lanterns`, `ExplosiveCrates`).
+5. **Acessibilidade multi-dispositivo já pronta:** teclado/mouse, toque mobile (`Nipple` + `InteractiveButtons`) e gamepad Xbox/PlayStation.
 
-O pedido original falava em "luz bakeada em texturas". O motor reusado prova outra coisa (seção 0.2): o visual do folio-2025 é **paleta + Lambert estilizado em TSL** e roda no celular no `Quality.level 1` com sombra de 512².
+### 1.2 O que sai 100%
+- Todo nome, bio, URL, e-mail, rede social, projeto, experimento, conquista pessoal e easter egg específico de Bruno Simon.
+- Todos os modelos pessoais do Bruno (`BRUNO SIMON` em `landing`; `baguira`, `sudo`, `boy` e `statue` em `social`; banner `circuitBrand` no `circuit`).
+- Todo conteúdo promocional ou sazonal de curso (`BlackFriday`, `Easter`, `Christmas`, *Three.js Journey*, modal comunitário do Discord, `2019.bruno-simon.com`).
+- Google Analytics (`G-JMSN30BQ5J`) e alertas vermelhos de servidor offline.
 
-**Recomendação:** manter esse modelo e somar o que barateia e embeleza no celular.
+### 1.3 Regra de Ouro para Assets (Especialmente Mini-games)
+> **"Os assets devem ser cuidadosamente alterados e, se não combinar, devemos manter. Principalmente para os mini-games."**
 
-| Camada | Desktop (Q0) | Celular (Q1) | Custo |
-|---|---|---|---|
-| Cor | textura de paleta 16×16 (PNG, nearest, ~1 KB) | idem | 1 fetch |
-| Sombra de núcleo, cor de sombra, bounce e névoa | TSL do `MeshDefaultMaterial` | idem | ALU barata |
-| **AO de contato** | bake Cycles de AO → atributo de vértice `COLOR_0` (multiplicado na cor) | idem | zero texturas extras |
-| **Sombra estática** do diorama | shadow map 2048² (como o motor) | **sombra bakeada** de cima para baixo por era (PNG/WebP sem perda, R8 1024², projetada no XZ), sem shadow map | 1 fetch no chão |
-| Sombra dos dinâmicos (Victor, caixotes) | shadow map | **blob** (decal instanciado) | ~1 draw call |
-| Pós | bloom (Linha e ponto) + `cheapDOF` leve | nenhum, ou bloom de 2 mips (`Q1+`) | |
+Critérios objetivos aplicados a qualquer asset antes de aceitar uma troca:
+1. **Paridade de linguagem formal:** o novo asset precisa ter bevel, proporção "chunky" e densidade de polígonos compatíveis com os objetos vizinhos do `folio-2025`.
+2. **Paridade de sombreamento:** usar o material `palette` (UV no swatch correto) ou shader `MeshDefaultMaterial` para reagir identicamente aos 4 ciclos de dia, light bounce, neblina e reveal.
+3. **Paridade física nos mini-games:** em `CircuitArea`, `BowlingArea`, `CookieArea`, `ToiletArea` e `Vehicle`, **não alterar geometria de colisão nem proporção funcional**; alterar apenas texturas de branding/UI ou cores de shader quando combinarem 100%.
+4. **Regra de rollback imediato:** ao testar um asset alterado em `npm run dev` (dia + pôr do sol + noite), se ele parecer "colado", inferior ou fora do estilo, **reverter imediatamente** e manter o original.
 
-Assim o "visual-alvo" fica idêntico em essência nos dois tiers, e o celular não paga sombra em tempo real.
-**Alternativa rejeitada:** lightmaps Cycles completos com UV2 por era. Brigam com o renderer reusado, travam a luz da era, pesam 2–4 MB por era e impedem a transição de luz entre eras.
+---
 
-### 5.2 Estrutura de pastas da arte (dentro de `game/`)
+## 2. Direção Criativa e "Spin Próprio" (*Roadtrip Costeira Tátil*)
 
+### 2.1 Conceito: *Roadtrip Costeira Tátil*
+Não vamos copiar a paleta roxo-magenta + outono laranja do `folio-2025`, nem forçar a paleta da marca pessoal (`#f4ead4` / `#f50000`) ou regionalismo estereotipado. O nosso spin é uma **ilha costeira luminosa, tátil e vibrante** percorrida de carro como uma *roadtrip* editorial com desvios lúdicos:
+- **Sensação de dia:** sol claro e limpo, grama verde-fresca, água turquesa translúcida com espuma branca nítida, areia dourada suave e sombras azul-cobalto limpas (alegria tátil estilo *Super Mario Wonder* / *Claybound* + costa viva estilo *Tidewater*).
+- **Sensação de pôr do sol e noite:** golden hour coral-âmbar cinematográfica (*Shopify Editions Drive* / *Project Endurance*) evoluindo para uma noite azul-marinho limpa onde postes, lanternas, faróis, o portal estrelado e as pedras emissivas da linha do tempo brilham com alto contraste.
+- **Sensação de percurso:** em vez de áreas jogadas sem ordem, a ilha ganha uma **rota cênica principal** ligando a história do Victor em loop, com os mini-games em penínsulas/bolsões laterais.
+
+### 2.2 Tradução concreta de cada referência enviada
+| Referência | Essência absorvida | Onde e como implementamos no `folio-2025` |
+|---|---|---|
+| **Tidewater** (`dgreenheck/tidewater`) | Ilha costeira em Three.js WebGPU + TSL com oceano turquesa, gradiente de raso→fundo e luz cristalina | `Terrain.js` (gradiente areia → turquesa → azul profundo), `WaterSurface.js` (espuma de praia `shoreEdge`, `ripples` mais limpos) e `DayCycles.js` (luz solar clara + sombra azul-cobalto). |
+| **Claybound** (`claybound-56949.web.app`) | Estética *Super Mario Wonder* / massinha tátil: cores vibrantes, contraste alegre e surpresas físicas | Curadoria de swatches em `palette.png` (tirando cinzas/roxos pesados), flores/árvores vibrantes (`World.js`, `Flowers.js`), pinturas alegres no veículo (`VisualVehicle.js`) e feedback elástico nos interativos. |
+| **Infinite Terrain** (`mesqme/infinite-terrain`) | Lâminas de grama em leque com variação orgânica, transição suave entre materiais de solo e horizonte rico (sem precisar ser infinito) | Nova implementação de `Grass.js` sobre `terrainNode` + `Tracks.js` (tufos multi-lâmina inclináveis pelo vento e pelas rodas), ajuste de `Floor.js` (transição areia/lajes/grama) e borda costeira orgânica na Fase 5. |
+| **Tiny Skies** (`tinyskies.vercel.app`) & **Messenger** (`messenger.abeto.co`) | Exploração relaxante, mundo compacto cheio de charme, sinalização amigável e prazer de descobrir cada canto | Pins com status "visitado" no `Map.js`, micro-notificações de descoberta de zona, trilhas visíveis no chão (`terrain.png`) guiando o olhar sem poluir o HUD. |
+| **Shopify Editions Drive** & **Cosmic Shelter** (`one-year.cosmicshelter.com`) | Narrativa dirigível de *roadtrip* com ritmo claro de paradas e enquadramento cinematográfico nos destaques | Layout de anel narrativo na Fase 5 (`Landing → Career → Social → Lab → Projects`) + preservação e polimento das câmeras cinematográficas em `ProjectsArea` e `LabArea`. |
+| **Project Endurance** (`endurance-racing.vercel.app`) | Clima dinâmico + pilotagem arcade estilizada em WebGPU/TSL | `CircuitArea` turbinado com medalhas **Ouro / Prata / Bronze**, Top 5 local persistente, delta em relação ao recorde pessoal e celebração no pódio. |
+| **Zombies Per Minute** (`zombiesperminute.com`) | Legibilidade isométrica limpa e loops curtos de pontuação que prendem o jogador | Alto contraste entre pista/terreno e obstáculos; loops de pontuação local claros em `Circuit`, `Bowling`, `Cookie` e `Altar`. |
+
+### 2.3 Bíblia Visual — Parâmetros Exatos de Cor, Luz e Shaders
+
+#### A. Presets completos de `sources/Game/Cycles/DayCycles.js`
+Todos os 4 keyframes calibrados (ajustáveis em tempo real pelo painel `#debug → 🕜 Day Cycles`):
+
+```js
+const presets = {
+    day: {
+        revealColor: new THREE.Color('#2ad4d9'),
+        revealIntensity: 10,
+        electricField: 0,
+        temperature: 14,
+        lightColor: new THREE.Color('#fff3db'),
+        lightIntensity: 1.25,
+        shadowColor: new THREE.Color('#3d6cb9'),
+        fogColorA: new THREE.Color('#68e1fd'),
+        fogColorB: new THREE.Color('#a8d4ff'),
+        fogNearRatio: 0.34,
+        fogFarRatio: 1.28
+    },
+    dusk: {
+        revealColor: new THREE.Color('#ff9a62'),
+        revealIntensity: 6.0,
+        electricField: 0.2,
+        temperature: 8,
+        lightColor: new THREE.Color('#ffaa6b'),
+        lightIntensity: 1.22,
+        shadowColor: new THREE.Color('#4a3a8c'),
+        fogColorA: new THREE.Color('#ff9d6c'),
+        fogColorB: new THREE.Color('#5b6ce6'),
+        fogNearRatio: 0.05,
+        fogFarRatio: 1.25
+    },
+    night: {
+        revealColor: new THREE.Color('#45d9ff'),
+        revealIntensity: 9.0,
+        electricField: 0.85,
+        temperature: 0,
+        lightColor: new THREE.Color('#4b73ff'),
+        lightIntensity: 3.1,
+        shadowColor: new THREE.Color('#1d2a78'),
+        fogColorA: new THREE.Color('#0f2454'),
+        fogColorB: new THREE.Color('#1e3a6e'),
+        fogNearRatio: -0.75,
+        fogFarRatio: 1.05
+    },
+    dawn: {
+        revealColor: new THREE.Color('#ffd08a'),
+        revealIntensity: 5.5,
+        electricField: 0.2,
+        temperature: 6,
+        lightColor: new THREE.Color('#ffc599'),
+        lightIntensity: 1.2,
+        shadowColor: new THREE.Color('#6d4c8f'),
+        fogColorA: new THREE.Color('#ffd1a6'),
+        fogColorB: new THREE.Color('#87c6ff'),
+        fogNearRatio: 0.3,
+        fogFarRatio: 1.25
+    },
+}
 ```
-game/blender/
-  lib/          vn_scene.py (unidades, coleções, limpeza), vn_palette.py (UV para swatch),
-                vn_shapes.py (blob, caixa arredondada, tubo, fita), vn_bevel.py, vn_collide.py
-                (cria filhos trimesh*/hull*/cuboid*/…), vn_refs.py (empties ref*),
-                vn_bake_ao.py (AO → COLOR_0), vn_bake_shadow.py (sombra top-down),
-                vn_rig.py, vn_anim.py, vn_export.py (glTF com custom props)
-  palette/      palette.json (nome → índice → hex), make_palette.py → static/palette.png
-  kits/         platform_kit.py, cerrado_kit.py, campus_kit.py, factory_kit.py, data_kit.py,
-                plaza_kit.py, line_kit.py (a Linha como curva + malha de fita)
-  character/    victor_model.py, victor_rig.py, victor_anims.py
-  eras/         origens.py, unicamp.py, industria.py, alemanha.py, dados.py,
-                transformacao.py, hub.py (cada um monta a era a partir dos kits + layout)
-  build_all.py  roda tudo em ordem; `blender -b -P build_all.py -- --only origens`
-  out/          .blend gerados (gitignored)
-game/static/    só saídas exportadas e comprimidas (servidas)
+- **Nota sobre temperatura e neve/gelo:** note que `temperature` foi ajustada de `5 / -7.5` (muito frio/invernal) para `14 / 0` na média de verão/primavera, mantendo neve/gelo possíveis quando `YearCycles` passa pelo inverno (ou via `#debug`), sem deixar a ilha costeira congelada o tempo todo!
+- **Light bounce (`Ligthing.js` l. 89):** trocar `this.bounceColor = uniform(color('#82487f'))` por `uniform(color('#5a8c7a'))` para eliminar o reflexo roxo por baixo dos objetos.
+
+#### B. Terreno, Lajes, Água e Vegetação
+| Arquivo | Parâmetro / Uniform | Original (`folio-2025`) | Novo Alvo (*Roadtrip Costeira*) |
+|---|---|---|---|
+| `Terrain.js` l. 46 | `colors[0]` (areia/borda) | `stop: 0.1, '#ffa94e'` | `stop: 0.08, '#f4d38c'` (areia quente clara) |
+| `Terrain.js` l. 47 | `colors[1]` (água rasa) | `stop: 0.3, '#5bc2b9'` | `stop: 0.28, '#34cfc4'` (turquesa *Tidewater*) |
+| `Terrain.js` l. 48 | `colors[2]` (água funda) | `stop: 0.9, '#13375f'` | `stop: 0.85, '#12487a'` (azul oceano vivo) |
+| `Terrain.js` l. 85 | `grassColorUniform` | `'#b8b62e'` | `'#76c442'` (verde-prado *Claybound*) |
+| `Floor.js` l. 47 | `slabHighColor` | `'#ffcf8b'` | `'#f7e5c2'` (pedra clara de estrada) |
+| `Floor.js` l. 48 | `slabLowColor` | `'#a87762'` | `'#b3957a'` (rejunte natural quente) |
+| `WaterSurface.js` l. 226 | `shoreEdge` | `0.17` | `0.16` (espuma de praia levemente mais refinada) |
+| `World.js` l. 69 | `birchTrees` (copa) | `'#ff4f2b'`, `'#ff903f'` | `'#2fa866'`, `'#6cd464'` (verde-esmeralda vivo) |
+| `World.js` l. 70 | `oakTrees` (copa) | `'#b4b536'`, `'#d8cf3b'` | `'#f2b705'`, `'#ffe066'` (dourado solar alegre) |
+| `World.js` l. 71 | `cherryTrees` (copa) | `'#ff6d6d'`, `'#ff9990'` | `'#ff6f91'`, `'#ffb3c6'` (coral/rosa suave) |
+
+#### C. Especificação Técnica da Nova `Grass.js` (Correção `T0.0` + Polimento `T2.2`)
+Como o `Grass.js` atual está quebrado (importando `TerrainHeight.js`), vamos estruturá-lo corretamente sobre o motor do `folio-2025`:
+- **Posicionamento em janela deslizante ao redor da câmera (`view.optimalArea.position`):** exatamente como `Floor.js` e `WaterSurface.js` fazem, mantendo um grid de instâncias centralizado no `optimalArea` com snap por célula (`cellSize`), cobrindo toda a área visível sem precisar de 500 mil instâncias fixas para os 192×192 m!
+- **Amostragem direta de `this.game.terrain.terrainNode(worldXZ)` na GPU (TSL):**
+  - `terrainData.g` controla a escala vertical da lâmina (`0` fora de áreas de grama ou onde o pneu do carro acabou de passar via `Tracks.js`, e `1` em gramado cheio). Assim, **zero lâminas flutuam na água, nas estradas ou em áreas pavimentadas**, automaticamente, mesmo quando mudarmos `terrain.png` na Fase 5!
+  - `terrainData.b` abaixa/descarta qualquer lâmina perto da água (`step(0.08, terrainData.b)`).
+- **Inspiração *Infinite Terrain* + *Tidewater*:**
+  - Cada instância é um tufo curvado de 2–3 lâminas afiladas (2 segmentos no Q1 mobile, 3 segmentos no Q0 desktop).
+  - Gradiente vertical por `uv().y`: base `#468c2e` → meio `#76c442` → ponta ensolarada `#b7eb5d`.
+  - Balanço orgânico guiado por `this.game.wind.direction`, `this.game.wind.strength` e ruído `this.game.noises.perlin`.
+  - Material `MeshDefaultMaterial` (`hasCoreShadows: true`, `hasDropShadows: true`, `hasFog: true`, `hasReveal: true`, `hasWater: false`) para casar 100% com a iluminação dos 4 ciclos de dia.
+
+#### D. Pinturas do Veículo (`VisualVehicle.js` + Recompensas de Conquistas)
+Mantemos as 6 chaves `data-name` (evitando quebrar CSS/HTML/storage existentes) e atualizamos as cores e rótulos exibidos:
+
+| Chave (`data-name`) | Nome PT-BR / EN | Material / Gradiente (`VisualVehicle.js` + `Materials.js`) | Critério de desbloqueio |
+|---|---|---|---|
+| `red` *(padrão)* | **Coral Solar** / *Solar Coral* | `redGradient`: `#ff5a36` → `#d92b4b` | Padrão (0 conquistas) |
+| `orange` | **Turquesa Costa** / *Coastal Teal* | `orangeGradient`: `#1dd3c6` → `#0d6e9e` | 20% das conquistas |
+| `white` | **Areia Pérola** / *Pearl Sand* | `whiteGradient`: `#fffaf0` → `#d4cfc4` | 40% das conquistas |
+| `black` | **Grafite Noturno** / *Midnight Slate* | `blackGradient`: `#4a5568` → `#1a202c` | 60% das conquistas |
+| `flames` | **Chamas Solares** / *Solar Flames* | Shader Voronoi existente com `colorA: '#ffd166'`, `colorB: '#ff4d2e'` | 80% das conquistas |
+| `abyssal` | **Cósmico** / *Cosmic* | Shader estrelado existente com `fresnelColor: '#2ae8ff'` | 100% das conquistas |
+
+#### E. Política de edição da `static/palette.png` (`128 × 4` PNG)
+- `palette.png` é lida com `NearestFilter` e usada por quase todas as malhas da ilha.
+- **Protocolo seguro (`T2.3`):**
+  1. Salvar cópia intacta em `game/resources/palette-original.png`.
+  2. Gerar uma tabela/mapa de swatches usados (lendo os pixels de `128×4` via script Node) antes de editar.
+  3. Fazer ajustes cirúrgicos de saturação/luminosidade apenas nos swatches excessivamente escuros/roxos, **sem anti-aliasing** e preservando as posições exatas `(x, y)` de cada swatch.
+  4. Validar visualmente todas as 12 áreas; qualquer swatch que prejudicar um mini-game é revertido imediatamente.
+
+### 2.4 Storyboard dos Primeiros 15 Segundos
+| Tempo | O que o visitante vê e ouve | Estado técnico |
+|---|---|---|
+| `0.0–1.8 s` | Tela limpa com anel luminoso turquesa (`revealColor`) acompanhando o progresso real do `ResourcesLoader` + dica de controle adaptada ao dispositivo + botão de som clicável. | Lote 0 carregado; lote 1 + Rapier WASM em paralelo. |
+| `1.8–3.2 s` | Onda radial `Reveal` se expande a partir do carro no `LandingArea`; ilha costeira solar revelada; música CC0 entra suave (se som ativo). | `World.step(1)` concluído; `PreRenderer` executado em Q0 WebGPU. |
+| `3.2–7.0 s` | Primeiro acelero: carro avança, derruba as letras físicas `VICTOR NEVES` com som de impacto (`hitBrick`), deixa marcas na grama (`Tracks.js`) e ativa partículas. | Controle 100% livre; conquista `landingLeave` ao sair da praça. |
+| `7.0–15.0 s` | Estrada de pedra clara guia o jogador direto para a `CareerArea` (onde a 1ª pedra da linha do tempo sobe com som de pedra + display de ano 7-segmentos) ou para o `ProjectsArea` / mini-games logo ao lado. | Descoberta guiada sem pop-ups invasivos. |
+
+---
+
+## 3. Jogabilidade, Física do Veículo, Câmera, Controles e Modo Offline-First
+
+### 3.1 Parâmetros do Veículo (`PhysicsVehicle.js`) e Câmera (`View.js`)
+- **Manter os valores base de `PhysicsVehicle.js`** (já testados e afinados para o terreno de 192×192 m, rampas do Circuito e obstáculos):
+  - `steeringAmplitude = 0.5`, `engineForceAmplitude = 300`, `boostMultiplier = 2`, `topSpeed = 5`, `topSpeedBoost = 40`, `brakeAmplitude = 35`, `idleBrake = 0.06`, `reverseBrake = 0.4`.
+  - Suspensão: `low = 0.88` (stiffness `20`), `mid = 1.23` (`30`), `high = 1.63` (`40`).
+- **Manter `View.js`** com `idealRatio = 1920 / 1080`, `focusPoint` suavizado, `cinematic` para `ProjectsArea` e `LabArea`, e câmera livre em `#debug` + tecla `V`.
+- **Única melhoria planejada de câmera (opcional na Fase 3):** suavizar a transição de saída do modo cinemático se houver salto perceptível em telas ultrawide ou retrato mobile.
+
+### 3.2 Controles (Mapeamento Completo — PT-BR e EN)
+| Ação | Teclado / Mouse | Toque (Mobile / Tablet) | Gamepad (Xbox / PlayStation) |
+|---|---|---|---|
+| Dirigir | `WASD` ou `SETAS` | Arrastar com 1 dedo (`Nipple`) | `RT/R2` acelerar · `LT/L2` ré · Analógico Esq. virar |
+| Boost | `SHIFT` | Arrasto máximo / botão | `B` / Círculo |
+| Freio | `CTRL ESQ.` ou `B` | — | `X` / Quadrado |
+| Pulo | `ESPAÇO` | Toque sobre o carro | `Y` / Triângulo |
+| Interagir / Abrir | `ENTER` | Botão contextual `Interagir` | `A` / Cruz |
+| Mapa | `M` | Botão de Mapa no canto superior | `M` / Menu |
+| Som (Mudo) | `L` | Botão em Opções / ícone inicial | — |
+| Respawn / Desatolar | `R` | Botão contextual `Desatolar` | `Select` |
+| Suspensão Hidráulica | Teclas numéricas `1–9` | — | `LB / RB` (`L1 / R1`) |
+| Buzina | `H` | — | Pressionar Analógico Esq. |
+| Mover Câmera / Zoom | Arrastar botão esquerdo + Scroll | 2 dedos mover / pinça | Analógico Dir. + clique zoom |
+
+### 3.3 Especificação Técnica do Modo Standalone / Offline-First (`T0.2`)
+
+Como `VITE_SERVER_URL` fica vazio no GitHub Pages, o modo **Standalone** passa a ser cidadão de primeira classe (não um "erro de servidor offline").
+
+#### A. Detecção e classes CSS (`Server.js` + `general.styl`)
+```js
+// Em Server.js
+this.isStandalone = !import.meta.env.VITE_SERVER_URL
+if (this.isStandalone) {
+    document.documentElement.classList.add('is-standalone')
+}
+```
+- **Regras CSS quando `html.is-standalone` está ativo:**
+  - Oculta `.offline-element` (avisos vermelhos `"Server currently offline"` em `circuit-content`, `circuit-end` e `whispers-content`).
+  - Oculta `.js-navigation-item[data-name="whispers"]` (aba Whispers do Menu).
+  - Oculta a linha `tr.is-server-row` na tabela de `Options`.
+  - Exibe `.standalone-element` (ex.: nota sutil `"Modo local · Recordes salvos neste navegador"` na aba Circuito).
+
+#### B. Contratos de `localStorage` (Schemas JSON versionados)
+| Chave `localStorage` | Schema JSON | Usado em | Limpeza / Reset |
+|---|---|---|---|
+| `vn_lang` | `"pt-BR"` ou `"en"` | `I18n.js`, `Options.js` | Mantido no reset de conquistas |
+| `vn_circuit_scores_v1` | `Array<{ tag: string, flag: string, timeMs: number, medal: 'gold'\|'silver'\|'bronze'\|'none', at: string }>` (máx. 5 itens ordenados por `timeMs` crescente) | `CircuitArea.js` | Botão opcional `"Limpar recordes"` na aba Circuito |
+| `vn_cookies_count_v1` | `number` (inteiro ≥ 0; sincronizado com `document.cookie` se existir valor maior) | `CookieArea.js` | Mantido entre sessões |
+| `vn_altar_count_v1` | `number` (inteiro ≥ 0) | `AltarArea.js` | Mantido entre sessões |
+| `achievements` | Schema nativo de `Achievements.js` (`{ [groupName]: number \| string[] }`) | `Achievements.js` | Botão `"Resetar conquistas"` |
+
+#### C. Comportamento exato de cada área no Modo Standalone
+1. **`CircuitArea.js`:**
+   - Ao cruzar a linha de chegada (`finish()`), calcula `medal`:
+     - `timeMs < 28000` → `'gold'` (Ouro)
+     - `timeMs < 34000` → `'silver'` (Prata)
+     - `timeMs < 42000` → `'bronze'` (Bronze)
+     - caso contrário → `'none'`
+   - Compara `timeMs` com `vn_circuit_scores_v1`: se houver menos de 5 recordes ou se bater o 5º colocado, **libera o formulário de iniciais (3 letras) + bandeira** mesmo sem servidor!
+   - Ao enviar o formulário, salva em `vn_circuit_scores_v1`, re-renderiza a tabela na aba `Circuit` e no placar 3D da pista, dispara `achievements.setProgress('circuitLeaderboard', 1)` e solta confete no pódio se for novo #1.
+2. **`CookieArea.js`:**
+   - No construtor (`setCounter`), se `this.game.server.isStandalone`, carrega `this.counter.value` de `vn_cookies_count_v1` e chama `this.counter.init()` imediatamente (fazendo a placa 3D de contagem aparecer sempre!).
+   - A cada `accept()`, incrementa `this.counter.value`, atualiza a placa 3D e salva em `vn_cookies_count_v1`.
+3. **`AltarArea.js`:**
+   - Se `this.game.server.isStandalone`, carrega `this.value` de `vn_altar_count_v1`, chama `this.updateText(this.value)` e calcula `this.progressUniform.value = (this.value % 5) / 5`.
+   - A cada entrada na zona (`setDeathZone`), soma `+1`, persiste em `vn_altar_count_v1`, atualiza `progressUniform` e, quando `this.value % 5 === 0`, dispara o efeito de **Cataclismo** (relâmpagos/tempestade/efeito climático + conquista `cataclysm`).
+4. **`Whispers.js`:**
+   - Quando `this.game.server.isStandalone`, não registra atalho `Keyboard.KeyT` para abrir modal de whispers e não instancia flames de servidor, economizando recursos.
+
+---
+
+## 4. Mapeamento Cirúrgico das 14 Áreas e Level Design (Atual vs Novo Layout)
+
+### 4.1 Mapa Espacial Atual (`192 × 192 m`, coordenadas reais de `areas.glb` e `respawnsReferences.glb`)
+```text
+                        Norte (-Z = -96)
+    (-54.5, -67.4)
+    [TimeMachine]
+                                      (28.9, -21.8)         (75.3, -27.9)
+                                        [Social]               [Altar]
+                                           |
+                                      (25.8, -0.9)     (52.5, -12.0)
+                                        [Career]       [BehindTheScene]
+         (-17.7, 7.1)                      |
+          [Circuit]                (35.8, 13.4)             (70.6, 9.9)
+                                    [Projects]             [Achievements]
+                          (13.1, 17.7)     |
+                             [Lab]         |
+                                           |
+                          (12.3, 35.3) (49.2, 38.5)
+                            [Cookie]    [Landing]  <-- Spawn: (39.5, 37.8)
+                                           |
+                    (2.3, 68.9)            |              (66.9, 66.7)
+                    [Bowling]              |                [Toilet]
+                        Sul (+Z = +96)
 ```
 
-### 5.3 Convenções (as do motor, para reusar `Objects`, `References` e `Area`)
+### 4.2 Tabela Resumo das 14 Áreas em `sources/Game/World/Areas/`
+| # | Arquivo | Decisão | Nome PT-BR / EN | Posição atual `(X, Z)` | Respawn atual `(X, Z)` | Fase principal de edição |
+|---|---|---|---|---|---|---|
+| 1 | `LandingArea.js` | **Manter e Rebrandar** | Início / Welcome | `(49.25, 38.52)` | `(39.53, 37.83)` | F1 (prompts), F4 (letras `VICTOR NEVES`), F5 (layout) |
+| 2 | `CareerArea.js` | **Manter mecânica + Novo conteúdo** | Carreira / Timeline | `(25.84, -0.90)` | `(26.28, 9.63)` | F1 (6 texturas RG + anos), F5 (layout) |
+| 3 | `ProjectsArea.js` | **Manter mecânica + Novo conteúdo** | Projetos / Projects | `(35.76, 13.41)` | `(35.78, 17.57)` | F0 (`.png`/`.ktx`), F1 (6 projetos), F5 (layout) |
+| 4 | `LabArea.js` | **Manter e Repropositar** | Lab & Dados / Lab | `(13.14, 17.68)` | `(17.88, 18.80)` | F0 (`.png`/`.ktx`), F1 (6 labs), F5 (layout) |
+| 5 | `SocialArea.js` | **Manter + Limpar figuras Bruno** | Contato / Contact | `(28.90, -21.82)` | `(25.67, -14.47)` | F1 (links + ocultar mascotes), F4 (totem), F5 (layout) |
+| 6 | `TimeMachineArea.js` | **Manter e Repropositar** | Arquivo 2005 / 2D Archive | `(-54.53, -67.40)` | `(-56.49, -64.74)` | F1 (link 2D + 2 telas CRT `140×124`), F5 (layout) |
+| 7 | `BehindTheSceneArea.js` | **Manter e Reescrever** | Bastidores / Behind the Scene | `(52.46, -11.96)` | `(48.82, -11.47)` | F1 (texto + créditos), F2 (`bloomColor`), F5 (layout) |
+| 8 | `AchievementsArea.js` | **Manter 100% 3D + Novas metas** | Conquistas / Achievements | `(70.55, 9.94)` | `(70.00, 20.36)` | F1 (35 conquistas), F2 (água herda `Terrain`), F5 (layout) |
+| 9 | `CircuitArea.js` | **Manter Mini-game (Prioritário)** | Circuito / Circuit | `(-17.74, 7.07)` | `(-13.71, 14.70)` | F0 (offline), F2 (`circuitBrand`), F3 (medalhas/Top 5) |
+| 10 | `BowlingArea.js` | **Manter 100% Mini-game** | Boliche / Bowling | `(2.31, 68.91)` | `(21.30, 62.22)` | F1 (prompts i18n), F3 (polimento) |
+| 11 | `CookieArea.js` | **Manter 100% Mini-game** | Cookies / Cookie Stand | `(12.25, 35.25)` | `(15.64, 36.38)` | F0 (contador offline), F1 (prompt i18n) |
+| 12 | `AltarArea.js` | **Manter com leve re-tema** | Portal do Caos / Vortex | `(75.34, -27.95)` | `(74.79, -14.08)` | F0 (cataclismo offline), F2 (trocar `satanStar.png`) |
+| 13 | `ToiletArea.js` | **Manter 100% Easter egg** | *(oculto no mapa)* | `(66.88, 66.74)` | `(70.91, 66.02)` | Preservar intacto |
+| 14 | `EasterArea.js` (+ `BlackFriday` / `Christmas`) | **Remover** | *(fora do escopo)* | — | — | F0 (`T0.1`: limpar imports, código morto e estilos) |
 
-- **Visual vs físico:** cada era exporta `eras/<era>/<era>Visual.glb` (malhas visuais mescladas por material) e `eras/<era>/<era>Physical.glb` (só colisores). Os objetos dinâmicos vão em `eras/<era>/<era>Objects.glb`, com um nó por objeto: filhos visuais + colisores `cuboid*`/`hull*`/`ball*`/`cylinder*` + custom props `mass`, `friction`, `restitution`, `category`.
-- **Referências:** empties `ref<Nome><n>`, por exemplo:
-  - `refMilestone1994`, `refRespawnOrigens`, `refCamera3`, `refLinePoint12`;
-  - `refZoneBounding` (escala x = raio), `refZoneFrustum`, `refSignal7`;
-  - `refPipeContact`, `refSecretTermite`.
-- **Instâncias** (árvores, capim, cupinzeiros): `…References.glb` com empties posicionados + `…Visual.glb` com 1 malha base (padrão `Trees.js`/`Foliage.js`/`Bushes.js`) → `InstancedGroup`.
-- **Nomes de arquivo:** `camelCase`, sufixo `-compressed.glb` gerado pelo pipeline (convenção do motor), texturas PNG/WebP sem perda (máscaras RGBA de terreno nunca com perda). Os nomes servidos ganham hash de conteúdo no build (T0.15).
-- **Unidades:** 1 unidade = 1 m. +Y para cima no glTF. Pivô no chão.
+### 4.3 Fichas Cirúrgicas das Áreas Principais
 
-### 5.4 Modelagem por família (o que o script faz)
+#### Área 1 — `LandingArea.js` (*Início*)
+- **Nós verificados:** `refLettersPhysicalDynamic.010..019` (`mass: 0.2`), `refKioskInteractivePoint`, `refControlsInteractivePoint`, `refBonfireInteractivePoint`, `refBonfireHashes`, `refBonfireBurn.001`, `gamepadPhysicalDynamic.001`, `phonePhysicalDynamic.001`, `gizmoPhysicalDynamic`.
+- **Som / Conquista:** `hitBrick` nas letras; `campfire` ao acender a fogueira (via `Res(e)t`); conquista `areas: 'landing'` (`boundingIn`) e `landingLeave` (`boundingOut`).
+- **Alterações planejadas:**
+  - `T1.2`: traduzir os 3 prompts (`Mapa`, `Controles`, `Resetar`).
+  - `T4.1`: substituir as 10 letras `BRUNO SIMON` no `timeline-world.blend` por `VICTOR NEVES` (11 letras individuais `refLettersPhysicalDynamic.001..011`, `mass: 0.2`, cada uma com `cuboid*`, material `palette` mutado).
+  - `T5.2`: atualizar textura do material `stylizedMap` no quiosque com o novo mapa da ilha.
 
-| Família | Técnica `bpy` | Tris por peça | Notas |
-|---|---|---|---|
-| Kit plataforma (bloco de marco, tijolo, cano, sinal, placa de cordel) | Primitivas + `Bevel` (largura 0.06, 3 seg.) + `WeightedNormal` + relevo do ponto via `Boolean` | 200–900 | O bloco de marco tem face papel com ponto vermelho em relevo. O cano tem borda com lábio. |
-| Vegetação do cerrado (buriti, ipê, pequizeiro, capim, flores) | Tronco por curva + `Skin`/`Screw`. Copa por blobs (metaballs → malha → `Decimate`). Folhas de buriti em leque por array de fitas. | 300–1500 | Capim vira instância do `Foliage` do motor (SDF) com nossa textura. |
-| Rochas e cupinzeiros | Icosfera + `Displace` (ruído) + `Remesh` voxel + `Decimate` + bevel | 150–400 | Forma de "massa de modelar" |
-| Arquitetura (casas, escola, campus, fábrica, enxaimel) | Caixas com bevel, janelas por `Boolean` em array, telhas por array | 1–6 mil | Paredes papel, detalhes tinta |
-| Landmarks (CRT, cartuchos, barras, ponto final) | Feitos sob medida por script | 2–8 mil | Cada um tem um script próprio e um render de checagem |
-| Terreno da era | Grid 128×128 + `Displace` por imagem de altura gerada (numpy) + bordas de papel recortado (extrusão de contorno) | 20–30 mil | Mais textura de dados RGBA (canal R = caminho de laterita, G = grama, B = água, A = sombra bakeada) para os shaders do `Terrain`/`Grass` |
-| A Linha | Curva Bézier por `refLinePoint*` → malha de fita (perfil 0.35 × 0.04, 1 seg/0.25 m) + export dos pontos como spline JSON | ~4 mil por era | O mesmo JSON alimenta o grind |
-| Victor | Malha por partes (cabeça, cabelo, tronco, membros) unidas, bevel, `Remesh` só no cabelo | ≤ 6 mil | Ver 5.6 |
+#### Área 2 — `CareerArea.js` (*Carreira / Timeline*)
+- **Nós verificados e `extras` em `areas.glb`:**
+  - `refLine` (`size: 4`, `hasEnd: true`, `color: 'blue'`, `texture: 'careerHetic'`)
+  - `refLine.001` (`size: 2`, `hasEnd: true`, `color: 'orange'`, `texture: 'careerUzik'`)
+  - `refLine.002` (`size: 2`, `hasEnd: true`, `color: 'orange'`, `texture: 'careerImmersiveGarden'`)
+  - `refLine.003` (`size: 6`, `hasEnd: false`, `color: 'purple'`, `texture: 'careerOnlineTeacher'`)
+  - `refLine.004` (`size: 14`, `hasEnd: false`, `color: 'orange'`, `texture: 'careerFreelancer'`)
+  - `refLine.005` (`size: 9`, `hasEnd: true`, `color: 'purple'`, `texture: 'careerIRLTeacher'`)
+  - `refYear` (4 meshes `digit*` com shader de 7 segmentos usando `DataTexture(7, 10)`).
+- **Mecânica de shader (`CareerArea.js` l. 106–122):**
+  - Revela progressivamente da esquerda para a direita via `step(baseUv.x, line.labelReveal)`.
+  - `alpha = step(0.1, max(textureColor.r, textureColor.g))`.
+  - `finalColor = mix(color('#251f2b'), emissiveColor, textureColor.r)` — ou seja, **canal `R` = texto emissivo colorido, canal `G` = borda/sombra escura legível sobre a pedra**.
+- **Alterações planejadas (`T1.4`):**
+  - Substituir os 6 PNGs em `static/career/` via `scripts/generate-career-textures.mjs` mantendo compatibilidade imediata com os nomes de `userData.texture` do `areas.glb` atual.
+  - Atualizar paleta das linhas: `blue: '#3b9eff'`, `orange: '#ff8a3d'`, `purple: '#34cfc4'`, `green: '#7ed957'`.
+  - Atualizar `this.year` para percorrer os anos reais da trajetória de Victor (`1994` → `2026` por tabela de marcos indexada por `offsetTarget / this.year.size`, ver Decisão `D5`).
 
-**Validação de cada script:** renderiza com Eevee 3 vistas fixas (frente, 3/4, cima) de 512² em `game/blender/out/previews/<asset>.png` e imprime tris/materiais. Essas imagens servem para checar a modelagem, **não para nota de "feel"**.
+#### Área 3 — `ProjectsArea.js` (*Projetos*)
+- **Nós verificados:** `refImages`, `refTitle`, `refUrl`, `refAttributes` (`role`, `at`, `with`), `refDistinctions`, `refPagination`, `refPrevious`, `refNext`, `refBlackBoard.002`, `refAnvilPhysicalDynamic`, `grinderPhysicalDynamic`, `blowerPhysicalDynamic`, `quenchPhysicalDynamic.001`.
+- **Alterações planejadas:**
+  - `T0.3`: fazer `this.images.getResourceAndLoad` respeitar `VITE_COMPRESSED` (usando `texture` + `.png` em dev e `textureKtx` + `.ktx` em prod, tirando a extensão fixa de `projects.js` ou trocando `.ktx` ↔ `.png` automaticamente).
+  - `T1.3`: trocar `sources/data/projects.js` e `static/projects/images/*` pelos 6 projetos de Victor Neves; manter `distinctions: []` (ocultando medalhas `awwwards`/`fwa`/`cssda`).
+  - `T2.3` (opcional): substituir textura do material `projectsLabels` em runtime para trocar rótulos `ROLE / AT / WITH` por `STACK / TIPO / FOCO` caso faça mais sentido que manter os rótulos originais.
 
-### 5.5 UV, paleta e AO
-- `vn_palette.assign(obj, face_selector → "paper"|"signal"|…)` move as UVs da face para o centro do swatch (0.5/16 + i/16). Um único material `palette` por arquivo, com o nó de textura **mutado** no export (a convenção do motor: a textura é aplicada no `Material` do three).
-- **AO no vértice:** Cycles `bake_type='AO'`, `target='VERTEX_COLORS'`, 64 amostras, distância 0.6 m, aplicado **depois** do merge por era, para pegar o contato entre peças. Antes, o script subdivide localmente as faces grandes (≥ 1 m²) para ter vértices suficientes.
-- **Sombra top-down (Q1):** câmera ortográfica de cima, Cycles com a luz da era → `ShadowCatcher` em plano → imagem R 1024² → canal A do terreno ou textura própria.
+#### Área 4 — `LabArea.js` (*Lab & Dados*)
+- **Nós verificados:** `refMecanism`, `refChainLeft`, `refChainRight`, `refChainPulley`, `refGearA/B/C`, `refImages.001`, `refMini`, `cauldronPhysicalDynamic`, `blackBoardPhysicalDynamic.001`.
+- **Alterações planejadas:**
+  - `T0.3`: respeitar `VITE_COMPRESSED` ao carregar `image` e `imageMini`.
+  - `T1.5`: popular `sources/data/lab.js` com 6 experimentos/demos reais do Victor e 12 imagens (`6 × 960×540` + `6 × 240×136`). Preservar 100% da geometria de oficina/roldana/caldeirão.
 
-### 5.6 Rig e animação do Victor
-- **Rig:** `vn_rig.py` cria uma armature de 24 bones (hips, spine×2, neck, head, brow L/R, shoulder/arm/forearm/hand ×2, thigh/shin/foot/toe ×2, scarf×3). Parent with automatic weights e correção de pesos por grupos nomeados (cabeça e cabelo 100% em `head`).
-- **Clipes (`vn_anim.py`):** poses-chave definidas como dicionários de rotação por bone (graus), interpoladas em Bézier com easing por chave:
-  - Run cycle: 8 chaves a 24 fps (0.5 s por ciclo a 7 m/s → passada 1.75 m).
-  - Walk: 8 chaves, 0.7 s.
-  - `jumpUp`, `fall` e `land`: 3–5 chaves.
-  - Exporta as **NLA tracks** como animações glTF nomeadas.
-- **Runtime (`CharacterVisual.js`):** `AnimationMixer` com máquina de estados e crossfades de 0.08–0.15 s. `timeScale` do run proporcional à velocidade (evita pé deslizando). Camadas procedurais: lean, squash, look-at, cachecol em molas, olhos e boca por troca de UV.
-- **Plano B (D3b):** se o gate GB reprovar, mais rodadas de iteração (T2.IT1/IT2) e mais peso na camada procedural. Clipes de terceiros (ex.: Mixamo) **só entram se o dono pedir explicitamente**, com a fonte no log de licenças.
+#### Área 5 — `SocialArea.js` (*Contato & Redes*)
+- **Nós verificados em `areas.glb`:** `baguiraPhysicalDynamic`, `sudoPhysicalDynamic`, `boyPhysicalDynamic`, `refStatuePhysicalDynamic`, `gitHubPhysicalDynamic`, `linkedInPhysicalDynamic`, `youtubePhysicalDynamic`, `mailPhysicalDynamic`, `xPhysicalDynamic`, `blueskyPhysicalDynamic.001`, `discordPhysicalDynamic`, `twitchPhysicalDynamic`, `onlyfansPhysicalDynamic`, `refCenter`, `refFan`, `refOnlyFans`.
+- **Alterações planejadas:**
+  - `T1.1` (Camada 1 — código):
+    - Reescrever `sources/data/social.js` (6 links de Victor Neves + modal `contact`).
+    - Criar helper em `SocialArea.js` para ocultar visualmente (`visible = false`) e desabilitar corpos físicos (`body.setEnabled(false)`) dos nós pessoais do Bruno (`baguira`, `sudo`, `boy`) e placas de redes não usadas (`twitch`, `bluesky`, `discord`), garantindo que o jogador nunca esbarre em colisores invisíveis nem veja mascotes de terceiros já a partir da Fase 1!
+  - `T4.2` (Camada 3 — Blender): remover esses nós definitivamente de `areas.glb` e trocar `refStatuePhysicalDynamic` por um totem/escultura estilizada neutra (mantendo a conquista `statueDown`).
 
-### 5.7 Compressão e orçamento de assets
-- `game/scripts/compress.mjs`, adaptado do `scripts/compress.js` do motor:
-  - GLB: `gltf-transform` `meshopt` (decoder de 7.7 KB gz em vez de Draco), quantização padrão.
-  - Texturas: **PNG/WebP sem perda** na fatia. A paleta 16×16 tem ~1 KB, e as máscaras RGBA de dados do terreno e a sombra top-down têm ≤ 250 KB por era. **Sem KTX2/basis** (economiza 260 KB e um wasm no caminho crítico). A KTX2 (UASTC via `toktx`) só volta se a medição de memória de GPU no celular pedir, e só para texturas grandes de cor, nunca para máscaras de dados.
-  - UI: WebP/SVG.
-  - Saída: `hash-assets.mjs` (T0.15) renomeia com hash e gera o manifesto.
-- **Orçamento por era** (transferido):
+#### Área 6 — `TimeMachineArea.js` (*Arquivo 2005 / Versão 2D*)
+- **Nós verificados:** `refInteractivePoint.006`, `refTvPhysicalDynamic` (contém `refScreen`), `cupPhysicalDynamic*`, `stoolPhysicalDynamic.004`.
+- **Alterações planejadas (`T1.5`):**
+  - Substituir URL de `https://2019.bruno-simon.com` para `https://voaneves.github.io/timeline/#carreira` (e na Fase 6, `../#carreira` quando hospedado dentro do mesmo site).
+  - Substituir `static/timeMachine/timeMachineScreenFolio.png` (`140×124`) por tela retrô do blog **Ponto Interativo (2005)** e `timeMachineScreenMGS.png` (`140×124`) por tela retrô da **Timeline 2D** — mantendo o som de alerta + shader de scanlines quando o carro bate na TV!
 
-| Peça | Alvo |
-|---|---|
-| Visual + Physical + Objects + References | ≤ 600 KB |
-| Máscaras e sombra da era (sem perda) | ≤ 250 KB |
-| **Crítico por era** | **≤ 850 KB** |
-| Áudio da era (ambiente + stem), carregado depois do reveal | ≤ 350 KB |
-| **Total por era** | **≤ 1.2 MB** |
+#### Área 7 — `BehindTheSceneArea.js` (*Bastidores*)
+- **Nós verificados:** `refCenter.001` (portal estrelado procedural), `refInteractivePoint.004`, `lightGeneratorPhysicalDynamic*`, `refObjectsPhysicalDynamic*`.
+- **Alterações planejadas:**
+  - `T1.1`: reescrever texto completo do menu `behindTheScene` em `sources/index.html` e `consoleLog.js`.
+  - `T2.1`: ajustar `this.bloomColor` de `#6053ff` para `#2ad4d9` (ciano luminoso combinando com o novo esquema).
 
-- **Comum:**
-  - no caminho crítico: Victor núcleo (malha + 7 clipes de locomoção, ≤ 200 KB), paleta (~1 KB), kit plataforma (≤ 150 KB);
-  - depois do reveal: clipes extras (≤ 120 KB) e sfx base (≤ 400 KB);
-  - fontes: já existentes.
-- **Draw calls:** visual estático mesclado por era em ≤ 6 malhas (opaco, folhagem, água, Linha, emissivos, bordas). Instâncias por tipo. Alvo ≤ 120 draw calls no celular e ≤ 250 no desktop.
+#### Área 8 — `AchievementsArea.js` (*Conquistas*)
+- **Nós verificados:** `refPillar`, `refWaterfallDrop`, `refWaterfallStill`, `refWaterfallParticles`, `refWaterfallZone`, `refInteractivePoint.005`.
+- **Alterações planejadas:** preservar 100% dos assets 3D e shaders (a cachoeira herda automaticamente as novas cores turquesa/oceano de `Terrain.js` l. 39–40!). Atualizar lista e metas em `sources/data/achievements.js` (`T1.5`).
 
-### 5.8 Divisão procedural vs autoral
-
-| Autoral (Blender) | Procedural (runtime, técnicas do motor) |
-|---|---|
-| Terreno, arquitetura, landmarks, Victor, kits, a Linha, colisores | Capim (`Grass`), folhas (`Leaves`), vento (`Wind`/`WindLines`), água (`WaterSurface`), pegadas (`Tracks`), confete (`Confetti`), reveal pop-up (`Reveal`), névoa (`Fog`), poeira e partículas |
+#### Áreas 9 a 13 — Mini-games e Easter Eggs (`Circuit`, `Bowling`, `Cookie`, `Altar`, `Toilet`)
+- **`CircuitArea.js`:** preservar 100% da pista, rampas, checkpoints (`refCheckpoints.000..007`), obstáculos cinemáticos (`refObstaclesPhysicalKinematicPositionBased.001..005`), air dancers e física. Trocar apenas `circuitBrand` (textura em runtime na `T2.3` e no `.blend` na `T4.2`) + adicionar Top 5 local (`T0.2`) e medalhas Ouro/Prata/Bronze (`T3.1`).
+- **`BowlingArea.js`:** preservar 100% da pista, 10 pinos (`refPinPositions`), bola, barreiras (`refBumpers`), sofás, bar e jukebox. Traduzir apenas prompts interativos (`T1.2`).
+- **`CookieArea.js`:** preservar 100% do quiosque, forno, chaminé, fole, banner e 22 cookies instanciados. Ativar placa 3D de contagem offline via `localStorage` (`T0.2`) e traduzir prompt (`T1.2`).
+- **`AltarArea.js`:** preservar feixe cilíndrico, partículas, glifos flutuantes e sinos. Ativar contador + cataclismo offline a cada 5 sacrifícios (`T0.2`) e substituir `static/areas/satanStar.png` (`128×128`) por glifo geométrico/vórtice (`T2.3`).
+- **`ToiletArea.js`:** preservar 100% da cabine derrubável, banquinho, papéis e lua noturna.
 
 ---
 
-## 6. Arquitetura técnica
+### 4.4 Proposta de Novo Layout da Fase (Fase 5 — *Spin Próprio "Roadtrip Costeira"*)
 
-### 6.1 Estratégia de repositório e deploy (D5)
+Diagrama espacial da ilha reorganizada (dentro dos mesmos `192 × 192 m`, de `-96` a `+96`):
 
-| Opção | Prós | Contras |
-|---|---|---|
-| A. Build commitado em `T:next\` no `main` | Simples | Cada iteração soma binários ao histórico. O cache do Pages pode misturar versões. |
-| B. Pages via Actions (artefato) no repo `timeline` | Sem build no git | Troca a fonte do Pages do live, e o 2D passa a depender de CI. Os assets-fonte continuam precisando estar no repo. |
-| **C. Repo de preview separado (`voaneves/timeline-preview`)**, Pages a partir de um branch com **um único commit órfão** substituído por `push --force` a cada publicação | Zero histórico de binários. Não toca no live nem na configuração do Pages do `timeline`. O SW de `/timeline/` não alcança `/timeline-preview/`. | Um repo a mais (público, `noindex`) |
-
-**Recomendação: C para os previews.** A produção vai para `play/` no `main` do `timeline` só no G4.
-- `G:scripts\publish-preview.mjs`: `vite build` → `hash-assets` → pasta temporária → `git init` → commit único `preview <buildId>` → `git push --force` para o `main` de `PV:`. A sessão principal executa o push, com autorização.
-- URL: `https://voaneves.github.io/timeline-preview/`.
-- **Indexação:**
-  - o preview leva `<meta name="robots" content="noindex">`;
-  - `game/sources/index.html` também leva `noindex` no próprio fonte, porque a pasta `game/` do `timeline` é servida crua pelo Pages; o build de `play/` remove a meta por variável;
-  - `robots.txt` em subcaminho não vale.
-- **Binários no `main`:**
-  - os assets gerados (`G:static\**`) ficam fora do git (`.gitignore`) entre gates e só são commitados nos marcos G1, G2, G3 e G4;
-  - os `.blend` de override manual (`G:blender\manual\`) são fonte humana e são commitados;
-  - entre gates, as cópias são o repo de preview e a pasta local.
-- **Cache do Pages (~10 min):**
-  - todo asset servido tem **hash de conteúdo no nome** (T0.15);
-  - o HTML aponta para o JS com hash do Vite, o JS embute o `buildId`, o loader busca `asset-manifest.<buildId>.json`, e o manifesto aponta para `<nome>.<hash8>.<ext>`;
-  - assim, JS novo nunca carrega GLB velho, nem o contrário.
-- `vite.config.js`: `root: 'sources/'`, `publicDir: false` (os assets saem do `hash-assets`), `base: './'`.
-
-**Integração com a página 2D:**
-- O 3D é um **documento separado**, então o Lighthouse do `index.html` não é afetado.
-- O Start navega para o alvo de uma flag de uma linha, `START_TARGET`, em `src/boot.js`: `'./play/'` no lançamento, `'legacy'` para o rollback (T5.2b).
-- `<link rel="prefetch">` do HTML e do JS do `play/` é disparado por **intenção** (pointerenter ou focus no botão), nunca no load.
-- O `play/` tem link fixo "Versão acessível" para `../#carreira`.
-
-**Service worker** (`worker.js`, escopo `/timeline/`):
-- bypass total para `/play/` e `/next/` e para `glb|png|webp|wasm|mp3|json` do jogo: o navegador usa o HTTP cache normal;
-- `VERSION` sobe para `v8`.
-
-### 6.2 Conteúdo: fonte única
-- `game/scripts/extract-content.mjs` faz o parse do `../index.html` (dep. `linkedom`, pin exato) e gera `game/static/content.json`: `{eras:[{n,name,years,entries:[{id,datetime,label,title,body}]}], projects:[{id,title,summary,stack,live,repo}], contact:{text,links}}`.
-- O build roda isso antes do Vite.
-- **Teste de paridade:** 15 entradas, 6 projetos e 1 contato, com os mesmos ids do DOM. Se diferir, o build falha.
-- Os cards no `play/` renderizam a partir do JSON com a mesma estrutura semântica (`<article>`, `<time datetime>`, `<h2>`).
-
-### 6.3 Mapa de reuso do motor folio-2025, arquivo por arquivo
-
-Legenda: **K** = manter (ajuste mínimo + cabeçalho MIT), **A** = adaptar, **R** = reescrever usando o arquivo como referência, **D** = descartar (não copiar).
-O inventário de dependências real é confirmado na T0.3: o que for marcado K/A e importar algo marcado D vira A.
-
-| Arquivo (`sources/Game/…`) | Ação | O que muda |
-|---|---|---|
-| `Game.js` | A | Listas de recursos novas, carga em 2 lotes (comum + era atual) + `ZoneStreamer`. Sem Server, Whispers, Tornado, Weather, BlackFriday ou Konami. |
-| `Events.js`, `Ticker.js`, `Time.js`, `Viewport.js`, `utilities/*`, `Noises.js` | K | — |
-| `Debug.js`, `Monitoring.js` | K | Tweakpane e stats-gl só com `?debug`, por `import()` dinâmico |
-| `ResourcesLoader.js` | A | `MeshoptDecoder` no GLTFLoader, **resolução pelo manifesto com hash** (T0.15), progresso por bytes, cancelamento. Sem KTX2/basis na fatia (6.5). Se voltar, o `basis/` vem de `three/examples/jsm/libs/basis`, nunca do upstream. |
-| `Rendering.js` | A | `?webgl` força `forceWebGL`. Pipeline por tier (Q0: DOF + bloom; Q1: bloom de 2 mips ou nenhum; Q2: nada). Escala de resolução dinâmica. |
-| `Quality.js` | A | Tiers 0/1/2 por **medição** (não só UA): 3 s de amostra após o reveal → desce de tier se p90 > 18 ms; opção manual no menu |
-| `PreRenderer.js` | K | Compila shaders durante o loader (evita travadas no primeiro marco) |
-| `Materials.js`, `Materials/MeshDefaultMaterial.js` | A | Paleta nossa. AO por `COLOR_0`. Sombra bakeada no Q1 (amostra a textura top-down por `positionWorld.xz`). Gradientes e emissivos com a nossa paleta. |
-| `Materials/MeshGridMaterial.js`, `World/Grid.js` | K (só debug) | — |
-| `Ligthing.js` | A | Presets por era. Shadow map só nos dinâmicos e só no Q0. |
-| `Cycles/Cycles.js`, `DayCycles.js` | A → `EraCycles` | Mantém a interpolação de presets, trocando o tempo pelo **progresso na Linha / zona atual** |
-| `Cycles/YearCycles.js`, `Weather.js`, `Tornado.js`, `World/VisualTornado.js`, `World/RainLines.js`, `World/Snow.js`, `World/Lightnings.js` | D | Fora do escopo. A chuva leve da era Dados pode voltar na Fase 4, escrita do zero. |
-| `Fog.js`, `Wind.js`, `Water.js`, `World/WaterSurface.js` | K/A | Cores da era, Rio Tocantins |
-| `Terrain.js`, `World/Floor.js`, `World/Grass.js`, `World/Foliage.js`, `World/Leaves.js`, `World/WindLines.js`, `World/Flowers.js`, `World/Bushes.js`, `World/Trees.js` | A | Mesma técnica com nossos dados, malhas e texturas (SDF de folhagem nossa). Árvores do cerrado. |
-| `Tracks.js`, `Trails.js` | A | Trilha do pneu vira **pegadas** e marcas de grind |
-| `Physics/Physics.js`, `Physics/PhysicsWireframe.js`, `Objects.js`, `InstancedGroup.js`, `References.js`, `Zones.js` | K | Upgrade para Rapier 0.21 |
-| `Physics/PhysicsVehicle.js`, `World/VisualVehicle.js` | K em quarentena | Só se D1 = C. Senão, D. |
-| `Player.js` | R | Novo `Player` com estados `onFoot`, `grind`, `locked` e `cutscene`, delegando a `Character/CharacterController.js` |
-| **novos** `Character/CharacterController.js`, `Character/CharacterVisual.js`, `Character/Grind.js`, `Character/Stamp.js` | novo | Seção 3 |
-| `View.js` | A | Foco no personagem, yaw autoral por `refCamera*`, retrato, enquadramento de card sem blur. `camera-controls` só no modo livre `?debug`. |
-| `Inputs/*` (Keyboard, Gamepad, Pointer, Wheel, Nipple, InteractiveButtons) | A | Mapa de ações novo. Nipple na metade esquerda, toque na direita = pulo, gesto de carimbo. Captura só com foco. |
-| `InteractivePoints.js`, `RayCursor.js` | A | Arte e tipografia nossas. Espelho em `aria-live`. |
-| `Respawns.js` | K | Respawns vindos de `refRespawn*` |
-| `Reveal.js`, `World/Intro.js` | R | Loader da Linha + reveal pop-up (seção 2.7) |
-| `Explosions.js`, `World/Confetti.js` | A | Explosão vira "estouro de papel". Confete na paleta nossa. |
-| `Audio.js` | A | Engine mantida. **Registro de sons 100% novo.** Playlist trocada por stems por era com crossfade. |
-| `Notifications.js`, `Modals.js`, `Menu.js`, `Overlay.js`, `Options.js`, `Tabs.js`, `Title.js`, `ClosingManager.js` | R | UI acessível (dialog nativo, foco, live region), com estilos dos tokens da marca |
-| `Achievements.js`, `Map.js` | A (Fase 4) | Conquistas e mapa nossos, só locais (sem servidor) |
-| `Server.js`, `World/Whispers.js`, `BlackFriday/*`, `Easter.js`, `KonamiCode.js`, `InputFlag.js`, `World/Fireballs.js`, `World/Lanterns.js`, `World/PoleLights.js`, `World/Scenery.js`, `World/Bubble.js`, `World/Benches.js`, `World/Bricks.js`, `World/Fences.js`, `World/ExplosiveCrates.js` | D, ou reescrever genericamente | Benches, Bricks, Fences e ExplosiveCrates viram um único `World/Breakables.js` genérico nosso (mesmo padrão `Objects` + `InstancedGroup`) |
-| `World/Areas/Area.js`, `World/Areas/Areas.js` | K/A | Base e registro mantidos. A lista vira as eras. |
-| `World/Areas/*Area.js` (Landing, Projects, Career, Lab, Circuit, Bowling, Cookie, Toilet, Social, Altar, Achievements, BehindTheScene, TimeMachine, Easter) | D | **Conteúdo do Bruno: não copiar.** Novas `World/Eras/OrigensEra.js` … `HubEra.js`. Comportamentos (ex.: carrossel de projetos) são reescritos. |
-| `Geometries/LineGeometry.js` | K | Útil para a Linha no debug |
-| `Geometries/PortalSlabsGeometry.js`, `Geometries/WindLineGeometry.js` | K se usado | — |
-| `Passes/cheapDOF.js` | K (só Q0) | — |
-| `TextCanvas.js` | K | Rótulos com Schibsted Grotesk e JetBrains Mono |
-| `sources/data/*` | D | Vira `content.json` + `sources/data/feel.js`, `achievements.js` e `eras.js` nossos |
-| `sources/index.html`, `sources/style/*.styl` | R | HTML acessível nosso + CSS puro com tokens (sem Stylus, sem Google Fonts, sem gtag) |
-| `scripts/compress.js` | A | → `game/scripts/compress.mjs` (meshopt, presets nossos) |
-| `static/**`, `resources/**` | **D, nunca copiar** | Inclusive `.blend`, sons, fontes, favicons e social. `basis/` e `draco/` vêm do pacote `three`. |
-
-**Atribuição:**
-- `LICENSES.md` ganha uma seção "folio-2025 (Bruno Simon), MIT" com o texto completo da licença.
-- Cada arquivo derivado ganha o cabeçalho `// Adapted from brunosimon/folio-2025 (MIT, (c) 2025 Bruno Simon)`.
-- O rodapé do menu e da sala de bastidores mostra "Motor baseado no folio-2025 de Bruno Simon (MIT)" com link.
-- Créditos de three.js, Rapier e Howler.
-
-### 6.4 Módulos novos e grafo de cena
-
-```
-Scene
- ├─ Sky (gradiente da era) + Fog
- ├─ Eras[] (Area)  ← streaming: cada era = {visual, physical, objects, references, instanced}
- │   └─ Milestones (blocos de marco, CRT, capelo…) · Signals (instanced) · Pipes · Line (fita)
- ├─ Hub (morro + ponto final)
- ├─ Player
- │   ├─ CharacterController (Rapier KCC)  ← Inputs
- │   └─ CharacterVisual (glTF skinned + AnimationMixer + procedural)
- ├─ Dynamic Objects (Rapier) · Breakables (InstancedGroup)
- ├─ FX: Grass, Foliage, Leaves, Tracks, Confetti, Explosions, WindLines, Water
- └─ View (câmera) → Rendering (RenderPipeline por tier)
-DOM: HUD · Cards (<dialog>) · Announcer (aria-live) · Menu/Options · Loader da Linha
+```text
+                        Norte (-Z = -96) — Costa Aberta
+             (-52, -62)                                (48, -56)
+           [TimeMachine]                             [BehindTheScene]
+           (Ilhota Retrô)                           (Mirante Estrelado)
+                                 (0, -48)
+                                [Social / Contato]  <-- Praça Final com vista pro mar
+                                /        \
+                  (-34, -22)   /          \   (40, -18)
+                   [Lab]  ----+            +---- [Altar / Vortex]
+                     |                                (Ponta Leste)
+                     |
+           (-48, 12) |         ANEL PRINCIPAL            (58, 12)
+          [Circuit]  |        (Estrada de Pedra)       [Achievements]
+         (Península) |            /      \               (Cachoeira)
+                     |     (-16, 14)    (24, 10)
+                     +---- [Projects]  [Career] ----+
+                              \          /          |
+                               \        /           |
+                                (0, 42)             | (54, 48)
+                               [Landing]            +-[Toilet]
+                            Spawn: (0, 50)
+                                /      \
+                   (-32, 62)   /        \   (28, 60)
+                   [Bowling]             [Cookie]
+                        Sul (+Z = +96) — Praia Sul
 ```
 
-Prioridades no `Ticker`: as do motor + `5.5 CharacterController:post-physics`, `8 EraCycles`, `9 Milestones/Line`, `14 Announcer`.
-
-### 6.5 Carga e streaming (orçamento recalculado)
-
-**Caminho crítico** (o que precisa chegar antes do controle):
-
-| Peça | gz | Lote |
-|---|---|---|
-| `play/index.html` + CSS inline | ≤ 15 KB | 0 |
-| Fontes (Schibsted Grotesk e JetBrains Mono; provavelmente já em cache pelo 2D) | ≤ 60 KB | 0 |
-| JS principal (three/webgpu + tsl + motor) | ≤ 420 KB | 1 |
-| Rapier wasm (não-compat, compilação em streaming) | 1.17 MB | 1 |
-| `content.json` + manifesto | ≤ 12 KB | 1 |
-| Paleta PNG 16×16 | ~1 KB | 1 |
-| Kit plataforma | ≤ 150 KB | 1 |
-| Victor núcleo (malha + 7 clipes de locomoção) | ≤ 200 KB | 1 |
-| Origens crítico (visual + física + objetos + refs ≤ 600 KB; máscaras e sombra sem perda ≤ 250 KB) | ≤ 850 KB | 2 |
-| **Total crítico** | **≈ 2.88 MB** (teto 3.0 MB, falha > 3.2 MB) | |
-
-**Fora do caminho crítico** (depois do reveal, em `requestIdleCallback`):
-- todo o áudio (sfx base ≤ 400 KB + ambiente e stem de Origens ≤ 350 KB). O som só pode tocar depois do primeiro gesto dentro do `play/` de qualquer jeito, então nada se perde;
-- os clipes extras do Victor (≤ 120 KB);
-- a era vizinha e o hub.
-
-**Sem KTX2/basis na fatia** (−260 KB e um wasm a menos).
-
-**Tempos honestos** (estimativa; a T2.31 mede de verdade). As fases se sobrepõem (o wasm compila durante o download), então cada linha é teto, não soma exata.
-
-| Perfil | Transferência | Rede (RTT, cascata) | Compilar wasm | Parse do JS | Shaders (`PreRenderer`) | **Até o controle** |
-|---|---|---|---|---|---|---|
-| Desktop, cabo 50 Mbps, RX 6750 XT | 0.5 s | 0.2 s | 0.15 s | 0.1 s | 0.4 s | **≈ 1.4 s** (meta ≤ 2.5 s) |
-| Celular médio em "Fast 4G" (9 Mbps, 150 ms RTT), WebGL2 | 2.6 s | 0.6 s | 0.6 s | 0.4 s | 1.2 s | **≈ 5.4 s** (meta ≤ 6.5 s) |
-| Celular, se o Pages não comprimir o `.wasm` (vira compat base64, 1.65 MB gz) | +0.4 s | | | | | **≈ 5.8 s** |
-
-**Sequência:**
-1. **Página 2D** (Lighthouse 100): nada de 3D. Prefetch só por intenção.
-2. **Boot do `play/`:** o HTML pinta o papel e a Linha de progresso em CSS/SVG, e o JS principal vem com `modulepreload`.
-3. **Lote 1** em paralelo.
-4. **Lote 2** (era atual). O reveal acontece quando os lotes 1 e 2 terminam e os shaders foram pré-compilados (`PreRenderer`).
-5. **Streaming:**
-   - ao entrar numa era, a vizinha seguinte (e o hub) carrega em `requestIdleCallback`;
-   - eras a 2+ de distância descarregam (`dispose` de geometrias, texturas e colisores, que saem do mundo Rapier);
-   - a transição entre eras (ônibus, ponte da Linha) dura ≥ 3 s e esconde a carga, com fallback de "parada" e a Linha piscando se a era ainda não chegou.
-6. **Content-Encoding no preview** (T0.11): se o `.wasm` não vier comprimido, trocar para `@dimforge/rapier3d-compat` e registrar a decisão.
-
-### 6.6 Renderer e cor
-- `WebGPURenderer`:
-  - desktop: WebGPU quando houver, senão WebGL2;
-  - **celular: `forceWebGL: true` (WebGL2) por padrão**, até o WebGPU passar na matriz da T1.11 no aparelho do dono (D17);
-  - `?webgpu` e `?webgl` forçam um backend para teste.
-- Saída sRGB e **tone mapping neutro ou nenhum**: a paleta é a verdade. O mapeamento é verificado com um swatch de calibração no T2.2, onde o render tem que bater com o hex com ΔE < 3.
-- DPR:
-  - desktop `min(dpr, 2)`;
-  - celular `min(dpr, 2)` com escala de resolução dinâmica de 0.6–1.0, alvo de 60 fps.
-- Pausa em `visibilitychange`. `webglcontextlost` / `device.lost` mostram um toast "O 3D parou" com o botão "Voltar para a versão simples".
-- **Memória:**
-  - GPU ≤ 180 MB no celular (PNG/WebP descompactadas: paleta ~1 KB, máscaras 1024² RGBA ≈ 5.6 MB com mips por era; a KTX2 só volta se a medição pedir), contada pelo `renderer.info` no painel debug;
-  - heap JS ≤ 150 MB;
-  - sem vazamento em 3 voltas de streaming (T3.x).
-
-### 6.7 Código atual do timeline: reuso vs aposentadoria
-
-| Arquivo | Destino |
-|---|---|
-| `index.html`, `assets/styles/main.css`, `tokens/*`, `dtcg-contrast.config.json` | **Mantidos.** Na Fase 5: botão Start → `./play/`, título e cópia ajustados, tela de título revisada. |
-| `src/boot.js` → `assets/js/boot.min.js` | Mantido. Na Fase 5 perde o `import()` do mundo e ganha a navegação para `play/` + prefetch por intenção + fallback (sem WebGL2 → fica no 2D). |
-| `src/world/*.js` (18 arquivos), `assets/js/world/*` | **Ficam vivos até a aprovação** (o live não muda). Na Fase 5 são **movidos** para `D:\GitHub\pode_apagar\timeline\src\world\` e `…\assets\js\world\` e depois `git rm` (regra do dono: nunca apagar). Ideias portadas: `content.js` → `extract-content.mjs`, padrões de dialog e foco do `ui.js` → `Cards.js`. |
-| `scripts/build.mjs` | Na Fase 5 perde o build do mundo |
-| `scripts/check-size.mjs` | Na Fase 5 perde a linha do `world.min.js`. O gate do 3D passa para `game/scripts/check-size.mjs` (seção 7.4). |
-| `worker.js` | Bypass de `play/`, `next/` e binários do jogo (T0.10) |
-| `assets/img/title-world*.avif/webp` | Substituídos por um pôster novo do mundo novo (Fase 5) e os antigos movidos para `pode_apagar` |
-
-### 6.8 Dependências (`game/package.json`, pins exatos, ≥ 7 dias, `npm audit signatures`)
-
-| Pacote | Versão alvo | Motivo |
-|---|---|---|
-| `three` | 0.187.0 | Igual ao motor e ao 2D |
-| `@dimforge/rapier3d` | 0.21.0 (o motor usa 0.19.3) | Upgrade com smoke test (T0.7). Se quebrar, fixar 0.19.x e registrar a exceção. |
-| `vite`, `vite-plugin-wasm` | as últimas com ≥ 7 dias na data da T0.5 | Build |
-| `howler` | 2.2.4 | Engine de áudio do motor |
-| `gsap` | a última com ≥ 7 dias | **Licença própria, não MIT** ("no charge", uso comercial permitido). Decisão D6: manter e registrar em `LICENSES.md`, ou trocar pelos tweens próprios (`springs.js`). |
-| `tweakpane`, `@tweakpane/plugin-essentials`, `stats-gl` | últimas | Só no `?debug` (chunk separado) |
-| `camera-controls` | última | Só no modo livre de debug |
-| `seedrandom` | última | Se mantido |
-| dev: `@gltf-transform/cli` 4.5.1, `linkedom`, `playwright` | — | Pipeline e testes |
-| **Fora:** stylus, msgpack-lite, uuid, emoji-regex, vite-plugin-node-polyfills, @vitejs/plugin-basic-ssl, dotenv, sharp (se a UI for SVG/WebP já pronta), glob (trocar por `fs.glob` do Node 22+) | — | — |
-
-### 6.9 Acessibilidade no `play/` (paridade, não enfeite)
-- `<main>` com `<h1>` visualmente oculto, landmark de aplicação no canvas com `aria-label` e `aria-describedby` para a ajuda de controles.
-- Botão "Lista de marcos" abre um painel HTML com todos os 15 marcos, os 6 projetos e o contato. Cada item tem "Ir até" (auto-walk) e "Abrir".
-- `aria-live="polite"`:
-  - era atual ("Origens, 3 marcos");
-  - proximidade ("Bloco 1994: pressione E"), com throttle de 1.5 s;
-  - marco aberto.
-- Movimento reduzido (`prefers-reduced-motion` + opção no menu): câmera em cortes, sem shake, sem DOF, partículas a 20%, grind opcional (o auto-walk substitui), reveal por fade.
-- Teclado-only completo, foco visível com o token `focus`, alvos ≥ 44 px no toque e ≥ 24 px no desktop.
-- Contraste: novos pares do HUD, dos cards, do loader e dos rótulos do mundo em `tokens/timeline.tokens.json` + `dtcg-contrast.config.json`, rodando `npm run contrast`.
-- Opções: som (mudo por padrão até o primeiro gesto; o botão é claro), volume da música, vibração, qualidade e "assistência" (pulo infinito e marcos por interação simples).
-- **Ponteiro único (WCAG 2.5.7 e 2.5.1):** tudo o que usa arrasto, deslize ou dois dedos tem alternativa de toque simples: tocar para andar (T2.NAV), botão "Carimbar", botões de câmera e a lista de marcos com "Ir até".
-- **Flashes (2.3.1):** nada pisca mais de 3× por segundo em área grande. O carimbo de tela inteira é uma transição única. Um script checa o vídeo (T2.27b).
-- **Pausar (2.2.2):** botão e tecla (P ou Esc) congelam simulação, partículas, ambiente e música. No modo reduzido, as animações ambientes param.
-- **Rota acessível:** o auto-walk (T2.NAV) segue o grafo `refNav*` e a Linha e anuncia cada parada. É o caminho de quem usa leitor de tela e de quem joga com um dedo.
-
----
-
-## 7. Gates de qualidade e avaliação
-
-### 7.1 Princípio
-**Quadro estático nunca dá nota de sensação.** A nota vem de três fontes, nesta ordem de autoridade:
-
-1. **Playtest do dono** (desktop + o celular dele) via URL de preview.
-2. **Vídeo gravado na GPU real** a 60 fps, com ghost runs determinísticas e com jogo humano livre.
-3. **Métricas** (fps, frame time, latência, bytes, tempos de ritmo).
-
-Agentes revisores avaliam **contact sheets extraídas do vídeo** (ffmpeg, 4 quadros/s, grade 4×4) junto com as métricas e o relatório de ritmo. Eles não decidem "feel" sozinhos: no máximo apontam problemas.
-
-### 7.2 Ferramentas de captura (Fase 0)
-- `game/tools/capture/record.mjs` (Playwright, Chrome **headed**):
-  - flags `--use-angle=d3d11 --ignore-gpu-blocklist --enable-gpu-rasterization --force-device-scale-factor=1`;
-  - abre o build local (`vite preview`) com `?debug&ghost=<nome>&hud=0`;
-  - posiciona a janela em 2560×1440 (desktop) ou na viewport emulada (celular).
-- **Gravação:** `ffmpeg -f lavfi -i ddagrab=output_idx=0:framerate=60:video_size=2560x1440:offset_x=0:offset_y=0 -c:v h264_amf -quality quality -rc cqp -qp_i 18 -qp_p 20 out.mp4`. É Desktop Duplication, sem custo de GPU relevante, com o encoder AMF da RX 6750 XT. Fallback: `gdigrab` + `libx264 -preset ultrafast`.
-- **Métricas:** a página expõe `window.__perf` com:
-  - fps médio, p50/p95/p99 de frame time, tempo de GPU (WebGPU: timestamp query; WebGL2: `EXT_disjoint_timer_query_webgl2` se o navegador expuser; senão registrado como 'indisponível', nunca estimado);
-  - draw calls, triângulos, texturas, `performance.memory`;
-  - bytes transferidos (Resource Timing), tempo até o reveal e tempo até a primeira entrada aceita;
-  - marcas de ritmo (primeiro marco, contato).
-  O script grava `metrics.json` ao lado do mp4.
-- **Ghosts** (gravados e reproduzidos pela T0.16, injetados no passo fixo): `game/tools/capture/ghosts/*.json`:
-  - `first10s` (spawn → bloco 1994);
-  - `contact30` (spawn → cano → ponto → card);
-  - `origensFull` (todos os marcos);
-  - `jumpArc` (pulos parados, para medir apex e tempo);
-  - `skid` (inversões);
-  - `latency` (ação injetada → velocidade > 0, em passos fixos; **mede só a simulação**, ver 3.2);
-  - `platform`, `stamp`, `grind`, `secret` e `nav` (tarefas das Fases 1 e 2).
-- **Contact sheet:** `ffmpeg -i out.mp4 -vf "fps=4,scale=480:-1,tile=4x4" sheet_%02d.png`.
-- **Benchmark do Bruno** (T0.4): mesmo script em `https://bruno-simon.com/`, sem ghost (30 s de jogo manual pelo dono, ou entrada simulada simples), medindo transferência, tempo até a primeira entrada, fps e draw calls (se `#stats`). Isso ancora a rubrica com números, não com impressão. O dono também dá nota ao site do Bruno no **mesmo formulário** (T0.17), e essa nota é a âncora do 10.
-
-### 7.3 Rubrica nova (0–11 por dimensão)
-**10** = nível do bruno-simon.com medido na T0.4 (números + nota do dono no mesmo formulário). **11** = o superou de forma demonstrável.
-**11/10 global** = todas as dimensões ≥ 9, média ≥ 10, e **pelo menos 3 dimensões nomeadas em 11** com evidência.
-
-| # | Dimensão | Âncora 10 (evidência tipo Bruno) | Âncora 11 (superar) |
+#### Tabela de Coordenadas Propostas para a Fase 5 (`T5.1`)
+| Área | Novo Centro `(X, Z)` | Novo Respawn `(X, Z)` | Papel no fluxo de navegação |
 |---|---|---|---|
-| 1 | Primeiros 10 s | Controle em poucos segundos, primeiro contato físico divertido, loader com identidade | Controle ≤ 0.8 s após o reveal, primeiro deleite < 5 s, primeiro marco < 15 s (ghost `first10s`) |
-| 2 | Controle e física | Veículo com suspensão, derrapagem e capotagem, empurra tudo | Platformer com curva medida (apex 2.0 m ± 0.05, latência de simulação ≤ 1 passo), carimbo, grind, empurrões. 3 testadores dizem "gostoso" sem ser perguntados. |
-| 3 | Câmera | Segue sem enjoar, zoom e órbita | Yaw autoral por trecho, Y travado no ar, enquadramento de momentos e retrato próprio |
-| 4 | Direção de arte e coesão | Uma linguagem: paleta, bevel, sombra de contato, névoa | Idem + identidade da marca VOANEVES + cerrado reconhecível por brasileiro sem legenda |
-| 5 | Personagem | (O Bruno não tem personagem) carro com personalidade | Silhueta reconhecível do Victor, 18 clipes, expressões, cachecol-fita |
-| 6 | Level design e descoberta | Áreas temáticas, segredos, circuito | Cada era com ≥ 1 set piece + ≥ 1 segredo com pista + a Linha como guia |
-| 7 | Juice e som | Som em cada interação, variação, música | Idem + música por era em stems + a Linha como pauta musical |
-| 8 | História e clareza | Conteúdo em modais por área | **O mundo é a biografia.** O recrutador acha o contato < 30 s e lembra de ≥ 3 eras depois de 2 min (teste com 3 pessoas). |
-| 9 | Mobile | Joga com um dedo, nível de qualidade baixo | Retrato e paisagem com enquadramento próprio, um polegar, ≥ 55 fps médio no celular do dono, transferência até o controle ≤ 3.0 MB vs. a do Bruno medida |
-| 10 | Carregamento e performance | Carrega tudo de uma vez | Streaming por era. Desktop: até o controle ≤ 2.5 s (cabo). Celular: ≤ 6.5 s em "Fast 4G" (conta na 6.5). GPU ≤ 6 ms a 1440p no Q0. |
-| 11 | Acessibilidade | (Ausente no Bruno) | Paridade completa: teclado-only, leitor de tela (lista de marcos + live), movimento reduzido, axe 0 violações, alvos e contraste no gate |
-| 12 | Originalidade e IP | — | Auditoria com 0 arquivos do upstream, nenhum asset de terceiros sem licença registrada, nada da Nintendo, assinatura da marca |
+| `landing` | `(0, 42)` | `(0, 50)` olhando `-Z` | Entrada central ao Sul; nome `VICTOR NEVES` logo à frente; visão direta da bifurcação do anel |
+| `career` | `(24, 10)` | `(24, 22)` | Braço Leste do anel principal — conduz cronologicamente de Sul para Norte (`1994 → 2026`) |
+| `social` | `(0, -48)` | `(0, -36)` | Clímax ao Norte com vista aberta para o oceano; praça de contato e redes |
+| `lab` | `(-34, -22)` | `(-24, -20)` | Braço Noroeste do retorno — experimentos interativos & dados |
+| `projects` | `(-16, 14)` | `(-14, 22)` | Braço Oeste fechando o loop de volta ao `Landing` — galeria dos 6 projetos |
+| `circuit` | `(-48, 12)` | `(-44, 20)` | Península Oeste dedicada para corrida sem conflito espacial com áreas narrativas |
+| `bowling` | `(-32, 62)` | `(-20, 58)` | Bolsão Sudoeste — acesso rápido do spawn para diversão imediata |
+| `cookie` | `(28, 60)` | `(22, 56)` | Bolsão Sudeste — acesso rápido à direita do spawn |
+| `achievements` | `(58, 12)` | `(52, 20)` | Costa Leste — cachoeira desaguando diretamente no oceano turquesa |
+| `altar` | `(40, -18)` | `(36, -10)` | Ponta Nordeste entre `Career` e `BehindTheScene` |
+| `behindTheScene` | `(48, -56)` | `(42, -48)` | Mirante estrelado no extremo Nordeste |
+| `timeMachine` | `(-52, -62)` | `(-46, -56)` | Ilhota retrô a Noroeste acessível por faixa rasa de areia |
+| `toilet` | `(54, 48)` | `(50, 46)` | Cantinho escondido no Sudeste entre árvores |
 
-**Candidatas a 11:**
-- 8 História;
-- 11 Acessibilidade;
-- 9 Mobile (retrato + carga);
-- 5 Personagem (o Bruno não tem).
+**Regras de pintura do novo `terrain.png` (`512×512` RGBA):**
+- **Canal `R` (Lajes):** traçar o anel principal largo (`~7–9 m`) ligando `Landing → Career → Social → Lab → Projects → Landing` e ramais mais estreitos (`~4–5 m`) até cada mini-game.
+- **Canal `G` (Grama):** preencher os canteiros internos e bordas verdes com borda suave (`blur 2–3 px`), deixando `0` nas estradas, praias e sob pisos pavimentados (`Bowling`, `Circuit`, `Projects`, `Lab`).
+- **Canal `B` (Água/Profundidade):** moldar o recorte costeiro de ilha orgânica ao redor do raio útil (~78–86 m), com enseada rasa ligando a ilhota da `TimeMachine`, mantendo correspondência 1:1 com o heightfield de `terrain.glb`.
 
-Para declarar 11, é obrigatório ter **pelo menos 3** dessas com evidência.
+---
 
-### 7.4 Metas de performance e tamanho (gate automático `game/scripts/check-size.mjs` + `perf-gate.mjs`)
+## 5. Especificação Completa de Conteúdo (Bruno Simon → Victor Neves) e I18n
 
-| Métrica | Desktop (Q0, 2560×1440, RX 6750 XT) | Celular (Q1) |
+### 5.1 Arquitetura Bilíngue (`sources/data/i18n.js` + `sources/Game/I18n.js`)
+- **Idioma padrão:** `pt-BR`. Persistência em `localStorage.getItem('vn_lang')`.
+- **API mínima de `I18n.js`:**
+  - `this.lang` (`'pt-BR'` | `'en'`)
+  - `t(key, params)` retorna string traduzida com interpolação `{valor}`
+  - `applyToDOM()` percorre `[data-i18n]` (via `textContent`) e `[data-i18n-html]` (via `innerHTML`, apenas strings internas confiáveis)
+  - `toggle()` alterna `'pt-BR'` ↔ `'en'`, salva em `localStorage`, chama `applyToDOM()` e dispara `this.events.trigger('change', [ this.lang ])` para atualizar prompts de `InteractivePoints`, `Map.js` e `Achievements.js`.
+
+#### Tabela de Copy Principal (`PT-BR` e `EN`)
+| Chave `i18n` | Português (`pt-BR` — padrão) | Inglês (`en`) |
 |---|---|---|
-| fps | 60 travado, p99 ≤ 16.7 ms, tempo de GPU ≤ 6 ms | ≥ 55 médio, p95 ≤ 20 ms, 5 min sem cair abaixo de 45 (térmico) |
-| Draw calls | ≤ 250 | ≤ 120 |
-| Triângulos visíveis | ≤ 800 mil | ≤ 250 mil |
-| Memória | GPU ≤ 400 MB | GPU ≤ 180 MB, heap ≤ 150 MB |
-| JS principal (gz) | ≤ 420 KB (falha > 460) | idem |
-| Transferência até o controle | ≤ 3.0 MB (falha > 3.2 MB) | idem |
-| Por era (streaming) | ≤ 850 KB crítico + ≤ 350 KB de áudio depois | idem |
-| Página 2D | Lighthouse 100×4 (mobile), HTML ≤ 30 KB gz, boot ≤ 8 KB gz, nada do 3D no load | idem |
+| `home.title` | `Victor Neves` | `Victor Neves` |
+| `home.p1` | `Bem-vindo!` | `Welcome!` |
+| `home.p2` | `Sou <strong>Victor Neves</strong> — engenheiro, desenvolvedor e especialista em <strong>dados e transformação digital</strong>.` | `I'm <strong>Victor Neves</strong> — engineer, developer and specialist in <strong>data & digital transformation</strong>.` |
+| `home.p3` | `Dirija pela ilha para explorar minha linha do tempo, projetos open-source, experimentos e mini-games.` | `Drive around the island to explore my timeline, open-source projects, experiments and mini-games.` |
+| `home.p4` | `E fique à vontade para derrubar algumas coisas pelo caminho!` | `And feel free to knock a few things over along the way!` |
+| `options.title` | `Opções` | `Options` |
+| `options.language` | `Idioma` | `Language` |
+| `options.audio` | `Áudio` | `Audio` |
+| `options.quality` | `Qualidade` | `Quality` |
+| `options.quality.high` | `Alta` | `High` |
+| `options.quality.low` | `Baixa` | `Low` |
+| `options.stuck` | `Atolou?` | `I'm stuck!` |
+| `options.respawn` | `Reposicionar` | `Respawn` |
+| `options.reset` | `Resetar mundo` | `Reset world` |
+| `options.renderer` | `Renderizador` | `Renderer` |
+| `contact.title` | `Vamos conversar` | `Let's talk` |
+| `contact.lead` | `Quer tirar uma ideia do papel, melhorar um processo ou falar de dados e transformação digital?` | `Want to bring an idea to life, improve a process, or talk about data and digital transformation?` |
+| `contact.direct.title` | `Contato direto` | `Direct contact` |
+| `contact.direct.cta` | `Falar com Victor` | `Message Victor` |
+| `contact.social.title` | `Redes e código` | `Socials & code` |
+| `circuit.standalone` | `Modo local · Top 5 salvo neste navegador` | `Local mode · Top 5 saved in this browser` |
+| `circuit.noScore` | `Nenhum tempo registrado ainda` | `No lap time recorded yet` |
+| `circuit.restart` | `Reiniciar` | `Restart` |
+| `circuit.end` | `Encerrar` | `End` |
+| `circuit.controls` | `Controles` | `Controls` |
+| `prompt.map` | `Mapa` | `Map` |
+| `prompt.controls` | `Controles` | `Controls` |
+| `prompt.reset` | `Resetar` | `Res(e)t` |
+| `prompt.projects` | `Projetos` | `Projects` |
+| `prompt.lab` | `Lab & Dados` | `Lab & Data` |
+| `prompt.cookie` | `Aceitar cookie` | `Accept cookie` |
+| `prompt.circuit` | `Iniciar corrida` | `Start race` |
+| `prompt.behindTheScene` | `Bastidores` | `Behind the scene` |
+| `prompt.achievements` | `Conquistas` | `Achievements` |
+| `prompt.timeMachine` | `Versão 2D · 2005` | `2D Archive · 2005` |
 
-### 7.5 Gate mobile (dentro da fatia)
-1. **Proxy na máquina** (alerta precoce, **não é gate**):
-   - emulação 390×844 e 844×390, DPR 3 com teto 2, `?q=1&webgl`, CPU 4×;
-   - mede main thread ≤ 8 ms/frame (trace CDP), draw calls ≤ 120, tris ≤ 250 mil, memória de texturas e geometria ≤ 180 MB (`renderer.info`), número de passes e pixels sombreados (resolução efetiva × passes).
-   - O throttle da CDP **não** reduz a GPU, então nenhum número de GPU do desktop é critério para o celular. A antiga meta "GPU ≤ 2.5 ms na RX 6750 XT" saiu do plano.
-2. **Celular real (o gate):**
-   - backend WebGL2 (padrão D17);
-   - Android: trace de 20 s via `chrome://inspect` + log de 5 min da HUD `?debug`;
-   - **gravação como evidência:** `adb shell screenrecord --bit-rate 8000000 --time-limit 180 /sdcard/run.mp4` (USB) ou a gravação de tela do próprio aparelho do dono;
-   - iPhone: Safari Web Inspector + gravação de tela do iOS;
-   - tempo de GPU no celular: `EXT_disjoint_timer_query_webgl2` se exposta; senão, só fps e frame time (registrado assim).
-3. **Critérios:**
-   - ≥ 55 fps médio, p95 ≤ 20 ms e 5 min sem cair abaixo de 45;
-   - carga ≤ 6.5 s, com a rede real do dono anotada;
-   - checklist subjetiva do dono: um polegar, retrato legível, calor, bateria.
+### 5.2 Carreira / Timeline (`CareerArea.js` + `scripts/generate-career-textures.mjs`)
 
-### 7.6 Checkpoints do dono (gates humanos)
+#### Mapeamento dos 6 Blocos
+| Slot `areas.glb` | Arquivo em `static/career/` | Dimensão exata | Cor | Linha 1 (Título) | Linha 2 (Subtítulo / Período) |
+|---|---|---|---|---|---|
+| `refLine` | `careerHetic.png` | `316 × 60` | `blue` | `ORIGENS · ARAGUAÍNA/TO` | `1994–2011 · Blog Ponto Interativo` |
+| `refLine.001` | `careerUzik.png` | `168 × 60` | `orange` | `UNICAMP` | `2012–2016 · ONGs · IC · Jr. MTE` |
+| `refLine.002` | `careerImmersiveGarden.png` | `340 × 60` | `orange` | `COCA-COLA FEMSA & KRONES` | `2017–2019 · Alemanha · Trainee` |
+| `refLine.005` | `careerIRLTeacher.png` | `268 × 92` | `purple` | `DAMÁSIO & DADOS` | `2019–2021 · IBM Data Science` |
+| `refLine.003` | `careerOnlineTeacher.png` | `332 × 92` | `purple` | `APPS, WEB & SEBRAE` | `2022–2024 · ALI · Casamento` |
+| `refLine.004` | `careerFreelancer.png` | `240 × 60` | `green` | `TRANSFORMAÇÃO DIGITAL` | `2022–HOJE · Produtos & Open Source` |
 
-Todos usam o formulário `T:docs\RUBRIC-FORM.md` (T0.17), o mesmo que o dono usou para o site do Bruno na T0.4.
+#### Especificação do Gerador `game/scripts/generate-career-textures.mjs`
+Para garantir 100% de compatibilidade com o shader TSL de `CareerArea.js` (linhas 112–121) sem depender de Photoshop:
+1. Recebe o array com os 6 registros (arquivo, largura `W`, altura `H`, linha 1, linha 2).
+2. Monta um SVG exatamente em `W × H` com fundo `#000000`:
+   - Primeiro renderiza o texto com `stroke="#00ff00"` (`stroke-width` proporcional à altura, `stroke-linejoin="round"`) e `fill="#00ff00"` — isso popula o **canal `G`** (contorno/sombra `#251f2b`).
+   - Por cima, renderiza o mesmo texto com `fill="#ff0000"` (`stroke="none"`) — isso popula o **canal `R`** (texto emissivo brilhante na cor da faixa).
+3. Converte cada SVG para PNG RGBA via `sharp(Buffer.from(svg)).png().toFile(...)` direto em `game/static/career/<arquivo>.png`.
+4. **Atenção ao `flipY = false`:** `Game.js` l. 166–171 carrega as texturas de carreira com `resource.flipY = false`. Verificar na primeira execução se o texto fica na orientação correta; se aparecer invertido verticalmente, adicionar `.flip()` no `sharp` dentro do gerador!
 
-| Gate | Quando | O que o dono faz | Passa se |
-|---|---|---|---|
-| G0 | Fim da Fase 0 | Vê o vídeo e dá notas ao site do Bruno; vê o motor vazio no preview | Ferramentas OK, sem objeção |
-| **G1** | Fim da Fase 1 | Joga as duas variantes no preview, no desktop e no celular, com WebGPU e WebGL2 | Decide D1, D12 e D17. Controle ≥ 8 no formulário, mesmo em greybox. |
-| GA | Antes da T2.5a | Escolhe 1 de 3 silhuetas e aprova o turnaround | Folha de referência aprovada |
-| GB | Depois da T2.8d | Aprova modelo e animação pelo turntable | Aprovado (senão, mais iteração) |
-| GC | Depois da T2.13d | Dá notas sobre os hero assets (rodada 1) | As notas viram T2.IT3/IT4 |
-| **G2** | Fim da Fase 2 | Joga a fatia no desktop e no celular real | **Todas as dimensões aplicáveis à fatia ≥ 9 e média ≥ 10.** Música fora da nota se D4 não tiver sido decidida. Resposta "não lembra reskin" na T2.32. |
-| G3 | Depois de UNICAMP + Indústria | Joga as duas eras novas | A mesma régua do G2 |
-| G4 | Pré-lançamento | Joga tudo no preview | Aprova `START_TARGET = './play/'` |
+#### Curva do Display de Anos 7-Segmentos (`CareerArea.js` l. 368)
+Em vez de `2008 + Math.floor(offsetTarget)`, usar uma tabela de marcos reais indexada pela fração `t = clamp(this.year.offsetTarget / this.year.size, 0, 1)`:
+```js
+const yearTimeline = [1994, 2005, 2011, 2012, 2014, 2017, 2018, 2019, 2021, 2022, 2023, 2024, 2025, 2026]
+const idx = Math.min(yearTimeline.length - 1, Math.floor(t * yearTimeline.length))
+const yearCurrent = yearTimeline[idx]
+```
+Assim, dirigir pelo corredor percorre de `1994` (nascimento) até `2026` (presente), sincronizado com os 6 blocos!
+
+### 5.3 Projetos (`sources/data/projects.js` — 6 Projetos Reais)
+Cada projeto tem 2–3 imagens `960 × 540` em `static/projects/images/` (capturadas diretamente dos demos publicados em `voaneves.github.io/<repo>` ou geradas em alta nitidez com cards visuais dos dashboards/ferramentas):
+
+```js
+export default [
+    {
+        title: 'dtcg-contrast',
+        titleSmall: [ 'dtcg', 'contrast' ],
+        url: 'https://voaneves.github.io/dtcg-contrast/',
+        attributes: {
+            role: [ 'Creator', 'JavaScript' ],
+            at: 'Open Source',
+            with: [ 'WCAG · APCA', 'OKLCH Tokens' ]
+        },
+        distinctions: [],
+        images: [ 'dtcg-contrast-1', 'dtcg-contrast-2', 'dtcg-contrast-3' ]
+    },
+    {
+        title: 'snake-arena',
+        titleSmall: [ 'snake', 'arena' ],
+        url: 'https://voaneves.github.io/snake-arena/',
+        attributes: {
+            role: [ 'Python', 'PyTorch · DQN' ],
+            at: 'RL Benchmark',
+            with: [ 'Reinforcement', 'Learning' ]
+        },
+        distinctions: [],
+        images: [ 'snake-arena-1', 'snake-arena-2', 'snake-arena-3' ]
+    },
+    {
+        title: 'Meu Poupig',
+        titleSmall: [ 'Meu', 'Poupig' ],
+        url: 'https://voaneves.github.io/meupoupig/',
+        attributes: {
+            role: [ 'HTML · CSS', 'JavaScript' ],
+            at: 'EdTech Game',
+            with: [ 'Educação', 'Financeira' ]
+        },
+        distinctions: [],
+        images: [ 'meu-poupig-1', 'meu-poupig-2', 'meu-poupig-3' ]
+    },
+    {
+        title: 'js-games',
+        titleSmall: [ 'js', 'games' ],
+        url: 'https://voaneves.github.io/js-games/',
+        attributes: {
+            role: [ 'Vanilla JS', 'PWA' ],
+            at: 'Open Source',
+            with: [ '4 Jogos Clássicos', 'Zero Frameworks' ]
+        },
+        distinctions: [],
+        images: [ 'js-games-1', 'js-games-2', 'js-games-3' ]
+    },
+    {
+        title: 'xbox-sales',
+        titleSmall: [ 'xbox', 'sales' ],
+        url: 'https://voaneves.github.io/xbox-sales/',
+        attributes: {
+            role: [ 'Excel', 'VBA' ],
+            at: 'Dashboard BI',
+            with: [ 'CSV em 1 Clique' ]
+        },
+        distinctions: [],
+        images: [ 'xbox-sales-1', 'xbox-sales-2' ]
+    },
+    {
+        title: 'Financial Sample',
+        titleSmall: [ 'Financial', 'Analysis' ],
+        url: 'https://voaneves.github.io/financial_sample_analysis/',
+        attributes: {
+            role: [ 'Power BI', 'Data Analysis' ],
+            at: 'Analytics',
+            with: [ 'Dataset Microsoft' ]
+        },
+        distinctions: [],
+        images: [ 'financial-sample-1', 'financial-sample-2' ]
+    }
+]
+```
+*(Note o uso de nomes-base sem extensão `.ktx`/`.png`: `ProjectsArea.js` anexa `.${ext}` automaticamente conforme `VITE_COMPRESSED`!)*
+
+### 5.4 Lab & Experimentos (`sources/data/lab.js` — 6 Itens Reais)
+Cada item usa `image` (`960 × 540`) e `imageMini` (`240 × 136`) sem extensão fixa:
+1. `DTCG Contrast · OKLCH` → `https://voaneves.github.io/dtcg-contrast/` (`lab-dtcg`, `lab-dtcg-mini`)
+2. `Snake Arena · DQN` → `https://voaneves.github.io/snake-arena/` (`lab-snake-dqn`, `lab-snake-dqn-mini`)
+3. `JS Games · PWA` → `https://voaneves.github.io/js-games/` (`lab-js-games`, `lab-js-games-mini`)
+4. `Meu Poupig · Finanças` → `https://voaneves.github.io/meupoupig/` (`lab-poupig`, `lab-poupig-mini`)
+5. `Timeline 2D Acessível` → `https://voaneves.github.io/timeline/#carreira` (`lab-timeline-2d`, `lab-timeline-2d-mini`)
+6. `Código Aberto · GitHub` → `https://github.com/voaneves` (`lab-github`, `lab-github-mini`)
+
+### 5.5 Social & Contato (`sources/data/social.js` + Modal `contact`)
+```js
+export default [
+    { name: 'Contato', modal: 'contact', align: 'right' },
+    { name: 'Site', url: 'https://voaneves.com/#contato', align: 'right' },
+    { name: 'GitHub', url: 'https://github.com/voaneves', align: 'right' },
+    { name: 'LinkedIn', url: 'https://linkedin.com/in/voaneves', align: 'right' },
+    { name: 'YouTube', url: 'https://youtube.com/c/voaneves', align: 'left' },
+    { name: 'Timeline 2D', url: 'https://voaneves.github.io/timeline/', align: 'left' },
+]
+```
+- **Modal `contact` (substitui `discord` em `sources/index.html`):**
+  - Título: **Vamos conversar** (`Let's talk`)
+  - Bloco 1 — **Contato direto:** *"Quer tirar uma ideia do papel, melhorar um processo ou falar de dados e transformação digital?"* → botão `Falar com Victor` (`https://voaneves.com/#contato`).
+  - Bloco 2 — **Redes & Código:** *"Acompanhe projetos abertos, estudos de dados e trajetória profissional."* → botões `LinkedIn` (`https://linkedin.com/in/voaneves`) e `GitHub` (`https://github.com/voaneves`).
+
+### 5.6 Conquistas (`sources/data/achievements.js` — 35 Conquistas Offline-First)
+Todas calibradas para funcionar 100% sem servidor (`areas = 12`, `whisper` omitida no modo standalone, `circuitLeaderboard` ligada ao Top 5 local, `cataclysm` disparado a cada 5 entradas no Portal):
+
+| # | Grupo | Título PT-BR | Descrição PT-BR | Meta | Único |
+|---|---|---|---|---|---|
+| 1 | `landingLeave` | Pé na estrada! | Saia da área inicial. | `1` | — |
+| 2 | `areas` | Explorador da Ilha | Visite todas as **12** áreas da ilha. | `12` | `true` |
+| 3 | `projects` | Portfólio Completo | Veja todos os projetos na área **Projetos**. | `projectsData.length` | `true` |
+| 4 | `lab` | Cientista de Dados | Veja todos os itens na área **Lab & Dados**. | `labData.length` | `true` |
+| 5 | `cookie` | Primeiro Cookie | Aceite **1** cookie. | `1` | — |
+| 6 | `cookie` | Massa Pronta | Aceite **10** cookies. | `10` | — |
+| 7 | `cookie` | Fornada Cheia | Aceite **100** cookies. | `100` | — |
+| 8 | `cookie` | Mestre dos Cookies | Aceite **1000** cookies. | `1000` | — |
+| 9 | `sea` | Mergulho Costeiro | Entre no mar. | `1` | — |
+| 10 | `upsideDown` | Tartaruga | Capote o carro de cabeça para baixo. | `1` | — |
+| 11 | `frontFlip` | Mortal de Frente | Faça um front flip e caia nas 4 rodas. | `1` | — |
+| 12 | `backFlip` | Salto de Fé | Faça um back flip e caia nas 4 rodas. | `1` | — |
+| 13 | `suspensions` | Lowrider | Use a suspensão hidráulica do carro. | `4` | — |
+| 14 | `honk` | Bi-bi! | Buzine 10 vezes pela ilha. | `10` | — |
+| 15 | `explosiveCrates` | Demolição Total | Exploda todos os caixotes explosivos. | `20` | `true` |
+| 16 | `goHigh` | Rumo às Nuvens | Alcance **15 metros** de altura. | `15` | — |
+| 17 | `strike` | Strike Perfeito! | Faça um strike no boliche. | `1` | — |
+| 18 | `toiletDown` | Não Perturbe | Derrube a cabine escondida. | `1` | — |
+| 19 | `circuitFinish` | Bandeira Quadriculada | Complete uma volta no Circuito. | `1` | — |
+| 20 | `circuitFinishFast` | Piloto de Ouro | Complete o Circuito em menos de **28s**. | `1` | — |
+| 21 | `circuitLeaderboard` | Novo Recorde! | Registre seu tempo no Top 5 local. | `1` | — |
+| 22 | `fullDay` | Do Amanhecer à Noite | Passe um ciclo completo de dia na ilha. | `1` | — |
+| 23 | `distanceDriven` | Primeira Volta | Dirija **1 km**. | `1` | — |
+| 24 | `distanceDriven` | Roadtrip | Dirija **10 km**. | `10` | — |
+| 25 | `distanceDriven` | Volta ao Mundo | Dirija **100 km**. | `100` | — |
+| 26 | `sacrifice` | Oferenda ao Vórtice | Entre no feixe do Portal do Caos. | `1` | — |
+| 27 | `cataclysm` | Testemunha do Caos | Presencie um cataclismo (5 entradas no Portal). | `1` | — |
+| 28 | `weatherSnow` | Dia de Neve | Presencie neve na ilha. | `1` | — |
+| 29 | `weatherRain` | Chuva na Estrada | Presencie chuva na ilha. | `1` | — |
+| 30 | `lightning` | 1.21 Gigawatts! | Seja atingido por um raio. | `1` | — |
+| 31 | `waterfall` | Instinto Gamer | O que você esperava atrás da cachoeira? Um tesouro? | `1` | — |
+| 32 | `fan` | Fã Número 1 | Invoque um ventilador na área Social. | `1` | — |
+| 33 | `reset` | Tudo no Lugar | Resete todos os objetos do mundo. | `1` | — |
+| 34 | `statueDown` | Revolução! | Derrube o monumento na área Social. | `1` | — |
+| 35 | `konami` | Cima, Cima, Baixo, Baixo… | Você conhece o resto. | `1` | — |
+| 36 | `debug` | Modo Engenheiro | Acesse o painel `#debug`. | `1` | — |
+| 37 | `hacker` | Hacker | Esta conquista não pode ser alcançada. | `1` | — |
+
+*(Nota: são 37 entradas no array de conquistas — 36 alcançáveis + 1 brincadeira `hacker`, exatamente no mesmo ritmo e estrutura do motor, todas traduzidas em `i18n.js`!)*
+
+### 5.7 Bastidores (`behindTheScene-content`) e `sources/data/consoleLog.js`
+- **Bastidores (HTML):**
+  - **Sobre esta experiência:** portfólio e linha do tempo interativa de Victor Neves (`github.com/voaneves/timeline`), com versão 2D acessível sempre disponível.
+  - **Stack Técnica:** Three.js (`THREE.REVISION`) + WebGPU / TSL (mr.doob, Sunag e comunidade), física Rapier3D, áudio Howler.js, animações GSAP e build Vite.
+  - **Base Open-Source & Créditos:** construído sobre o motor aberto `folio-2025` de Bruno Simon sob licença **MIT** (`github.com/brunosimon/folio-2025`). Músicas ambiente criadas por **Kounine** sob licença **CC0**.
+  - **Modo Debug:** adicione `#debug` ao final da URL e pressione `[V]` para câmera livre.
+- **`consoleLog.js`:**
+  - Substituir ASCII `BRUNO'S PORTFOLIO` por `VICTOR NEVES · TIMELINE`.
+  - Trocar cor dos pipes de `#D66FFF` (roxo) para `#2AD4D9` (turquesa-costeiro).
+  - Listar apenas links reais de Victor Neves + bloco de créditos MIT (`folio-2025`) e CC0 (`Kounine`).
 
 ---
 
-## 8. Roadmap
+## 6. Pipeline de Assets (`.glb` / `.ktx` / `.png` / `compress.js`) e Convenções Blender
 
-### 8.0 Regras para todas as tarefas
-- **Uma tarefa = um entregável = um critério de aceite**, uma sessão de agente de ≤ 30 min, com relatório curto no fim. Se passar de ~30 min ou a hipótese não se confirmar, **parar e reportar**. Fases da mesma tarefa continuam no mesmo agente via `SendMessage`.
-- **Fechamento de toda fase (decisão do dono, 2026-11-20):** cada fase termina com **duas passadas separadas**, nesta ordem: (1) **Revisão** (R): correção, qualidade e critérios de aceite da fase; (2) **Adversarial** (R, papel de atacante): tentar **quebrar** o que foi entregue (build/gates, determinismo do ghost, perf e travadas, a11y, originalidade/assets do upstream, cache/hash e preview, segurança da cadeia de dependências, entradas extremas, mobile/WebGL2). Os achados viram tarefas de correção; a fase só fecha com **nenhum achado Alto aberto** nas duas passadas. Ids: `T<n>.R` (revisão) e `T<n>.ADV` (adversarial).
-- **Evidência de gate vem só de ghost runs** (T0.16), gravadas pela T0.8. Validação com teto: 1 build, 1 ghost gravado (≤ 60 s), 1 execução de cada gate e repetição de testes ≤ 10.
-- **Toda tarefa que toca arquivos da raiz** (`T:index.html`, `T:src\**`, `T:assets\**`, `T:worker.js`, `T:tokens\**`, `T:dtcg-contrast.config.json`, `T:scripts\**`) tem aceite extra fixo: `npm run check` verde, `npm run contrast` verde e **1 run de Lighthouse mobile = 100×4**.
-- Executores preparam localmente. **Commit e push só pela sessão principal**, com autorização do dono: uma mensagem Conventional Commits por tarefa, sem atribuição de ferramenta e sem `Co-Authored-By`.
-- **Binários** (`.glb`, `.png`, `.webp`, `.mp3`) só entram no `main` nos marcos de gate (G1, G2, G3, G4). Entre gates, os previews são publicados pelo canal da 6.1 (sem histórico).
-- **Buffer de retrabalho:** +35% sobre a soma das tarefas em cada fase. As durações de calendário abaixo já incluem esse buffer e a espera pelos gates do dono.
-- Papéis:
-  - E = executor (esforço médio; **E+** = esforço alto);
-  - A = auxiliar (só leitura);
-  - R = revisor (só leitura);
-  - dono = o Victor.
-- ∥ marca o que roda em paralelo, sempre em arquivos diferentes.
+### 6.1 Fluxo em 3 Camadas (Do Zero-Risco ao Blender)
+```text
+[Camada 1: Código + Shaders TSL + Dados]   --> preview imediato via `npm run dev`
+         |
+         v
+[Camada 2: Texturas 2D (.png via scripts)] --> preview imediato com VITE_COMPRESSED=""
+         |
+         v
+[Camada 3: Blender (timeline-world.blend)] --> export .glb sem compressão -> verify-glb.mjs -> preview
+         |
+         v
+[Produção: `npm run compress` (Draco + KTX2 + WebP)] --> `VITE_COMPRESSED=1 npm run build`
+```
 
-Caminhos:
-- `T:` = `D:\GitHub\_kit-clones\timeline\`;
-- `G:` = `T:game\`;
-- `U:` = clone de leitura durável `D:\GitHub\_vendor\folio-2025\` no commit `70764a9` (criado na T0.3, fora do repo servido);
-- `PV:` = repo de preview (6.1).
+### 6.2 Especificação da Reforma de `game/scripts/compress.js` (`T0.3`)
+Reescrever `scripts/compress.js` mantendo exatamente os mesmos formatos de saída (`-compressed.glb`, `.ktx`, `.webp`) porém robusto no Windows:
+1. **Resolução de binários:**
+   - `gltf-transform`: resolver via `path.resolve('node_modules/.bin/gltf-transform' + (process.platform === 'win32' ? '.cmd' : ''))` (zero dependência global!).
+   - `toktx`: verificar disponibilidade com `spawnSync('toktx', ['--version'])`; se ausente, imprimir instrução objetiva (`winget` / GitHub `KhronosGroup/KTX-Software`) e pular apenas a geração `.ktx`, concluindo Draco e WebP normalmente.
+2. **Normalização de caminhos:** converter `const normalized = inputFile.replaceAll('\\', '/')` antes de testar os regexes de presets (`palette.png`, `terrain/terrain.png`, `career/*.png`, `areas/satanStar.png`, `intro/*.png`, etc.) — evita corromper `palette.ktx` e `terrain.ktx` no Windows!
+3. **Fila de concorrência (`MAX_CONCURRENCY = 4`):** substituir disparos paralelos ilimitados por um worker pool assíncrono simples com resumo final (`OK / Skipped / Failed`).
+4. **Escopo seletivo por CLI:** `node scripts/compress.js static/projects` comprime apenas a pasta passada, mantendo `npm run compress` (`static/`) para compressão completa.
+5. **Preservação dos parâmetros Draco e KTX2:**
+   - GLB: `etc1s --quality 255` seguido de `draco --method edgebreaker --quantization-volume mesh --quantize-position 12 --quantize-normal 6 --quantize-texcoord 6 --quantize-color 2 --quantize-generic 2`.
+   - `palette.png`: `--nowarn --2d --t2 --encode uastc --genmipmap --assign_oetf srgb --target_type RGB`.
+   - `terrain/terrain.png`: `--nowarn --2d --t2 --encode uastc --genmipmap --assign_oetf linear --target_type RGB`.
+   - `career/*.png`: `--nowarn --2d --t2 --encode uastc --assign_oetf srgb --target_type RG`.
+   - `ui/**/*.{png,jpg}`: `sharp(input).webp({ quality: 80 })`.
 
-### Fase 0: Ferramentas e base do motor (≈ 2–3 dias de calendário)
+### 6.3 Script Validador de Contrato `.glb` (`game/scripts/verify-glb.mjs` — `T4.0`)
+Antes de aceitar qualquer exportação do Blender nas Fases 4 e 5, rodar `node scripts/verify-glb.mjs` que lê o JSON embutido em `static/areas/areas.glb` e `static/respawns/respawnsReferences.glb` e verifica automaticamente:
+1. Todos os 12 grupos de área ativos existem (`landing`, `career`, `projects`, `lab`, `social`, `timeMachine`, `behindTheScene`, `achievements`, `circuit`, `bowling`, `cookie`, `altar`, `toilet` — 13 nós).
+2. Todos os `ref*` críticos de cada área continuam presentes (ex.: `refLettersPhysicalDynamic*`, `refLine*` ×6, `refYear`, `refImages`, `refCheckpoints.000..007`, `refPinPositions`, `refStart`, `refCenter`, `refZoneBounding*`, `refZoneFrustum*`).
+3. Nenhum nó proibido do Bruno restou após a Fase 4 (`baguira*`, `sudo*`, `boy*`).
+4. Todos os `respawn*` referenciados por `Map.js` existem em `respawnsReferences.glb`.
+5. O material `palette` está presente e sem textura base64 gigante embutida por engano.
 
-| ID | Entregável | Papel | Dur. | Deps | Arquivos | Passos | Aceite (único) | Validação |
-|---|---|---|---|---|---|---|---|---|
-| T0.1 | Blender instalado e testado | E | 15 min | — | `G:blender\smoke.py` | `winget install BlenderFoundation.Blender`; script cubo + bevel → `smoke.glb` | Blender **≥ 5.0** responde a `-b --version` (a versão exata fica registrada em `G:NOTICE.md`) e gera um glb válido | 1 execução |
-| T0.2 | ffmpeg instalado | E | 10 min | — | — | `winget install Gyan.FFmpeg`; gravação de 3 s com `ddagrab` + `h264_amf` | `ffprobe` mostra mp4 de 60 fps (fallback `libx264` registrado se não houver AMF) | 1 gravação |
-| T0.3 | Clone durável + inventário do motor | E (5 min) + A (25 min) | 30 min | — | `U:` | E: `git clone … D:\GitHub\_vendor\folio-2025 && git -C … checkout 70764a9`. A: imports, importadores, `game.server`, `resources.*` e `static/` de cada arquivo de `U:sources\Game\**`. | Relatório que confirma ou corrige a tabela 6.3 com o fecho mínimo "motor vazio" | — (leitura) |
-| T0.4 | Âncora: benchmark do bruno-simon.com + nota do dono no **mesmo formulário** | E + dono | 25 min | T0.8, T0.17 | `G:tools\capture\baseline\bruno\` (gitignored), `T:docs\BASELINE.md` | `record.mjs` nos perfis desktop e mobile (30 s cada, jogo manual); o dono preenche `RUBRIC-FORM.md` para o Bruno | `BASELINE.md` com transferência, tempo até a 1ª entrada, fps médio/p95, draw calls e **as notas do dono por dimensão** | 1 run por perfil |
-| T0.5 | Scaffold do `game/` | E | 30 min | T0.3 | `G:package.json`, lock, `G:vite.config.js`, `G:sources\**` (só K/A da 6.3), `G:scripts\compress.mjs`, `T:LICENSES.md`, `G:NOTICE.md` | Copiar **só código**; cabeçalho MIT por arquivo; pins exatos ≥ 7 dias; **`npm ci --ignore-scripts`**; listar pacotes com binário nativo ou `postinstall` (rolldown/esbuild e afins) e revisar cada um; `npm audit signatures` | `npm run build` conclui com o mundo vazio e **nenhum** arquivo de `U:static`/`U:resources` existe em `G:` | 1 build |
-| T0.6 | Motor vazio rodando | E | 30 min | T0.5 | `G:sources\Game\Game.js` e os removidos da 6.3 | Remover Server, Whispers, BlackFriday, Easter, Konami, gtag, Tornado, Weather, YearCycles e Areas; chão + cubo dinâmico | `vite preview` a ≥ 60 fps sem erro, em WebGPU e `?webgl` | 1 abertura por backend |
-| T0.7 | Rapier 0.21 validado | E | 20 min | T0.6 | `G:package.json`, `G:sources\Game\Physics\*` | `createVehicleController` e `createCharacterController` por 10 s em `?debug=physics` | Os dois simulam sem erro (ou exceção de versão registrada em `NOTICE.md`) | 1 run |
-| T0.8 | Ferramenta de gravação | E | 30 min | T0.2 | `G:tools\capture\record.mjs`, `sheet.mjs` | Playwright headed + flags da 7.2 + ffmpeg + `window.__perf` + perfis | `record.mjs --profile desktop --seconds 10` gera mp4 60 fps + `metrics.json` + 1 contact sheet | 1 run por perfil |
-| T0.9 | Perf HUD + `?debug` preguiçoso | E | 25 min | T0.6 | `G:sources\Game\Debug.js`, `PerfProbe.js` | `window.__perf`; Tweakpane só em `import()` | O bundle sem `?debug` não contém "tweakpane" | 1 build + grep |
-| T0.10 | Bypass do SW para `play/` e binários | E + R | 15 + 10 min | — | `T:worker.js`, `T:worker.min.js` | `/play/`, `/next/` e as extensões `glb`, `png`, `webp`, `wasm`, `mp3` e `json` do jogo fora do SW; `VERSION v8` | Requisições de `play/` não entram em `caches` **+ aceite fixo da raiz** (check, contrast, Lighthouse 100×4) | 1 teste Playwright + 1 Lighthouse |
-| T0.11 | Canal de preview sem inchaço | E | 30 min | T0.6, T0.15 | `G:scripts\publish-preview.mjs`, `PV:` | Build → pasta temporária → commit órfão único → `git push --force` no repo de preview (6.1) | URL de preview abre o motor vazio, com `noindex`, e o `Content-Encoding` de `.js/.wasm/.glb/.png` fica registrado em `NOTICE.md` | 1 publicação + 1 curl por tipo |
-| T0.12 | `content.json` + teste de paridade | E | 25 min | T0.5 | `G:scripts\extract-content.mjs`, `G:tests\content-parity.test.mjs` | `linkedom` lê `T:index.html` | `node --test` passa com 5 eras, 15 entradas, 6 projetos e contato, e falha se o DOM divergir | 1 `node --test` |
-| T0.13 | Auditoria de originalidade (script + manifesto) | E | 25 min | T0.3, T0.5 | `G:scripts\audit-originality.mjs`, `G:scripts\upstream-hashes.json` | Manifesto de sha256 do upstream (só hashes); comparação; grep de strings; allowlist `three/examples/jsm/libs/**` | Sai 0 hoje e sai 1 com um arquivo do upstream plantado num teste | 2 runs |
-| T0.14 | Gate de tamanho e perf | E | 20 min | T0.9 | `G:scripts\check-size.mjs`, `perf-gate.mjs`, `G:budgets.json` | Orçamentos da 6.5 e da 7.4 | `npm run gate` falha com um orçamento artificialmente baixo | 2 runs |
-| T0.15 | Nomes com hash + manifesto de assets | E | 30 min | T0.5 | `G:scripts\hash-assets.mjs`, `G:sources\Game\ResourcesLoader.js` | Copia `static/**` para `assets/<nome>.<hash8>.<ext>`; gera `asset-manifest.<buildId>.json`; o loader só pede pelo manifesto; o `buildId` vem embutido no JS (que já tem hash do Vite) | Trocar um glb muda o nome dele e o manifesto, e o JS antigo continua resolvendo os assets antigos (teste com 2 builds lado a lado) | 1 teste |
-| T0.16 | Ghost: gravador e reprodutor | E+ | 30 min | T0.6, T0.9 | `G:sources\Game\Ghost.js`, `G:tools\capture\ghosts\` | `?ghost=rec` grava `[{t, action, value}]` no **passo fixo** (1/120 s) a partir do mapa de ações de `Inputs`; `?ghost=<nome>` injeta no mesmo ponto (não em eventos DOM), com semente fixa de RNG | Reproduzir o mesmo ghost 3× dá posição final idêntica (±1 mm) | 3 runs |
-| T0.17 | Formulário de rubrica | E | 15 min | — | `T:docs\RUBRIC-FORM.md` | Uma linha por dimensão da 7.3, escala 0–11, campo de comentário, aparelho e data | O formulário cobre as 12 dimensões e é usado na T0.4 e em todo gate | revisão de 1 leitura |
-| T0.18 | Revisão da Fase 0 | R | 20 min | T0.5–T0.17 | — | Licenças, pins, binários nativos, SW, preview, auditoria | Nenhum achado "alto" aberto | — |
+### 6.4 Procedimento Operacional no Blender (Fases 4 e 5)
+1. Copiar `game/resources/folio-2025.blend` → `game/resources/timeline-world.blend` (nunca sobrescrever o original).
+2. Antes de qualquer exportação `.glb`:
+   - Conferir escala aplicada (`Ctrl+A → Scale`) nos objetos novos ou editados.
+   - Conferir pivô e hierarquia dentro da coleção correta da área (`landing`, `social`, `circuit`, etc.).
+   - No Shader Editor do material `palette`, **mutar (`M`)** o nó `Image Texture` da paleta (o Three.js injeta `paletteTexture` em runtime).
+   - Exportar em `File → Export → glTF 2.0 (.glb)` com **Custom Properties ativado** (`Include → Data → Custom Properties`), **Compression (Draco) DESMARCADO**, **+Y Up ativado**.
+3. Rodar `node scripts/verify-glb.mjs` → abrir `npm run dev` → testar colisões e visual em Dia/Noite.
 
-**Gate G0** (dono, assíncrono): vê o vídeo e as notas do benchmark do Bruno e o motor vazio no preview.
+---
 
-Paralelismo da Fase 0:
-- (T0.1 ∥ T0.2 ∥ T0.3 ∥ T0.10 ∥ T0.17)
-- → T0.5 → (T0.6 ∥ T0.12 ∥ T0.13 ∥ T0.15)
-- → (T0.7 ∥ T0.8 ∥ T0.9)
-- → (T0.11 ∥ T0.14 ∥ T0.16) → T0.4 → T0.18
+## 7. Arquitetura Técnica, Performance e Integração com o Site Raiz
 
-**Total da Fase 0: 18 tarefas.**
+### 7.1 Orçamento de Performance e Peso
+| Métrica | Alvo Desktop (`Quality.level = 0`) | Alvo Mobile (`Quality.level = 1`) | Ferramenta de medição |
+|---|---|---|---|
+| Frame rate estável dirigindo | ≥ 60 fps | ≥ 30–60 fps | `#debug#stats` / DevTools Performance |
+| Draw calls por frame | ≤ 180 | ≤ 140 | `#debug#stats` (`renderer.info.render.drawCalls`) |
+| Shadow map | `2048 × 2048` | `512 × 512` | `Ligthing.js` l. 23 |
+| Pós-processamento | `cheapDOF` + `bloom` (5 mips) | `bloom` (2 mips), sem DOF | `Rendering.js` l. 82–99 |
+| Água | `hashBlur` (25 repeats) | Sem blur (`baseOutput`) | `WaterSurface.js` l. 330–343 |
+| Economia imediata de `dist/` | **−136 MB** ao mover `.wav` em `T0.1` | Idem | Tamanho de `game/dist/` |
+| Erros de console / HTTP 404 | **0** | **0** | DevTools Console + Network |
 
-### Fase 1: Spike de locomoção e gate G1 (≈ 3–4 dias de calendário)
+### 7.2 Estratégia de Integração com `D:\GitHub\_kit-clones\timeline` (Fase 6 — `T6.3`)
+- **Durante Fases 0 a 5:** o site raiz (`index.html`, `src/`, `assets/`) não sofre nenhuma alteração. Todo desenvolvimento acontece isolado em `game/` com preview em `npm run dev` / `npm run preview`.
+- **Na Fase 6 (somente após aprovação do dono):**
+  - Publicar a saída de `game/dist/` na rota `play/` (ou `3d/`) do repositório raiz (ou via workflow GitHub Actions de build do `game/`).
+  - Atualizar o botão `"Jogar em 3D"` / `"Press start"` no `index.html` raiz para apontar para `./play/`, preservando 100% da página 2D acessível com **Lighthouse 100×4**.
+  - Garantir que o link da `TimeMachineArea` e um atalho no Menu do jogo apontem de volta para `../#carreira` (versão acessível/texto completo).
 
-| ID | Entregável | Papel | Dur. | Deps | Arquivos | Passos | Aceite (único) | Validação |
-|---|---|---|---|---|---|---|---|---|
-| T1.1 | Greybox de teste | E | 30 min | T0.1, T0.6 | `G:blender\eras\greybox.py` → `G:static\eras\greybox\*` | Reta, rampa de 30°, degraus de 0.3 m, 3 blocos a 3.2 m, 2 canos, plataforma móvel, 4 caixotes, vão de 4 m, fita de 20 m, `refRespawn`/`refCamera1/2` | Carrega no motor com colisores visíveis no `PhysicsWireframe` | 1 run |
-| T1.2 | Andar e correr | E+ | 30 min | **T1.1, T0.8, T0.16** | `G:sources\Game\Character\CharacterController.js`, `Player.js`, `G:sources\data\feel.js` | KCC Rapier + curvas da 3.2 | Ghost `skid`: 0→7 m/s em 0.14 ± 0.02 s e 7→0 em 0.10 ± 0.02 s | 1 ghost |
-| T1.3 | Pulo e planada da fita | E+ | 30 min | T1.2 | `CharacterController.js` | Gravidade própria, coyote, buffer, variável, 2º toque = planada | Ghost `jumpArc`: apex 2.0 ± 0.05 m em 0.34 ± 0.02 s | 1 ghost |
-| T1.4 | Carimbo | E | 25 min | T1.3 | `G:sources\Game\Character\Stamp.js` | Trava, descida, anel, quebra caixote | Ghost `stamp`: o caixote do greybox quebra em 10/10 | 1 ghost (10 repetições) |
-| T1.5 | Carregar o personagem em plataforma cinemática | E+ | 30 min | T1.2 | `CharacterController.js`, `G:sources\Game\World\MovingPlatform.js` | Delta da plataforma aplicado antes do KCC; herdar a velocidade ao pular | Ghost `platform`: 10 s parado na plataforma móvel com deriva ≤ 2 cm, e o pulo herda a velocidade da plataforma (±5%) | 1 ghost |
-| T1.6 | Câmera em paisagem | E | 30 min | T1.2, **T0.8** | `G:sources\Game\View.js` | Valores da 3.3 (paisagem), Y travado no ar, blend `refCamera1→2` | Vídeo do `jumpArc` com o horizonte estável (desvio vertical do foco ≤ 5 cm no ar) | 1 gravação |
-| T1.7 | Câmera em retrato (matemática de FOV) | E | 25 min | T1.6 | `View.js` | Fórmula da 3.3: FOV horizontal mantido, vertical derivado e limitado, distância compensa | Em 390×844 o avatar ocupa 9–12% da altura e a largura útil no foco é ≥ 6 m (medido) | 1 gravação |
-| T1.8 | Toque com um polegar + alternativas de ponteiro único | E | 30 min | T1.3 | `G:sources\Game\Inputs\Nipple.js`, `Pointer.js`, `TouchControls.js` | Joystick à esquerda, toque à direita = pulo, botão contextual "Carimbar", **tocar no chão ou num marco = andar até lá** (WCAG 2.5.7) | Teste Playwright com toques sintéticos completa o greybox **sem nenhum arrasto** | 1 teste |
-| T1.9 | Teclado e gamepad | E | 20 min | T1.3 | `G:sources\Game\Inputs\Keyboard.js`, `Gamepad.js` | Mapa da 3.4, captura só com foco | Ghost por teclado completa o greybox, e com o foco fora do canvas nenhuma tecla é consumida | 1 teste |
-| T1.10 | Variante veículo (comparação) | E | 20 min | T0.7, T1.1 | `G:sources\Game\Physics\PhysicsVehicle.js` (quarentena) | Carrinho de caixas cinza no mesmo greybox (`?loco=vehicle`) | Percorre o greybox por ghost | 1 ghost |
-| T1.11 | Matriz de backends | E | 25 min | T1.6 | `Rendering.js` | `?webgpu` e `?webgl` em desktop e no celular do dono; o celular usa **WebGL2 por padrão** | Tabela fps/erros por backend × aparelho em `G:NOTICE.md` | 1 run por célula |
-| T1.12 | Vídeos de comparação + publicação | E | 20 min | T1.2–T1.11 | `G:tools\capture\runs\g1\` | 4 vídeos (a pé e veículo × desktop e retrato), preview publicado | Vídeos + métricas + URL de preview prontos para o dono | 1 run cada |
-| T1.13 | Revisão do controlador | R | 20 min | T1.2–T1.9 | — | Passo fixo, interpolação, quinas, teto, plataforma | Nenhum achado "alto" aberto | — |
+---
 
-**Gate G1** (dono): joga as duas variantes no preview (desktop + celular, com os dois backends) e preenche o formulário. Decide D1, D12 e D17. A afinação vai para `feel.js`. **Binários do greybox entram no `main` aqui.**
+## 8. Gates de Qualidade, Verificação Automatizada e Playtest
 
-Paralelismo da Fase 1:
-- T1.1 → T1.2 → (T1.3 ∥ T1.5 ∥ T1.6 ∥ T1.10)
-- → (T1.4 ∥ T1.7 ∥ T1.8 ∥ T1.9 ∥ T1.11)
-- → T1.12 → T1.13
-
-**Total da Fase 1: 13 tarefas.**
-
-### Fase 2: Fatia vertical "Origens" (≈ 5–7 semanas de calendário, com 3 rodadas de iteração de arte e os gates GA, GB e G2)
-
-**2A. Fundação da arte**
-
-| ID | Entregável | Papel | Dur. | Deps | Arquivos | Aceite (único) | Validação |
-|---|---|---|---|---|---|---|---|
-| T2.1a | `vn_scene.py` + `vn_export.py` (unidades, coleções, export com custom props) | E | 25 min | T0.1 | `G:blender\lib\` | Um empty com `mass=2` chega ao `userData.mass` no three | 1 export |
-| T2.1b | `vn_shapes.py` + `vn_bevel.py` (blob, caixa arredondada, tubo, fita, weighted normals) | E | 30 min | T2.1a | `G:blender\lib\` | Render de 3 vistas das 4 formas sem artefato de normal | 1 render |
-| T2.1c | `vn_collide.py` + `vn_refs.py` (`trimesh*`/`hull*`/`cuboid*`, `ref*`) | E | 25 min | T2.1a | `G:blender\lib\` | O greybox regerado com a lib carrega com os mesmos colisores e refs da T1.1 | 1 run |
-| T2.1d | **Overrides manuais** (R1): `blender/manual/<asset>.blend` substitui a malha gerada pelo nome | E | 25 min | T2.1a | `G:blender\lib\vn_manual.py`, `G:blender\manual\README.md` | Um cubo editado à mão em `manual/` sobrevive a uma regeração completa | 1 regeração |
-| T2.2 | Paleta 16×16 + calibração de cor | E | 25 min | T2.1a, T0.6 | `G:blender\palette\*`, `G:static\palette.png` | ΔE2000 < 3 para cada swatch na cena `?debug=palette` (tone mapping registrado) | 1 medição |
-| T2.3a | AO no vértice | E | 30 min | T2.1b | `G:blender\lib\vn_bake_ao.py`, `MeshDefaultMaterial.js` | Greybox com AO lido de `COLOR_0` visível nas quinas (vídeo de 10 s) | 1 gravação |
-| T2.3b | Sombra estática top-down para o Q1 | E | 30 min | T2.3a | `vn_bake_shadow.py`, `MeshDefaultMaterial.js` | No Q1 sem shadow map, as sombras estáticas aparecem e o frame time do proxy móvel cai (números antes e depois registrados) | 1 medição |
-| T2.4 | Compressão meshopt + PNG/WebP sem perda + integração com o manifesto | E | 25 min | T2.1a, T0.15 | `G:scripts\compress.mjs` | Greybox comprimido ≥ 60% menor e carregado pelo manifesto com hash | 1 build |
-
-**2B. Direção de arte do personagem (gate GA antes de modelar)**
-
-| ID | Entregável | Papel | Dur. | Deps | Arquivos | Aceite (único) | Validação |
-|---|---|---|---|---|---|---|---|
-| T2.A1 | 3 silhuetas do Victor (render chapado em tinta, frente e perfil) a partir de D3 | E | 30 min | T2.1b, D3 | `G:blender\character\silhouettes.py` | 3 opções distintas entregues ao dono | 1 render |
-| T2.A2 | Turnaround colorido (frente, 3/4, perfil, costas) da silhueta escolhida | E | 30 min | GA-1 (escolha) | `G:blender\character\turnaround.py` | Folha de referência aprovada pelo dono (até 3 rodadas, cada uma é uma tarefa nova de ≤ 30 min) | 1 render |
-
-**Gate GA** (dono): escolhe a silhueta (GA-1) e aprova o turnaround (GA-2). Sem GA, a T2.5a não começa.
-
-**2C. Personagem**
-
-| ID | Entregável | Papel | Dur. | Deps | Aceite (único) | Validação |
-|---|---|---|---|---|---|---|
-| T2.5a | Blockout de cabeça e cabelo (topete) | E+ | 30 min | GA | Sobreposição com o turnaround: desvio de silhueta ≤ 5% em pixels | 1 render |
-| T2.5b | Blockout de corpo, roupa, mochila e cachecol | E+ | 30 min | T2.5a | Altura 1.20 m e 2.6 cabeças medidas no script | 1 render |
-| T2.5c | Detalhe + UV de paleta + olhos e boca por UV | E+ | 30 min | T2.5b | ≤ 6 mil tris e 2 materiais | `gltf-transform inspect` |
-| T2.5d | Casco de contorno + checklist de trade dress + export | E | 20 min | T2.5c | Checklist (sem boné, macacão, bigode ou luvas) assinada pelo revisor | 1 export |
-| T2.6 | Rig de 24 bones + pesos | E | 30 min | T2.5d | A pose extrema de teste não rasga (3 renders) | 1 render |
-| T2.7a | Clipes `idle`, `walk` e `run` | E+ | 30 min | T2.6 | Run sem pé deslizando a 7 m/s (ghost `run` com o Victor real) | 1 ghost |
-| T2.7b | Clipes `jumpUp`, `fall`, `landSoft` e `landHard` | E+ | 30 min | T2.6 | O ghost `jumpArc` troca os clipes nos frames certos (log de estado) | 1 ghost |
-| T2.8a | Clipes `skid`, `flutter` e `stamp` | E+ | 30 min | T2.7b | Os 3 clipes tocam nos ghosts `skid`/`jumpArc`/`stamp` | 1 ghost |
-| T2.8b | Clipes `push`, `grind`, `interact` e `hurtBump` | E+ | 30 min | T2.7b | Os 4 clipes existem no glb com os nomes certos | 1 export |
-| T2.8c | Clipes `wave`, `celebrate`, `idleLong` e `sitLaptop` | E+ | 30 min | T2.7b | Os 4 clipes existem no glb com os nomes certos | 1 export |
-| T2.8d | Turntable de 40 s com os 18 clipes para o gate GB | E | 15 min | T2.8a–c | Vídeo entregue | 1 vídeo |
-| T2.9a | `CharacterVisual`: máquina de estados + crossfades + `timeScale` | E+ | 30 min | T2.7a, T1.3 | Log de transições do ghost `first10s` sem estado inválido | 1 ghost |
-| T2.9b | Camadas procedurais (lean, squash, look-at, cachecol em molas, piscar) | E+ | 30 min | T2.9a | Vídeo de 20 s com as 5 camadas ativas e desligáveis no `?debug` | 1 gravação |
-| T2.IT1 | Rodada de iteração 2 do Victor (notas do dono, ≤ 6 itens) | E+ | 30 min | GB | Itens fechados | 1 render + 1 vídeo |
-| T2.IT2 | Rodada de iteração 3 do Victor (≤ 6 itens) | E+ | 30 min | T2.IT1 | Itens fechados | 1 render + 1 vídeo |
-
-**Gate GB** (dono): aprova modelo e animação pelo turntable. Se reprovar depois da IT2, entra mais iteração com procedural. **Mixamo só se o dono pedir explicitamente** (D3b).
-
-**2D. Mundo de Origens**
-
-| ID | Entregável | Papel | Dur. | Deps | Aceite (único) | Validação |
-|---|---|---|---|---|---|---|
-| T2.10 | Blockout da planta (O1–O11 + Linha + `refNav*`) | E | 30 min | **T2.1c, T1.3, T1.6, T0.16** | Ghosts `first10s` e `contact30` cumprem 5 s / 15 s / 30 s no greybox da era | 2 ghosts |
-| T2.11 | Kit do cerrado (buriti, ipê 2 estados, pequizeiro, capim base, cupinzeiro, rocha, flores) | E | 30 min | T2.1b, T2.2 | Renders das 7 peças dentro dos tris da 5.4 | 1 render |
-| T2.12 | Kit plataforma (bloco de marco, tijolo, cano de cobre, sinal, placa, caixote) + **checagem de trade dress** | E | 30 min | T2.1b, T2.2 | Checklist assinada pelo revisor: cano não verde nem em forma de cano clássico, bloco sem "?", sinal sem forma de moeda dourada | 1 render |
-| T2.13a | Casa natal + ipê (pop-up) | E+ | 30 min | T2.11 | Renders de 3 vistas | 1 render |
-| T2.13b | CRT gigante + mesa, cadeira e teclado (plataformas, tela separada) | E+ | 30 min | T2.12 | Renders + a malha `screen` existe | 1 render |
-| T2.13c | Escola + mastro + capelo | E+ | 30 min | T2.12 | Renders de 3 vistas | 1 render |
-| T2.13d | Ponto de ônibus + mini-ilha provisória do ponto final | E | 25 min | T2.12 | Renders de 3 vistas | 1 render |
-| T2.IT3 | Rodada 2 dos hero assets (notas do dono, ≤ 8 itens) | E+ | 30 min | GC | Itens fechados | 1 render |
-| T2.IT4 | Rodada 3 dos hero assets (≤ 8 itens) | E+ | 30 min | T2.IT3 | Itens fechados | 1 render |
-| T2.14a | Montagem da era + merge em ≤ 6 malhas + AO | E | 30 min | T2.10, T2.13a–d, T2.3a | ≤ 6 malhas visuais | `gltf-transform inspect` |
-| T2.14b | Altura do terreno + máscaras de dados (PNG/WebP sem perda) + sombra top-down | E | 30 min | T2.14a, T2.3b | Máscaras sem perda e com ≤ 250 KB juntas | 1 build |
-| T2.14c | Export + compressão + orçamento | E | 15 min | T2.14b, T2.4 | Era ≤ 850 KB (6.5) no `check-size` | 1 gate |
-| T2.15a | Terreno + capim | E | 30 min | T2.14c | O capim se curva com o Victor, e no Q1 a densidade é ≤ 40% do Q0 | 1 gravação |
-| T2.15b | Folhagem + água do Rio Tocantins | E | 25 min | T2.14c | Vídeo de 10 s com água na cor da era | 1 gravação |
-| T2.16 | `EraCycles` + céu e névoa do amanhecer | E | 25 min | T2.14c | Preset Origens aplicado e interpolação testada com um preset fictício | 1 gravação |
-
-**Gate GC** (dono): olha os renders dos hero assets (rodada 1) e manda notas para T2.IT3/IT4. O dono pode editar qualquer `.blend` à mão, e a T2.1d preserva a edição.
-
-**2E. Jogabilidade e conteúdo**
-
-| ID | Entregável | Papel | Dur. | Deps | Aceite (único) | Validação |
-|---|---|---|---|---|---|---|
-| T2.17 | Marcos + cards (`<dialog>` do `content.json`) | E | 30 min | T0.12, T1.3 | Os 3 cards abrem, o foco vai ao título e volta ao canvas no Esc (teste Playwright) | 1 teste |
-| T2.18a | A Linha em runtime (spline + malha de fita + colisor de sensor) | E | 30 min | T2.14c | O sensor detecta o Victor no ar ao longo dos 100% da fita | 1 ghost |
-| T2.18b | Estado de grind (entrar, velocidade 9–14 m/s, sair pulando) | E+ | 30 min | T2.18a | Ghost `grind`: atravessa Origens em ≤ 8 s | 1 ghost |
-| T2.18c | Efeitos do grind (faíscas, cachecol brilhando, ganchos de som) | E | 20 min | T2.18b | Vídeo de 10 s | 1 gravação |
-| T2.19a | Set piece: casa pop-up + ipê florindo | E | 30 min | T2.17 | Sequência ≤ 2.5 s pulável (vídeo) | 1 gravação |
-| T2.19b | Set piece: CRT liga + página pixelada "Ponto Interativo" (256×192, Python/PIL, arte original) | E | 30 min | T2.17, T1.4 | O carimbo no botão liga a tela (vídeo) | 1 gravação |
-| T2.19c | Set piece: o capelo voa e vira acessório | E | 25 min | T2.17 | O capelo fica preso ao bone `head` até sair da era (vídeo) | 1 gravação |
-| T2.20a | 20 sinais instanciados + contador no HUD | E | 25 min | T2.14c | O ghost `origensFull` coleta 17 sinais visíveis e o HUD bate | 1 ghost |
-| T2.20b | Segredo do cupinzeiro + quartinho | E | 30 min | T2.20a, T1.4 | O segredo abre com planada + carimbo (ghost `secret`) | 1 ghost |
-| T2.20c | Cano de contato → ponto final provisório → card de contato | E | 25 min | T2.17 | Ghost `contact30` < 30 s | 1 ghost |
-| T2.21a | Breakables (caixotes de pequi, cercas) | E | 30 min | T2.14c | 10 repetições sem nada atravessar o chão | 1 ghost × 10 |
-| T2.21b | Vida ambiente (seriema, borboletas) + pegadas | E | 30 min | T2.14c | Vídeo de 30 s | 1 gravação |
-| T2.NAV | Rota de **auto-walk** (grafo de `refNav*` + spline da Linha) para "Ir até" | E+ | 30 min | T2.10, T2.17 | Da lista de marcos, "Ir até" leva a cada um dos 3 marcos e ao contato sem travar (ghost `nav`) | 1 ghost |
-
-**2F. Som**
-
-| ID | Entregável | Papel | Dur. | Deps | Aceite (único) | Validação |
-|---|---|---|---|---|---|---|
-| T2.22 | Curadoria de sfx e ambiente com licença verificável | A | 30 min | — | Tabela com URL, licença e autor de 30 sfx + 2 ambiências (música só se D4 estiver decidida) | — |
-| T2.23 | Arquivos de áudio prontos + `LICENSES-AUDIO.md` | E | 30 min | T2.22 | Comum + Origens ≤ 750 KB, normalizados | 1 medição de loudness |
-| T2.24a | Passos por superfície + pulo + aterrissagem | E | 25 min | T2.23, T2.9a | Nenhum som se repete idêntico 3× seguidas (log de rate e volume) | 1 vídeo |
-| T2.24b | Interações (bloco, card, carimbo, grind por velocidade, pluck por marco) | E | 30 min | T2.24a, T2.18b | Os 5 eventos tocam no vídeo do `origensFull` | 1 vídeo |
-| T2.24c | Ambiência + música (se D4) + ducking no card | E | 25 min | T2.24b | Ducking de −8 dB medido com o card aberto | 1 vídeo |
-
-**2G. Carga, UI e acessibilidade**
-
-| ID | Entregável | Papel | Dur. | Deps | Aceite (único) | Validação |
-|---|---|---|---|---|---|---|
-| T2.25a | Loader da Linha (HTML/CSS, progresso por bytes do manifesto) | E | 25 min | T0.15 | A barra chega a 100% exatamente quando o último byte crítico chega (log) | 1 run |
-| T2.25b | Reveal pop-up + câmera inicial + aceno cancelável | E | 30 min | T2.25a, T2.9a | Controle ≤ 0.8 s após o reveal (ghost `first10s`) | 1 ghost |
-| T2.25c | Passe de tempo do storyboard dos 10 s | E | 20 min | T2.25b, T2.19a | Marcas da 2.7 batem ±0.3 s no `metrics.json` | 1 ghost |
-| T2.26 | HUD, menu e opções + tokens e contraste | E | 30 min | T2.17 | Retrato e paisagem com alvos de 44 px **+ aceite fixo da raiz** (pares novos em `T:tokens\` e `T:dtcg-contrast.config.json`) | 1 teste + 1 Lighthouse |
-| T2.27a | Announcer `aria-live` + lista de marcos | E | 30 min | T2.17, T2.NAV | Roteiro NVDA: era, proximidade e marco anunciados | 1 roteiro |
-| T2.27b | Movimento reduzido + **Pausar** (WCAG 2.2.2) + checagem de flashes (2.3.1) | E | 30 min | T2.26 | `flash-check.mjs` (ffmpeg `signalstats`: no máximo 3 transições de luminância por segundo em área ≥ 25%) passa no vídeo do `origensFull` + o carimbo de tela inteira | 1 vídeo |
-| T2.27c | Alternativas de ponteiro único em toda a UI do 3D (2.5.7) + axe | E | 25 min | T1.8, T2.26 | axe-core com 0 violações e fluxo completo só com toques simples | 1 run axe + 1 teste |
-| T2.28 | `ZoneStreamer` | E | 30 min | T2.14c | 3 ciclos de carga e descarga com memória ±5% e colisores removidos | 1 run |
-
-**2H. Qualidade, performance e publicação**
-
-| ID | Entregável | Papel | Dur. | Deps | Aceite (único) | Validação |
-|---|---|---|---|---|---|---|
-| T2.29 | Tiers Q0/Q1/Q2 + adaptação + **WebGL2 forçado no celular** até D17 | E | 30 min | T2.15a, T2.16, T1.11 | Troca automática de tier com p90 > 18 ms por 3 s (teste com atraso artificial) | 1 teste |
-| T2.30a | Passe de draw calls (merge e instancing) | E | 30 min | T2.29, T2.21a | ≤ 120 draw calls no Q1 em toda a era (log do ghost) | 1 ghost |
-| T2.30b | Passe de shader, overdraw e resolução no Q1 | E | 30 min | T2.30a | Proxy da 7.5 verde (main ≤ 8 ms, contadores) | ≤ 3 medições |
-| T2.30c | Medição no celular do dono | dono + E | 30 min | T2.30b | Celular real ≥ 55 fps médio e p95 ≤ 20 ms (trace remoto + gravação de tela) | 1 sessão |
-| T2.31a | Gravações desktop (WebGPU e `?webgl`, 1440p): ghosts `first10s`, `contact30` e `origensFull` | E | 25 min | T2.30b | 3 vídeos + `metrics.json` dentro da 7.4 | 1 run cada |
-| T2.31b | Gravações no proxy móvel (retrato e paisagem) | E | 25 min | T2.30b | 4 vídeos + `metrics.json` dentro da 7.4 | 1 run cada |
-| T2.31c | Relatório da rubrica com evidência | R | 25 min | T2.31a–b, T2.30c | Notas por dimensão com link para vídeo/métrica e lista do que impede o 10 | — |
-| T2.32 | Auditoria de originalidade + **comparação humana lado a lado** | R + dono | 25 min | T2.31c | `audit-originality` = 0 e contact sheets nossas vs. as do Bruno (T0.4) lado a lado: o dono responde "não lembra reskin" | 1 run + 1 olhada |
-| T2.33 | Publicar a fatia no preview + roteiro de playtest | E | 15 min | T2.32 | `npm run gate` verde e URL de preview + `PLAYTEST.md` (o que testar, formulário, aparelho) entregues | 1 publicação |
-
-**Gate G2** (dono): playtest desktop + celular real, com o formulário (T0.17). Passa com **todas as dimensões aplicáveis à fatia ≥ 9 e média ≥ 10**. A dimensão "música" só conta se D4 estiver decidida antes da T2.22. Senão, sai da nota e fica registrada como pendência.
-- Se reprovar: no máximo 2 rodadas de ajuste. Cada rodada é uma lista do dono de ≤ 10 itens, quebrada em tarefas de ≤ 30 min (T2.FIX1-n e T2.FIX2-n).
-- **Binários da fatia entram no `main` aqui.**
-
-Paralelismo da Fase 2:
-- 2A → (2B ∥ 2D até T2.13d)
-- 2C depois de GA
-- 2F desde o início
-- 2E depois de T2.14c
-- 2G depois de T2.17
-- 2H no fim
-
-**Total da Fase 2: 75 tarefas** (2A 8, 2B 2, 2C 15, 2D 15, 2E 13, 2F 5, 2G 8, 2H 9), mais até 2 rodadas de ajuste.
-
-### Fase 3: Expandir as eras (≈ 8–10 semanas de calendário)
-
-**Molde por era `X`** (13 tarefas; `<era>` = `unicamp`, `industria`, `alemanha`, `dados`, `transformacao` ou `hub`).
-
-| Passo | Entregável | Papel | Dur. | Deps | Arquivos | Aceite (único) | Validação |
-|---|---|---|---|---|---|---|---|
-| X.1 | Blockout + refs + Linha + `refNav*` | E | 30 min | G2; T2.1c | `G:blender\eras\<era>.py` | Primeiro marco da era < 15 s após a chegada (ghost) | 1 ghost |
-| X.2 | Kit A (vegetação/ambiente) | E | 30 min | X.1 | `G:blender\kits\<era>_kit.py` | Renders dentro dos tris da 5.4 | 1 render |
-| X.3a | Landmark 1 (modelo) | E+ | 30 min | X.1 | `G:blender\kits\<era>_landmarks.py` | Renders de 3 vistas | 1 render |
-| X.3b | Landmark 2 (modelo) + colisores dos dois | E+ | 30 min | X.3a | idem | Colisores corretos no wireframe | 1 abertura |
-| X.4 | Montagem + AO + terreno + máscaras + compressão | E | 30 min | X.2, X.3b | `G:static\eras\<era>\*` | Era ≤ 850 KB e ≤ 6 malhas | 1 gate |
-| X.5 | Luz, céu, névoa + transição | E | 25 min | X.4 | `EraCycles.js` | Transição sem tranco em vídeo | 1 gravação |
-| X.6a | Set piece 1 | E+ | 30 min | X.4 | `G:sources\Game\World\Eras\<Era>Era.js` | Vídeo do set piece | 1 gravação |
-| X.6b | Set piece 2 | E+ | 30 min | X.6a | idem | Vídeo do set piece | 1 gravação |
-| X.6c | Marcos (cards) + segredo | E | 30 min | X.4, T2.17 | idem | Cards com paridade e segredo aberto por ghost | 1 ghost |
-| X.7 | Áudio da era (com licença) | E | 30 min | X.4, T2.24c | `G:static\sounds\<era>\*` | Log de licença completo | 1 vídeo |
-| X.8 | Gravação + perf + proxy móvel | E | 30 min | X.5–X.7 | — | Gates da 7.4 | ≤ 3 medições |
-| X.9a | Iteração 2 de arte (notas do dono, ≤ 8 itens) | E+ | 30 min | X.8 | arquivos da era | Itens fechados | 1 render |
-| X.9b | Iteração 3 de arte (≤ 8 itens) | E+ | 30 min | X.9a | arquivos da era | Itens fechados | 1 render |
-
-Instâncias:
-- **UNICAMP:** T3.U1–T3.U13 (nanotubos, rua das ONGs, empresa júnior).
-- **Indústria:** T3.I1–T3.I13 (esteiras, garrafas genéricas, trainee).
-- **Alemanha:** T3.A1–T3.A6 (molde reduzido: X.1, X.3a, X.4, X.5, X.8, X.9a).
-- **Dados:** T3.D1–T3.D13 (barras vivas, regressão).
-- **Transformação digital + praça de projetos:** T3.T1–T3.T13, mais **T3.T14**: imagens dos 6 projetos (WebP 1200×675 ≤ 60 KB, D11).
-- **Hub e ponto final:** T3.H1–T3.H6 (molde reduzido: X.1, X.3a, X.4, X.5, X.6a, X.8).
-
-Integração:
-
-| ID | Entregável | Papel | Dur. | Deps | Arquivos | Aceite (único) | Validação |
-|---|---|---|---|---|---|---|---|
-| T3.X1 | Anel completo com transições (ônibus, ponte da Linha, dirigível) | E | 30 min | todas as eras | `G:sources\Game\World\Transitions.js` | Ghost de jornada completa sem tranco e com transições puláveis | 1 ghost |
-| T3.X2 | Streaming do anel inteiro | E | 30 min | T3.X1, T2.28 | `ZoneStreamer.js` | 3 voltas com memória ±5% | 1 run |
-| T3.X3 | (Opcional, D1 = C) empilhadeira original com `PhysicsVehicle` | E | 30 min | T3.I8 | `G:blender\kits\industria_forklift.py` | Dirige por ghost sem asset do upstream | 1 ghost |
-| T3.X4 | Revisão da Fase 3 | R | 20 min | T3.X1–X3 | — | Nenhum "alto" aberto | — |
-
-**Gate G3** depois de UNICAMP + Indústria (as duas podem correr em paralelo em executores diferentes, cada um nos seus arquivos). **Binários entram no `main` aqui.**
-
-**Total da Fase 3:** 13 (U) + 13 (I) + 6 (A) + 13 (D) + 14 (T) + 6 (H) + 4 (X) = **69 tarefas.**
-
-### Fase 4: Polimento e performance (≈ 2–3 semanas de calendário)
-
-| ID | Entregável | Papel | Dur. | Deps | Arquivos | Aceite (único) | Validação |
-|---|---|---|---|---|---|---|---|
-| T4.1 | Conquistas locais (sem servidor) | E | 30 min | T3.X2 | `Achievements.js`, `G:sources\data\achievements.js` | 8 conquistas, nenhuma bloqueia conteúdo | 1 teste |
-| T4.2 | Mapa em estilo cordel com teleporte | E | 30 min | T3.X2 | `Map.js`, `G:static\ui\map.svg` | Navegável só por teclado e só por toque simples | 1 teste |
-| T4.3 | Mix final de áudio | E | 30 min | T3.X1 | `Audio.js` | 10 min sem pico acima de −1 dBTP (`ebur128`) | 1 medição |
-| T4.4 | Música final (D4) | E | 30 min | D4 | `G:static\sounds\music\*` | Licença registrada e −16 LUFS | 1 medição |
-| T4.5a–h | "Juice": **no máximo 8 itens**, a lista é fechada no G3 (cada item é uma tarefa de ≤ 30 min). O excedente vai para o backlog pós-lançamento. | E+ | ≤ 8 × 30 min | G3 | arquivos da era | Cada item com vídeo antes e depois | 1 vídeo por item |
-| T4.6 | Perf desktop | E | 30 min | T3.X2 | `Rendering.js`, `Quality.js` | `perf-gate` desktop verde | ≤ 3 medições |
-| T4.7 | Perf mobile (anel inteiro, 5 min de térmico no aparelho do dono) | E + dono | 30 min | T4.6 | idem | Seção 7.5 verde | 1 sessão |
-| T4.8 | Auditoria de acessibilidade completa | R | 30 min | T4.1, T4.2 | — | axe 0 + roteiro NVDA + 2.5.7, 2.3.1 e 2.2.2 OK | 1 run |
-| T4.9 | Teste com 3 pessoas | dono | 30 min | T4.7 | `T:docs\PLAYTEST.md` | Formulários registrados | — |
-| T4.10a–f | Correções do T4.9: **no máximo 6 itens**, lista fechada no T4.9 | E | ≤ 6 × 30 min | T4.9 | conforme a lista | Cada item com ghost de evidência | 1 ghost por item |
-| T4.11 | Gravação final da rubrica | E + R | 30 + 25 min | T4.10 | `G:tools\capture\runs\final\` | Relatório com evidência de ≥ 3 dimensões em 11 | 1 run por perfil |
-| T4.12 | Auditoria final de originalidade, licenças e segurança + **comparação humana lado a lado** | R + dono | 25 min | T4.11 | — | Script = 0 e o dono responde "não lembra reskin" | 1 run |
-
-**Total da Fase 4: 10 tarefas fixas + até 8 (T4.5) + até 6 (T4.10) = até 24 tarefas.**
-
-### Fase 5: Lançamento (≈ 1–1.5 semana de calendário, incluindo a janela de rollback)
-
-| ID | Entregável | Papel | Dur. | Deps | Arquivos | Aceite (único) | Validação |
-|---|---|---|---|---|---|---|---|
-| T5.1 | `build:play` → `T:play\` (sem `noindex`, com canonical e OG) | E | 20 min | T4.12 | `G:vite.config.js`, `T:play\**` | `npm run gate` verde | 1 build |
-| T5.2 | Start do 2D navega para o alvo da flag `START_TARGET` (`'./play/'`) com prefetch por intenção; pôster novo | E | 30 min | T5.1 | `T:src\boot.js`, `T:index.html`, `T:assets\**` | O 3D não é requisitado antes do clique **+ aceite fixo da raiz** | 1 log de rede + 1 Lighthouse |
-| T5.2b | **Rollback documentado:** `T:docs\ROLLBACK.md` com (1) `git revert <sha>` do lançamento e (2) a linha única `START_TARGET = 'legacy'`, que volta ao 3D antigo (ainda presente) | E + R | 20 min | T5.2 | `T:docs\ROLLBACK.md`, `T:src\boot.js` | Ensaio local: trocar a flag volta ao 3D antigo em 1 build | 1 ensaio |
-| T5.3 | **Depois de 7 dias sem rollback:** mover `src/world/*` e `assets/js/world/*` para `D:\GitHub\pode_apagar\timeline\…`, `git rm`, simplificar os scripts da raiz | E | 20 min | T5.2b + 7 dias | esses arquivos | Nada apagado sem cópia **+ aceite fixo da raiz** | 1 check + 1 Lighthouse |
-| T5.4 | SW `VERSION v9` + revisão do bypass | E + R | 15 + 15 min | T5.1 | `T:worker.js` | `play/` fora do cache **+ aceite fixo da raiz** | 1 teste |
-| T5.5 | README (README-SPEC) + `LICENSES.md` final | E | 30 min | T5.2 | `T:README.md`, `T:LICENSES.md` | Checklist da spec OK | 1 leitura |
-| T5.6 | JSON-LD + OG do `play/` | E | 20 min | T5.1 | `G:sources\index.html` | Validador OG sem erro | 1 validação |
-| T5.7 | Revisão final | R | 25 min | T5.1–T5.6 | — | Nenhum "alto" | — |
-| T5.8 | **Gate G4:** o dono aprova e a sessão principal faz commit e push | dono | — | T5.7 | — | Live atualizado e smoke test OK | 1 smoke |
-| T5.9 | Limpeza dos documentos internos | E | 25 min | T5.8 | `T:docs\**` | Remover `docs/PLAN-3D.md` do repositório (e o que mais for só de planejamento); reescrever os documentos que ficam (inventário do motor, baseline, rubrica) **sem citar Bruno Simon**, usando termos neutros ("motor base", "site de referência"); o crédito permanece apenas em `game/LICENSES.md` | `grep -ri "bruno\|folio" docs/` vazio; `LICENSES.md` intacto | 1 grep |
-
-**Total da Fase 5: 9 tarefas.**
-
-### Resumo de tarefas e esforço
-
-| Fase | Tarefas | Calendário (com buffer de +35% e gates) |
+| Gate | Onde ocorre | Verificações objetivas obrigatórias |
 |---|---|---|
-| 0 Ferramentas e base | 18 | 2–3 dias |
-| 1 Spike de locomoção | 13 | 3–4 dias |
-| 2 Fatia vertical Origens | 75 (+ até 2 rodadas de ajuste) | 5–7 semanas |
-| 3 Expansão | 69 | 8–10 semanas |
-| 4 Polimento | até 24 | 2–3 semanas |
-| 5 Lançamento | 9 | 1–1.5 semana |
-| **Total** | **até 208** | **≈ 4–5 meses** |
+| **G0 — Fundação Limpa** | Após `T0.3` | `Grass.js` funcionando sobre `terrainNode` + `Tracks`; `npm run build` passa com código 0; `dist/sounds/musics/` sem `.wav`; 0 chamadas a `googletagmanager.com`; 0 avisos `"Server currently offline"`; troca de um `.png` em `projects/images/` aparece direto em `npm run dev`. |
+| **G1 — Conteúdo 100% Victor** | Após `T1.5` | Busca case-insensitive em `game/sources/` por `bruno|threejs-journey|hetic|uzik|immersive|2019\.bruno` retorna **somente** os créditos MIT/CC0 em `behindTheScene` e `consoleLog.js` (e eventuais chaves técnicas internas compatíveis com `areas.glb` até a Fase 4). Toggle `PT-BR ↔ EN` funciona sem reload. |
+| **G2 — Spin Visual Validado** | Após `T2.3` | Inspeção visual em `#debug` nos 4 períodos (`day`, `dusk`, `night`, `dawn`) + chuva e neve; água turquesa com espuma limpa; grama verde-fresca dobrando sob as rodas; textos de Carreira, Projetos, Lab e UI legíveis em todos os horários; `circuitBrand` e `Altar` sem marcas antigas. |
+| **G3 — Mini-games & Gameplay** | Após `T3.2` | Completar 2 corridas no Circuito (medalha + Top 5 persistido após F5); fazer strike e reset no Boliche; aceitar 10 cookies (contador 3D persistido após F5); entrar 5 vezes no Portal do Caos (cataclismo offline + conquista); testar teclado, mouse, toque (DevTools mobile `390×844`) e gamepad. |
+| **G4 — Assets 3D Coesos** | Após `T4.2` | `node scripts/verify-glb.mjs` passa sem erros; `VICTOR NEVES` derruba com física/som; mascotes/estátua do Bruno removidos de `Social`; mini-games 100% preservados sem regressão. |
+| **G5 — Novo Layout & Mapa** | Após `T5.2` | Percorrer todo o anel narrativo `Landing → Career → Social → Lab → Projects → Landing`; testar teleporte de cada um dos 12 pins do novo Mapa (Dia e Noite); confirmar 0 objetos flutuando e 0 colisores fantasmas. |
+| **G6 — Pronto para Publicar** | Após `T6.2` | `VITE_COMPRESSED=1 npm run build` + `npm run preview` com 0 erros 404; WebGPU (`Q0`), WebGL2 fallback e Mobile (`Q1`) validados; FPS estável. |
 
 ---
 
-## 9. Riscos, mitigações e decisões do dono
+## 9. Roadmap Granular com Tarefas Numeradas (`T0.0` a `T6.3`)
 
-### 9.1 Riscos
+> **Fluxo padrão de entrega de cada tarefa:** editar arquivos do escopo → validar build (`npm.cmd run build`) → abrir preview local (`npm.cmd run dev`) e inspecionar visualmente → confirmar o DoD da tarefa antes de passar para a próxima.
 
-| # | Risco | Prob. | Impacto | Mitigação |
-|---|---|---|---|---|
-| R1 | **Qualidade da modelagem por `bpy`** fica "programática" (de novo primitivas) | Alta | Alto | Biblioteca de formas com bevel, blobs, remesh e weighted normals (T2.1). Render de 3 vistas por asset com revisão antes da montagem. Landmarks com script próprio. O dono pode retocar o `.blend` gerado, e o script aceita "overrides" manuais por nome (a malha editada à mão é preservada se existir em `blender/manual/`). |
-| R2 | **Animação por keyframes em script** sem vida | Alta | Alto | A camada procedural faz metade do trabalho (5.6). Plano B: mais iteração + procedural. Mixamo só com opt-in explícito do dono (D3b). Gate GB. |
-| R3 | **Mobile no backend WebGL2 do `WebGPURenderer`** abaixo da meta | Média | Alto | Proxy móvel desde a Fase 1 (`?webgl&q=1`). Sombra bakeada no Q1. ≤ 120 draw calls. Escala de resolução dinâmica. Celular real no G1, não só no G2. Último recurso: build Q2 sem pós e sem capim denso. |
-| R4 | **Peso inicial** (Rapier 1.17 MB + three) em 4G | Média | Médio | Prefetch por intenção, streaming por era, loader que já é a experiência (a Linha). Verificar o gzip no Pages (T0.11). Se o `.wasm` não comprimir, usar o compat. |
-| R5 | **Parecer reskin do Bruno** | Média | Alto | Locomoção a pé (D1). A fronteira de reuso da 6.3. A auditoria de hashes e strings. Nada de UI, fonte, som, paleta ou layout do upstream. Uma checagem humana no G2: "lembra o site do Bruno?" tem que dar não. |
-| R6 | **Escopo** (121 tarefas) | Alta | Médio | A fatia vertical é o produto mínimo lançável: se a Fase 3 atrasar, dá para lançar só Origens + hub com os demais marcos acessíveis pela lista/cards. Gates G2 e G3 cortam escopo, não qualidade. |
-| R7 | **Divergência com o upstream** (bugs do motor) | Baixa | Médio | O código copiado vira nosso. Não há merge automático. O `NOTICE.md` registra o commit `70764a9` de origem. |
-| R8 | **Licenças de terceiros** (áudio, GSAP, eventual Mixamo) | Média | Médio | Log de licença obrigatório por arquivo. Revisor na T2.32 e na T4.12. Na dúvida, não usar. |
-| R9 | **Inchaço do repositório** | Média | Baixo | Previews num repo separado com commit órfão forçado (6.1). Binários no `main` só nos gates. Só os `.blend` de override manual entram no git. `git count-objects -vH` a cada gate. |
-| R10 | **SW servindo build velho** | Baixa | Médio | T0.10 (bypass) e o versionamento. |
-| R11 | **Diferença de cor** entre Blender e three | Média | Médio | Calibração ΔE < 3 na T2.2, paleta como verdade, tone mapping neutro. |
-| R12 | **Avaliação inflada** de novo | Média | Alto | 7.1: vídeo + métricas + playtest humano. Nota de "feel" só do dono, com o mesmo formulário usado para o Bruno. |
-| R13 | **Mistura de versões em cache** (o Pages guarda ~10 min) | Média | Alto | Nomes com hash + manifesto (T0.15). O HTML é o único arquivo sem hash. |
-| R14 | **Estimativas otimistas** | Alta | Médio | Buffer de +35% por fase, rodadas de iteração já orçadas (IT1–IT4, X.9a/b) e tetos explícitos em T4.5/T4.10 |
+---
 
-### 9.2 Decisões que dependem do gosto do dono (com padrão para não travar)
+### Fase 0 — Recuperação, Higiene, Modo Offline-First e Pipeline
 
-| ID | Decisão | Padrão recomendado (o trabalho segue com ele) | Quando decidir |
+#### `T0.0` — Restaurar e corrigir `Grass.js` (Bloqueador Imediato)
+- **Pré-requisito:** nenhum.
+- **Arquivos:** `game/sources/Game/World/Grass.js`
+- **Passos:**
+  1. Remover o arquivo antigo (que importa `./TerrainHeight.js` inexistente).
+  2. Implementar `Grass.js` em TSL integrado ao `this.game.terrain.terrainNode(positionWorld.xz)` (usando canal `G` já afetado por `this.game.tracks` e canal `B` para evitar água) com grid deslizante centralizado em `this.game.view.optimalArea.position`, vento (`this.game.wind`) e densidade escalada por `this.game.quality.level`.
+  3. Validar no browser que o carro amassa a grama ao dirigir e que nenhuma lâmina nasce dentro da água ou em estradas.
+- **Validação:** `npm.cmd run build` + `npm.cmd run dev`.
+- **DoD:** build verde com 0 erros de módulo; grama renderizada, responsiva às rodas e ao vento, em 60 fps.
+
+#### `T0.1` — Limpeza de Analytics, Metadados, Código Promocional e `.wav` Duplicados
+- **Pré-requisito:** `T0.0`.
+- **Arquivos:** `game/sources/index.html`, `game/package.json`, `game/sources/Game/Title.js`, `game/sources/Game/World/Areas/Areas.js`, `game/sources/style/index.styl`, `game/sources/Game/BlackFriday/`, `game/sources/Game/Easter.js`, `game/sources/Game/World/Areas/EasterArea.js`, `game/sources/style/blackFriday.styl`, `game/sources/style/easter.styl`, `game/static/sounds/musics/*.wav`
+- **Passos:**
+  1. Remover `<script>` do Google Analytics (`G-JMSN30BQ5J`) em `sources/index.html` (linhas 44–52).
+  2. Atualizar `<html lang="pt-BR">`, `<title>`, `<meta name="description">`, `og:*`, `twitter:*` e `apple-mobile-web-app-title` para **Victor Neves — Linha do Tempo & Portfólio 3D**.
+  3. Atualizar `"name": "victor-neves-timeline-3d"` em `game/package.json`.
+  4. Em `Title.js` l. 88, trocar `'Bruno'` por `'Victor'`.
+  5. Remover import morto de `EasterArea` em `Areas.js` e deletar/limpar arquivos promocionais não usados (`BlackFriday/`, `Easter.js`, `EasterArea.js`, `blackFriday.styl`, `easter.styl`).
+  6. Mover `Baguira.wav`, `Boy.wav` e `Sudo.wav` de `game/static/sounds/musics/` para `game/resources/sounds/musics/`.
+- **Validação:** `npm.cmd run build` + conferir tamanho de `game/dist/sounds/musics/` e aba Network sem `gtag`.
+- **DoD:** 0 scripts de analytics externos; `dist/` ~136 MB menor; aba do navegador exibe `Victor 🚗🌳...`.
+
+#### `T0.2` — Modo Standalone / Offline-First Completo
+- **Pré-requisito:** `T0.1`.
+- **Arquivos:** `game/sources/Game/Server.js`, `game/sources/Game/Options.js`, `game/sources/Game/World/Whispers.js`, `game/sources/index.html`, `game/sources/style/general.styl`, `game/sources/Game/World/Areas/CircuitArea.js`, `CookieArea.js`, `AltarArea.js`
+- **Passos:**
+  1. Adicionar `this.isStandalone = !import.meta.env.VITE_SERVER_URL` em `Server.js` e aplicar `document.documentElement.classList.add('is-standalone')`.
+  2. Via CSS (`is-standalone`), ocultar `.offline-element`, aba `whispers` do menu e linha `Server` em `Options`; adicionar nota discreta `.standalone-element` no Circuito.
+  3. Em `Whispers.js`, evitar registrar atalho `T` quando `this.game.server.isStandalone`.
+  4. Em `CookieArea.js`, inicializar `this.counter.init()` no modo standalone lendo/salvando `vn_cookies_count_v1` em `localStorage`.
+  5. Em `AltarArea.js`, ler/salvar `vn_altar_count_v1` em `localStorage`, atualizar texto e `progressUniform = (value % 5) / 5`, e disparar o evento de cataclismo localmente a cada 5 sacrifícios.
+  6. Em `CircuitArea.js`, implementar leitura/gravação do Top 5 em `vn_circuit_scores_v1`, habilitar formulário de iniciais/bandeira offline e atualizar tabela HTML + placar 3D.
+- **Validação:** testar Circuito, Cookie, Altar, Menu e Opções sem servidor; dar F5 e confirmar persistência.
+- **DoD:** zero avisos vermelhos de servidor offline; todos os mini-games persistem progresso localmente (Gate **G0 parcial**).
+
+#### `T0.3` — Unificação `.png`/`.ktx` e `scripts/compress.js` Windows-Friendly
+- **Pré-requisito:** `T0.1`.
+- **Arquivos:** `game/sources/Game/World/Areas/ProjectsArea.js`, `game/sources/Game/World/Areas/LabArea.js`, `game/sources/Game/World/Intro.js`, `game/scripts/compress.js`
+- **Passos:**
+  1. Em `ProjectsArea.js`, `LabArea.js` e `Intro.js`, ler `const compressed = !!import.meta.env.VITE_COMPRESSED` e escolher `textureKtx` + `.ktx` ou `texture` + `.png` (aceitando nomes com ou sem extensão em `projects.js` e `lab.js`).
+  2. Em `scripts/compress.js`: normalizar `\` → `/` antes dos regexes de presets, usar `node_modules/.bin/gltf-transform` com suporte a Windows, checar `toktx` antes de disparar conversão KTX2, limitar concorrência a 4 jobs e aceitar subpasta como argumento CLI.
+- **Validação:** `node scripts/compress.js static/ui` + editar temporariamente um `.png` de `projects/images/` e vê-lo em `npm.cmd run dev`.
+- **DoD:** Gate **G0** 100% aprovado.
+
+---
+
+### Fase 1 — Substituição Completa de Conteúdo (Bruno Simon → Victor Neves) + I18n
+
+#### `T1.1` — Home, Bastidores, `consoleLog.js`, `social.js` e Limpeza de `SocialArea`
+- **Pré-requisito:** `T0.2`.
+- **Arquivos:** `game/sources/index.html`, `game/sources/data/consoleLog.js`, `game/sources/data/social.js`, `game/sources/Game/World/Areas/SocialArea.js`, `game/sources/style/discord.styl` (ou `contact.styl`), `game/sources/style/index.styl`
+- **Passos:**
+  1. Reescrever `home-content` e `behindTheScene-content` em `sources/index.html` (incluindo créditos MIT ao `folio-2025` e CC0 a Kounine).
+  2. Reescrever `sources/data/consoleLog.js` com ASCII `VICTOR NEVES` e links reais.
+  3. Substituir `sources/data/social.js` pelas 6 entradas de Victor Neves e converter modal `discord` → modal `contact` ("Vamos conversar").
+  4. Em `SocialArea.js`, localizar os filhos `baguiraPhysicalDynamic`, `sudoPhysicalDynamic`, `boyPhysicalDynamic`, `twitchPhysicalDynamic`, `blueskyPhysicalDynamic.001` e `discordPhysicalDynamic`, ocultando a malha (`visible = false`) e desabilitando seus corpos físicos (`setEnabled(false)`).
+- **Validação:** abrir Home, Bastidores, Console DevTools e dirigir até `SocialArea` clicando nos links e no modal Contato.
+- **DoD:** nenhum link, mascote ou texto do Bruno visível na Home, Bastidores, Console ou Social.
+
+#### `T1.2` — Sistema Bilíngue PT-BR (Padrão) / EN
+- **Pré-requisito:** `T1.1`.
+- **Arquivos:** `game/sources/data/i18n.js` (novo), `game/sources/Game/I18n.js` (novo), `game/sources/Game/Game.js`, `game/sources/Game/Options.js`, `game/sources/index.html`, `game/sources/Game/Map.js`, `game/sources/Game/World/Areas/*.js`, `game/static/intro/*Label.png`
+- **Passos:**
+  1. Criar `data/i18n.js` e `Game/I18n.js` com dicionários `pt-BR` e `en` (Seção 5.1) e inicializar no `Game.js`.
+  2. Anotar `data-i18n` / `data-i18n-html` em `sources/index.html` e adicionar seletor `Idioma / Language` em `Options.js`.
+  3. Integrar `this.game.i18n.t(...)` aos pins do `Map.js` e aos prompts de `InteractivePoints` das áreas.
+  4. Gerar novas texturas limpas `256×128` para `static/intro/*Label.png` em PT-BR (ou visuais universais de teclas/gestos).
+- **Validação:** alternar `PT-BR ↔ EN` em `Options` e testar Menu, Controles, Mapa, Opções e prompts 3D sem recarregar.
+- **DoD:** experiência abre em PT-BR por padrão e troca instantaneamente para EN com persistência em `vn_lang`.
+
+#### `T1.3` — Projetos de Victor Neves (`ProjectsArea`)
+- **Pré-requisito:** `T0.3`, `T1.2`.
+- **Arquivos:** `game/sources/data/projects.js`, `game/sources/Game/World/Areas/ProjectsArea.js`, `game/static/projects/images/*`
+- **Passos:**
+  1. Preparar as 16 screenshots (`960×540` PNG) dos 6 projetos reais de Victor (`dtcg-contrast`, `snake-arena`, `Meu Poupig`, `js-games`, `xbox-sales`, `Financial Sample Analysis`) em `static/projects/images/`.
+  2. Remover as 31 imagens antigas dos projetos do Bruno de `static/projects/images/`.
+  3. Atualizar `sources/data/projects.js` conforme Seção 5.3 (`distinctions: []`) e confirmar que `ProjectsArea.js` lida com `distinctions` vazio sem erros.
+- **Validação:** dirigir até `ProjectsArea`, abrir a câmera cinemática, passar por todos os 6 projetos e todas as fotos, testar clique no link externo e verificar conquista `projects`.
+- **DoD:** 6 projetos reais do Victor navegáveis em alta nitidez, 0 projetos do Bruno.
+
+#### `T1.4` — Carreira / Timeline de Victor Neves (`CareerArea` + Gerador RG)
+- **Pré-requisito:** `T1.2`.
+- **Arquivos:** `game/scripts/generate-career-textures.mjs` (novo), `game/static/career/*.png`, `game/sources/Game/World/Areas/CareerArea.js`
+- **Passos:**
+  1. Criar `scripts/generate-career-textures.mjs` usando SVG + `sharp` para gerar os 6 PNGs RG nas dimensões exatas da Seção 5.2.
+  2. Executar o script e substituir os 6 arquivos `.png` em `game/static/career/`.
+  3. Em `CareerArea.js`, atualizar as 4 cores de linha para a nova paleta e aplicar o mapeamento de anos `1994 → 2026` no display de 7 segmentos.
+- **Validação:** dirigir do início ao fim da `CareerArea` de dia e de noite; checar orientação vertical (`flipY`), contraste e sincronia dos anos.
+- **DoD:** 6 blocos legíveis contando toda a trajetória de Victor (1994–2026) com display 7-segmentos sincronizado.
+
+#### `T1.5` — Lab, Máquina do Tempo (`TimeMachineArea`) e Conquistas (`achievements.js`)
+- **Pré-requisito:** `T0.3`, `T1.2`.
+- **Arquivos:** `game/sources/data/lab.js`, `game/static/lab/images/*`, `game/sources/Game/World/Areas/TimeMachineArea.js`, `game/static/timeMachine/*.png`, `game/sources/data/achievements.js`, `game/sources/Game/Achievements.js`
+- **Passos:**
+  1. Preparar os 6 pares de imagens (`960×540` + `240×136`) para `static/lab/images/`, remover os arquivos do Bruno e reescrever `sources/data/lab.js`.
+  2. Gerar as 2 telas retrô `140×124` (`Ponto Interativo 2005` e `Timeline 2D`) em `static/timeMachine/` e atualizar `TimeMachineArea.js` para abrir `https://voaneves.github.io/timeline/#carreira`.
+  3. Reescrever `sources/data/achievements.js` com as 37 conquistas da Seção 5.6 (integrando tradução PT-BR/EN em `Achievements.js`), ajustando `areas` para `12` e removendo dependência de `whisper`.
+- **Validação:** testar `LabArea`, bater na TV da `TimeMachineArea`, abrir aba `Conquistas` e rodar auditoria de grep por `bruno`.
+- **DoD:** Gate **G1** 100% aprovado.
+
+---
+
+### Fase 2 — Spin Visual por Código, Shaders TSL e Paleta (Sem Blender)
+
+#### `T2.1` — Nova Atmosfera, Iluminação e Ciclos de Dia
+- **Pré-requisito:** `T1.5`.
+- **Arquivos:** `game/sources/Game/Cycles/DayCycles.js`, `game/sources/Game/Ligthing.js`, `game/sources/Game/World/Areas/BehindTheSceneArea.js`
+- **Passos:**
+  1. Aplicar os 4 presets costeiros (`day`, `dusk`, `night`, `dawn`) da Seção 2.3 em `DayCycles.js`.
+  2. Alterar `bounceColor` em `Ligthing.js` para `#5a8c7a`.
+  3. Alterar `bloomColor` em `BehindTheSceneArea.js` para `#2ad4d9`.
+  4. Validar todos os 4 horários via slider no `#debug` (inclusive `VITE_DAY_CYCLE_PROGRESS` em testes rápidos).
+- **DoD:** iluminação limpa, vibrante e coerente nos 4 momentos do dia, sem sombra roxa/magenta exagerada.
+
+#### `T2.2` — Água Costeira (*Tidewater*), Terreno, Grama (*Infinite Terrain*) e Bioma de Árvores
+- **Pré-requisito:** `T2.1`.
+- **Arquivos:** `game/sources/Game/Terrain.js`, `game/sources/Game/World/Floor.js`, `game/sources/Game/World/WaterSurface.js`, `game/sources/Game/World/Grass.js`, `game/sources/Game/World/World.js`
+- **Passos:**
+  1. Atualizar gradiente de água/areia (`#f4d38c` → `#34cfc4` → `#12487a`) e `grassColorUniform` (`#76c442`) em `Terrain.js`.
+  2. Atualizar `slabHighColor` (`#f7e5c2`) e `slabLowColor` (`#b3957a`) em `Floor.js`.
+  3. Atualizar cores das 3 famílias de árvores em `World.js` (esmeralda, dourado solar e coral suave).
+  4. Polir `Grass.js` (gradiente vertical `#468c2e` → `#76c442` → `#b7eb5d`, curvatura de lâmina e resposta suave ao vento/rodas) e `shoreEdge` em `WaterSurface.js`.
+- **Validação:** percorrer costa, pontes, cachoeira (`AchievementsArea`) e gramados em Desktop Q0 e Mobile Q1.
+- **DoD:** visual costeiro vivo, água turquesa translúcida, grama estilizada fluida a 60 fps.
+
+#### `T2.3` — Curadoria da Paleta, Pinturas do Carro, Altar, `circuitBrand` e Previews UI
+- **Pré-requisito:** `T2.2`.
+- **Arquivos:** `game/static/palette.png` (backup em `game/resources/palette-original.png`), `game/sources/Game/Materials.js`, `game/sources/Game/World/VisualVehicle.js`, `game/static/areas/satanStar.png`, `game/sources/Game/World/Areas/CircuitArea.js`, `game/static/circuit/brand.png` (novo), `game/static/ui/previews/*`, `game/static/ui/achievements/rewards/*`, `game/static/social/share-image.png`
+- **Passos:**
+  1. Fazer backup de `palette.png` e aplicar refinamentos controlados de saturação/alegria estilo *Claybound* (respeitando a Regra de Ouro: reverter qualquer swatch que piore algum mini-game).
+  2. Atualizar as 6 pinturas do veículo (`Materials.js` + `VisualVehicle.js`) e gerar os 6 thumbnails correspondentes em `static/ui/achievements/rewards/*.png` (e `.webp`).
+  3. Substituir `static/areas/satanStar.png` (`128×128`) por um glifo geométrico/vórtice limpo (canal `R`).
+  4. Criar textura `static/circuit/brand.png` própria e aplicá-la em runtime no material `circuitBrand` dentro de `CircuitArea.js` (substituindo a marca do Bruno nos banners da pista).
+  5. Capturar novas imagens `600×600` para `static/ui/previews/*.png` → `.webp` e nova `static/social/share-image.png` (`1200×630`).
+- **Validação:** inspecionar todas as 12 áreas + todas as abas do Menu + todas as 6 pinturas do carro em Dia e Noite.
+- **DoD:** Gate **G2** 100% aprovado.
+
+---
+
+### Fase 3 — Melhorias de Gameplay & Mini-games (Sem Quebrar Assets Originais)
+
+#### `T3.1` — Circuito Turbinado (Medalhas Ouro/Prata/Bronze + Delta de Recorde)
+- **Pré-requisito:** `T0.2`, `T2.3`.
+- **Arquivos:** `game/sources/Game/World/Areas/CircuitArea.js`, `game/sources/index.html`, `game/sources/style/circuit.styl`, `game/sources/style/circuit-end.styl`
+- **Passos:**
+  1. Implementar cálculo de medalhas (Ouro `< 28s`, Prata `< 34s`, Bronze `< 42s`) e exibição do badge + delta para o melhor tempo pessoal no modal `circuit-end`.
+  2. Exibir ícone da medalha em cada linha do Top 5 local na aba `Circuit` e adicionar botão discreto `"Limpar recordes"` com confirmação.
+  3. Disparar confete no pódio (`refPodiumConfettiA/B`) sempre que o jogador conquistar novo #1 local.
+- **Validação:** correr 2–3 voltas completas, testar reset no meio da corrida, bater recorde e conferir persistência após F5.
+- **DoD:** circuito viciante e recompensador 100% offline sem mexer na física/geometria da pista.
+
+#### `T3.2` — Polimento de Exploração, Mapa com Progresso e Check de Dispositivos
+- **Pré-requisito:** `T3.1`.
+- **Arquivos:** `game/sources/Game/Map.js`, `game/sources/style/map.styl`, `game/sources/Game/Notifications.js`, `game/sources/Game/World/Areas/BowlingArea.js`, `CookieArea.js`
+- **Passos:**
+  1. Adicionar classe `.is-visited` nos pins de `Map.js` consultando `this.game.achievements.groups.get('areas').progress` + contador discreto `X / 12 áreas descobertas` no canto do mapa.
+  2. Adicionar micro-notificação não-invasiva ao descobrir uma área pela primeira vez.
+  3. Testar todos os mini-games (`Circuit`, `Bowling`, `Cookie`, `Altar`, `Toilet`) em teclado/mouse, emulação mobile touch (`390×844`) e gamepad (se disponível), corrigindo qualquer conflito de foco/modal.
+- **DoD:** Gate **G3** 100% aprovado.
+
+---
+
+### Fase 4 — Edições Pontuais de Assets 3D no Blender (Com Critério de Coesão)
+
+*Pré-requisito de ambiente: instalar Blender localmente e duplicar `game/resources/folio-2025.blend` → `game/resources/timeline-world.blend`.*
+
+#### `T4.0` — Script de Validação de Contrato `.glb` (`verify-glb.mjs`)
+- **Pré-requisito:** `T3.2`.
+- **Arquivos:** `game/scripts/verify-glb.mjs` (novo), `game/package.json` (adicionar `"verify:glb": "node scripts/verify-glb.mjs"`)
+- **Passos:** implementar a validação estrutural da Seção 6.3 lendo os cabeçalhos JSON de `areas.glb` e `respawnsReferences.glb`.
+- **DoD:** `npm.cmd run verify:glb` passa no `areas.glb` atual e acusa corretamente os 3 mascotes antigos do Bruno como pendência da `T4.2`.
+
+#### `T4.1` — Letras Físicas `VICTOR NEVES` na `LandingArea`
+- **Pré-requisito:** `T4.0`, Blender instalado.
+- **Arquivos:** `game/resources/timeline-world.blend` → `game/static/areas/areas.glb`
+- **Passos:**
+  1. Substituir as 10 letras `BRUNO SIMON` pelas 11 letras `VICTOR NEVES` mantendo altura, espessura, bevel, UV no swatch da `palette` (nó de textura mutado), nomeação `refLettersPhysicalDynamic.*`, custom property `mass = 0.2` e colliders `cuboid*`.
+  2. Exportar `areas.glb` sem compressão e rodar `npm.cmd run verify:glb`.
+  3. Testar no jogo acelerando contra cada letra (física, som `hitBrick` e `Reset`).
+- **DoD:** `VICTOR NEVES` com acabamento idêntico ao original, derrubável e resetável sem glitches.
+
+#### `T4.2` — Limpeza Geométrica de `SocialArea` e Consolidação de `CircuitArea`
+- **Pré-requisito:** `T4.1`.
+- **Arquivos:** `game/resources/timeline-world.blend` → `game/static/areas/areas.glb`, `game/sources/Game/World/Areas/SocialArea.js`
+- **Passos:**
+  1. Remover definitivamente `baguiraPhysicalDynamic`, `sudoPhysicalDynamic`, `boyPhysicalDynamic` e as 3 placas de redes não usadas (`twitch`, `bluesky`, `discord`) da coleção `social`.
+  2. Substituir `refStatuePhysicalDynamic` por um monumento/totem geométrico estilizado (derrubável, com `cuboid*` ajustado, mantendo a conquista `statueDown`).
+  3. Consolidar a textura do material `circuitBrand` no `.blend` (mantendo **intactos** todos os assets de `Bowling`, `Cookie`, `Toilet`, `Achievements`, `TimeMachine` e `Vehicle`).
+  4. Remover o workaround de ocultação em código de `SocialArea.js` que já não for necessário e rodar `npm.cmd run verify:glb`.
+- **DoD:** Gate **G4** 100% aprovado.
+
+---
+
+### Fase 5 — Spin no Layout da Fase (*Roadtrip Costeira*) e Novo Mapa
+
+#### `T5.1` — Reorganização da Ilha (Anel Narrativo + Penínsulas de Mini-games)
+- **Pré-requisito:** `T4.2` (Gate `G4`) e confirmação da Decisão `D10`.
+- **Arquivos:** `game/resources/timeline-world.blend` → `game/static/areas/areas.glb`, `game/static/respawns/respawnsReferences.glb`, `game/static/scenery/scenery.glb`, `game/static/terrain/terrain.png`, `game/static/terrain/terrain.glb`, `*References.glb` de vegetação/props
+- **Passos:**
+  1. Reposicionar as 13 áreas e seus respectivos `refZoneBounding*` / `refZoneFrustum*` conforme a tabela da Seção 4.4.
+  2. Reposicionar todos os `respawn*` em `respawnsReferences.glb` (alinhando `rotation.y` para o carro nascer olhando para a estrada/área).
+  3. Pintar novo `terrain.png` (`512×512` RGBA) desenhando o anel principal de pedra (`R`), gramados (`G`) e recorte costeiro/ilhota (`B`) sincronizado com o heightfield de `terrain.glb`.
+  4. Reposicionar referências de árvores, arbustos, flores, cercas, bancos, postes, lanternas e caixotes explosivos para emoldurar a nova estrada sem obstruir pistas nem spawns.
+  5. Exportar todos os `.glb` afetados e validar com `npm.cmd run verify:glb`.
+- **DoD:** volta completa pelo anel narrativo e todos os mini-games sem colisões invisíveis, sem objetos flutuando e com frustum culling limpo.
+
+#### `T5.2` — Novo Mapa 2D (Dia e Noite), Pins Recalibrados e Previews Atualizados
+- **Pré-requisito:** `T5.1`.
+- **Arquivos:** `game/static/ui/map/map-day.png`, `map-night.png`, `map-day.webp`, `map-night.webp`, `game/sources/Game/Map.js`, `game/static/ui/previews/*`
+- **Passos:**
+  1. Renderizar vista ortográfica top-down (`1024×1024`) exata dos `192 × 192 m` em iluminação Dia e Noite, converter para `.webp` e atualizar também `stylizedMap` no quiosque do `Landing`.
+  2. Recalibrar `offset` de todos os 12 pins em `Map.js` e validar teleporte de cada um.
+  3. Atualizar os previews `600×600` do Menu refletindo a nova geografia.
+- **DoD:** Gate **G5** 100% aprovado.
+
+---
+
+### Fase 6 — Compressão de Produção, Auditoria Final e Integração com a Raiz
+
+#### `T6.1` — Compressão de Produção (`Draco` + `KTX2` + `WebP`) e `VITE_COMPRESSED=1`
+- **Pré-requisito:** `T5.2` (ou `T4.2` se pular Fase 5), KTX-Software (`toktx`) instalado.
+- **Arquivos:** `game/static/**`, `game/.env.production` (ou variável de build)
+- **Passos:**
+  1. Executar `npm.cmd run compress` e revisar o log garantindo 0 falhas e presets `uastc` corretos em `palette.ktx`, `terrain.ktx` e `career/*.ktx`.
+  2. Rodar `VITE_COMPRESSED=1 npm.cmd run build` e testar em `npm.cmd run preview`.
+  3. Inspecionar aba Network (0 erros 404; todos os modelos `-compressed.glb` e texturas `.ktx`/`.webp` carregados) e conferir fidelidade visual lado a lado com o modo dev.
+- **DoD:** build de produção 100% comprimido, leve e visualmente fiel.
+
+#### `T6.2` — Auditoria Final de Originalidade, WebGPU/WebGL2, Mobile e Performance
+- **Pré-requisito:** `T6.1`.
+- **Arquivos:** `game/` completo
+- **Passos:**
+  1. Executar busca automatizada de strings confirmando 0 referências residuais a Bruno Simon fora de créditos MIT/CC0.
+  2. Testar Desktop WebGPU (`Q0`), Desktop WebGL2 fallback e Mobile (`390×844`, `Q1`, controles touch).
+  3. Registrar medições finais de FPS, draw calls e peso total de `game/dist/`.
+- **DoD:** Gate **G6** 100% aprovado.
+
+#### `T6.3` — Integração com o Site Raiz (`D:\GitHub\_kit-clones\timeline`) *(Somente após aprovação)*
+- **Pré-requisito:** `T6.2` + autorização explícita do dono.
+- **Arquivos:** `D:\GitHub\_kit-clones\timeline\index.html`, script de cópia/deploy para `play/` (ou GitHub Actions)
+- **Passos:**
+  1. Publicar `game/dist/` em `play/` (ou rota definida em `D12`).
+  2. Conectar o botão `"Jogar em 3D"` da página raiz ao `./play/` e o retorno dentro do jogo ao `../#carreira`.
+  3. Validar que a página raiz 2D permanece acessível e com Lighthouse 100.
+- **DoD:** fluxo completo Timeline 2D ↔ Experiência 3D funcionando ponta a ponta.
+
+---
+
+## 10. Matriz de Riscos, Decisões do Dono (`D1`–`D12`) e Checklist Final
+
+### 10.1 Matriz de Riscos e Mitigações
+| Risco | Prob. | Impacto | Mitigação concreta |
 |---|---|---|---|
-| D1 | Locomoção: a pé + grind (B), veículo (A) ou híbrido (C) | **B**, com C opcional na Fase 3 | G1 |
-| D2 | Iluminação: paleta + Lambert estilizado + AO no vértice + sombra bakeada no celular, ou lightmaps Cycles completos | **Paleta + AO + sombra bakeada no Q1** | Antes da T2.3 (padrão já vale) |
-| D3 | Semelhança do avatar: cabelo, óculos, barba, tom de pele, porte | Topete preto, sem óculos, sem barba, pele `#c98d6a`, porte médio. O dono pode mandar 2–3 fotos ou uma descrição. | Antes da T2.5a |
-| D3b | Animações de terceiros (ex.: Mixamo) | **Não usar.** Script + procedural + rodadas de iteração. Só com pedido explícito do dono. | GB |
-| D4 | Música: (a) encomenda a um músico; (b) composição procedural/generativa própria (WebAudio com timbres sintetizados ou samples CC0 de instrumentos); (c) faixa CC0 **se** a curadoria achar uma boa. Não dá para presumir que existe um baião CC0 bom. | **Decidir antes da T2.22.** Sem decisão, a fatia vai **sem música** e a música sai da nota do G2. Recomendação para o lançamento: (a). | Antes da T2.22 |
-| D5 | Deploy de preview | **Repo de preview separado (`voaneves/timeline-preview`) com commit órfão forçado.** Produção em `play/` no `main` só no G4. | Antes da T0.11 |
-| D6 | GSAP (licença própria "no charge") | **Manter e registrar**, ou trocar pelos tweens próprios se o dono preferir 100% OSI | T0.5 |
-| D7 | Entrada no 3D: documento separado `play/` | **Sim** | Agora |
-| D8 | Tom dos textos no mundo (placas de cordel, piadas leves) | Voz da marca (direto, caloroso, sem exclamação na UI); placas curtas | T2.19 |
-| D9 | Crédito visível ao motor do Bruno | **Sim**, no menu, na sala de bastidores, no `LICENSES.md` e no README (exigência do dono) | Já decidido |
-| D10 | Celular(es) do teste real | O aparelho principal do dono + qualquer Android médio disponível | Antes do G1 |
-| D11 | Imagens dos projetos (capturas das páginas live) | Capturas automáticas WebP 1200×675 revisadas pelo dono | Fase 3 (T3.T*) |
-| D12 | Qualidade padrão no celular e WebGPU no celular | Q1 + WebGPU quando houver (auto), com `?webgl` como fallback | G1 |
-| D13 | Idioma | Só pt-BR (en depois) | — |
-| D14 | Lançar só com Origens + hub se a Fase 3 atrasar | Sim, com os outros marcos acessíveis por cards/lista | G2 |
-| D15 | Cor e forma dos canos | **Cobre e tinta com anel vermelho** (homenagem reinterpretada). O verde clássico só se o dono quiser assumir o risco de trade dress. | Antes da T2.12 |
-| D16 | Medir a conversão do contato | **Nenhuma medição na fatia.** Depois, se o dono quiser: contador próprio sem cookies e sem terceiros (no estilo GoatCounter auto-hospedado), contando só cliques em "Falar com Victor". | G2 |
-| D17 | Backend no celular | **WebGL2 forçado** até o WebGPU passar na matriz da T1.11 no aparelho do dono | G1 |
+| `Grass.js` quebrado impede iniciar o projeto hoje | Certo | Alto | Resolvido imediatamente na `T0.0` antes de qualquer outra mudança. |
+| Quebra de `References.js`, `extras` ou colisores ao editar `areas.glb` no Blender | Média | Alto | Fases 0–3 não tocam no `.glb`; na Fase 4/5 usar cópia `timeline-world.blend` + validação automatizada obrigatória via `verify-glb.mjs`. |
+| Regexes de `compress.js` falharem no Windows (`\` vs `/`) corrompendo `palette.ktx` / `terrain.ktx` | Alta | Alto | Corrigido na `T0.3` com normalização de barras + conferência visual na `T6.1`. |
+| Troca de assets em mini-games piorar estética ou física | Média | Alto | Regra de Ouro (Seção 1.3): preservar geometria/física de `Circuit`, `Bowling`, `Cookie`, `Toilet` e `Vehicle`; reverter qualquer troca que não combine. |
+| `toktx` ausente bloquear iteração de texturas 2D | Alta | Médio | `T0.3` unifica `ProjectsArea`/`LabArea`/`Intro` para carregar `.png` quando `VITE_COMPRESSED=` estiver vazio; `toktx` só é exigido na `T6.1`. |
+| Texturas RG de `CareerArea` aparecerem invertidas (`flipY = false`) ou ilegíveis à noite | Média | Médio | Script `generate-career-textures.mjs` parametrizado com teste imediato em Dia e Noite na `T1.4`. |
+| Build inflado com 136 MB de `.wav` mortos em `static/sounds/musics/` | Certo | Médio | Movidos para `resources/sounds/musics/` já na `T0.1`. |
+| Queda de FPS em celulares por shaders de grama/água | Média | Médio | `Quality.level = 1` reduz instâncias de grama, desliga blur da água (`WaterSurface.js`) e desliga `cheapDOF` (`Rendering.js`). |
 
----
+### 10.2 Decisões do Dono (`D1`–`D12`) — Padrões Sugeridos
+| ID | Tema | Padrão adotado neste plano | Alternativa aberta |
+|---|---|---|---|
+| **D1** | Idioma padrão | **PT-BR padrão** com toggle `PT-BR / EN` em `Options` | EN padrão com toggle PT-BR |
+| **D2** | Direção visual | **Roadtrip Costeira Tátil** (solar/turquesa/alegre, sem forçar marca pessoal) | Puxar mais para paleta editorial papel/vermelho |
+| **D3** | Pintura inicial do carro | **Coral Solar** (`#ff5a36` → `#d92b4b`) | Turquesa Costa ou Amarelo Solar |
+| **D4** | `Whispers` sem servidor | **Oculto** quando `VITE_SERVER_URL` estiver vazio | Mural local em `localStorage` |
+| **D5** | Contador 7-segmentos da `CareerArea` | **Curva de marcos (`1994` → `2026`)** | Linear `2011` → `2026` (1 m = 1 ano) |
+| **D6** | Estátua derrubável na `SocialArea` | Ocultar mascotes na F1 e **trocar estátua por totem geométrico** na F4 | Remover estátua e conquista `statueDown` |
+| **D7** | Easter egg `OnlyFans` (ventiladores) | **Manter mecânica** (rótulo leve `"Fãs"` / `"OnlyFans"`) | Remover ponto interativo |
+| **D8** | Re-tema do `AltarArea` | **Trocar `satanStar.png` por vórtice geométrico** + cataclismo offline (5 entradas) | Manter estrela original e só ligar modo offline |
+| **D9** | Destino da `TimeMachineArea` | Abrir **Timeline 2D (`#carreira`)** + telas retrô *Ponto Interativo 2005* | Abrir modal interno retrô |
+| **D10** | Rearranjo de layout na Fase 5 | **Sim** — anel narrativo costeiro (`Landing → Career → Social → Lab → Projects`) | Manter layout atual e mudar apenas visual/texturas |
+| **D11** | Trilha sonora | **Manter 3 músicas CC0 de Kounine** (com créditos) | Substituir por trilha própria futura |
+| **D12** | Integração com a raiz | Build em `play/` ligado ao botão `"Jogar em 3D"` (mantendo site 2D intacto) | Hospedar em subdomínio/repo separado |
 
-## 10. Definição de 11/10 (checklist)
-
-- [ ] O dono jogou no desktop **e** no celular dele e deu ≥ 9 em todas as dimensões e média ≥ 10 no formulário (o mesmo que usou para o Bruno na T0.4), e disse "melhor que o Bruno" em pelo menos três: história, acessibilidade, mobile e personagem.
-- [ ] Rubrica 7.3: todas ≥ 9, média ≥ 10, ≥ 3 dimensões nomeadas em 11 com evidência (vídeo + métricas).
-- [ ] Primeiros 10 s: controle ≤ 0.8 s após o reveal, primeiro deleite < 5 s, primeiro marco < 15 s, contato < 30 s (ghosts `first10s` e `contact30`).
-- [ ] Controle medido: apex 2.0 m ± 0.05 em 0.34 s, aceleração 0.14 s, frenagem 0.10 s, latência ≤ 1 frame. Um polegar joga no retrato e na paisagem.
-- [ ] Desktop 1440p: 60 fps travado, GPU ≤ 6 ms. Celular real (WebGL2, com gravação de tela como evidência): ≥ 55 fps médio, p95 ≤ 20 ms, 5 min sem cair abaixo de 45.
-- [ ] Transferência até o controle ≤ 3.0 MB, era crítica ≤ 850 KB (+ ≤ 350 KB de áudio depois), JS principal ≤ 420 KB gz, todos os assets com hash de conteúdo.
-- [ ] Página 2D intacta: Lighthouse 100×4 e nada do 3D antes do clique.
-- [ ] Acessibilidade: axe 0, teclado-only completo, lista de marcos + `aria-live`, movimento reduzido, contraste no gate (`npm run contrast`), alternativas de ponteiro único (2.5.7), sem flashes (2.3.1), Pausar (2.2.2) e auto-walk acessível.
-- [ ] Originalidade: `audit-originality.mjs` = 0 arquivos do upstream. Nenhum som, modelo, textura, fonte ou layout do Bruno. Comparação humana lado a lado aprovada (T2.32, T4.12). Nada da Nintendo. Log de licenças completo.
-- [ ] Atribuição MIT do folio-2025 no `LICENSES.md`, nos cabeçalhos, no menu e no README.
-- [ ] Os 15 marcos, os 6 projetos e o contato do 2D aparecem no 3D com paridade testada.
-- [ ] Rollback documentado e ensaiado (T5.2b) antes de aposentar o 3D antigo.
-- [ ] Commit e push só com autorização, em commits pequenos Conventional Commits, sem atribuição de ferramenta e sem `Co-Authored-By`.
+### 10.3 Checklist Final de "Pronto para Publicar"
+- [ ] `T0.0` concluída: `Grass.js` integrado ao `terrainNode` + `Tracks`, build e dev rodando limpos.
+- [ ] `npm.cmd run build` (dev e `VITE_COMPRESSED=1`) com 0 erros e `dist/` livre dos 136 MB de `.wav`.
+- [ ] Zero menções residuais a Bruno Simon, *Three.js Journey*, `G-JMSN30BQ5J` ou URLs externas antigas (exceto créditos MIT/CC0 em *Bastidores* e `consoleLog.js`).
+- [ ] 100% do conteúdo de **Victor Neves** validado em **PT-BR e EN**: Carreira (6 blocos + display `1994–2026`), Projetos (6 projetos reais), Lab (6 experimentos), Social (links + Modal Contato), TimeMachine (versão 2D + 2 telas CRT) e 37 Conquistas.
+- [ ] Modo 100% offline-first validado: Circuito (Top 5 + medalhas Ouro/Prata/Bronze), Cookie (contador 3D), Altar (cataclismo a cada 5 entradas) e Conquistas persistem após recarregar.
+- [ ] Spin visual *Roadtrip Costeira Tátil* validado em `day`, `dusk`, `night`, `dawn`, chuva e neve; todos os mini-games (`Circuit`, `Bowling`, `Cookie`, `Toilet`) preservados e visualmente coesos.
+- [ ] Letras `VICTOR NEVES` funcionam fisicamente no `LandingArea` e figuras pessoais do Bruno removidas de `SocialArea` (`verify-glb.mjs` verde).
+- [ ] Desktop (WebGPU + WebGL2 fallback) e Mobile (`Quality.level = 1`, touch `Nipple`) testados com performance estável e 0 erros 404.
