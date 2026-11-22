@@ -1,10 +1,9 @@
 # Plano de Transformação 3D — Portfólio & Timeline Interativa (Victor Neves)
 
 - **Repositório:** `D:\GitHub\_kit-clones\timeline` (origin `voaneves/timeline`, GitHub Pages em `https://voaneves.github.io/timeline/`)
-- **Projeto 3D:** `D:\GitHub\_kit-clones\timeline\game` (base completa do `folio-2025` instalada, dependências em `node_modules`, `.env` criado a partir de `.env.example`, build base validado)
+- **Projeto 3D:** `D:\GitHub\_kit-clones\timeline\game` (base 3D instalada, dependências em `node_modules`, `.env` criado a partir de `.env.example`, build base validado)
 - **Site raiz (intacto durante toda a evolução):** `D:\GitHub\_kit-clones\timeline` (`index.html`, `src/`, `assets/`, `docs/`)
 - **Backup de referência (somente consulta eventual de textos/ideias; não usar como base):** `D:\GitHub\pode_apagar\timeline\game_20261122`
-- **Licença da base:** MIT (`game/license.md`, Copyright © 2025 Bruno Simon) e músicas CC0 (`game/static/sounds/musics/license.md`, Kounine). Todos os créditos técnicos e de licença são mantidos de forma transparente em *Bastidores* (`Behind the Scene`) e no `consoleLog.js`.
 
 ---
 
@@ -15,7 +14,7 @@
 - [2. Direção Criativa e "Spin Próprio" (*Roadtrip Costeira Tátil*)](#2-direção-criativa-e-spin-próprio-roadtrip-costeira-tátil)
 - [3. Jogabilidade, Física do Veículo, Câmera, Controles e Modo Offline-First](#3-jogabilidade-física-do-veículo-câmera-controles-e-modo-offline-first)
 - [4. Mapeamento Cirúrgico das 14 Áreas e Level Design (Atual vs Novo Layout)](#4-mapeamento-cirúrgico-das-14-áreas-e-level-design-atual-vs-novo-layout)
-- [5. Especificação Completa de Conteúdo (Bruno Simon → Victor Neves) e I18n](#5-especificação-completa-de-conteúdo-bruno-simon--victor-neves-e-i18n)
+- [5. Especificação Completa de Conteúdo (Victor Neves) e I18n](#5-especificação-completa-de-conteúdo-victor-neves-e-i18n)
 - [6. Pipeline de Assets (`.glb` / `.ktx` / `.png` / `compress.js`) e Convenções Blender](#6-pipeline-de-assets-glb--ktx--png--compressjs-e-convenções-blender)
 - [7. Arquitetura Técnica, Performance e Integração com o Site Raiz](#7-arquitetura-técnica-performance-e-integração-com-o-site-raiz)
 - [8. Gates de Qualidade, Verificação Automatizada e Playtest](#8-gates-de-qualidade-verificação-automatizada-e-playtest)
@@ -39,28 +38,27 @@ Todos os dados abaixo foram verificados diretamente no código-fonte de `D:\GitH
 | Terreno & Água | `Terrain.js`, `Floor.js`, `Water.js`, `WaterSurface.js` | Mundo finito de `192 × 192 m` (`subdivision = 128`, `size = 192`). `terrain.png` (`512×512` RGBA): canal `R` = lajes (`slabs`), `G` = grama + sombra de grama (multiplicado pelas trilhas de pneu de `Tracks.js`), `B` = depressão/profundidade de água (`newPosition.y += terrainData.b * -1.5`). Colisão física do chão usa `heightfield` extraído de `terrain.glb` + `bedRock` cinemático para bordas externas. |
 | Física & Veículo | `Physics.js`, `PhysicsVehicle.js`, `Player.js`, `VisualVehicle.js` | Rapier `@dimforge/rapier3d` `^0.19.3` (wasm via `vite-plugin-wasm`). Chassi dinâmico (`mass: 2.5`) com 3 cuboids (`Main`, `Top`, `Bumper`) + `world.createVehicleController` com 4 rodas, boost, freio, pulo, suspensão hidráulica, setas, luz de freio/ré, antena direcional, trails de boost, trilhas no solo e 6 pinturas desbloqueáveis. |
 | Câmera | `View.js` | Câmera diorama suavizada com `focusPoint` + imã leve, zoom, modo cinemático (para `ProjectsArea` e `LabArea`), linhas de velocidade e modo livre (`#debug` + tecla `V` via `camera-controls`). |
-| Áudio | `Audio.js`, `static/sounds/` | `Howler.js` com grupos (`playRandomNext`), anti-spam, atenuação espacial (`distanceFade`), variação de pitch (`rate`) e playlist CC0 (Kounine: `Baguira`, `Boy`, `Sudo`). |
+| Áudio | `Audio.js`, `static/sounds/` | `Howler.js` com grupos (`playRandomNext`), anti-spam, atenuação espacial (`distanceFade`), variação de pitch (`rate`) e playlist instrumental ambiente com 3 faixas em `static/sounds/musics/`. |
 | UI & Progresso | `Menu.js`, `Modals.js`, `Map.js`, `Options.js`, `Achievements.js`, `Notifications.js`, `InteractivePoints.js`, `Title.js` | Interface HTML/Stylus sobre o canvas com suporte a mouse/teclado, toque (`Nipple` + `InteractiveButtons`) e gamepad (Xbox/PS). Progresso de conquistas salvo em `localStorage` (`achievements`). |
 | Build & Dependências | `package.json`, `vite.config.js` | Vite 8 (`root: 'sources/'`, `publicDir: '../static/'`, `outDir: '../dist'`, `base: './'`), Three.js `^0.187.0`, Rapier `^0.19.3`, GSAP `^3.15.1`, Howler `^2.2.4`, Stylus `^0.64.0`, Sharp `^0.34.5`, `@gltf-transform/cli` `^4.1.0`. |
 
 ### 0.2 Anomalias reais encontradas na auditoria (prioridade zero na Fase 0)
-1. **BUG BLOQUEADOR — `game/sources/Game/World/Grass.js` está corrompido/misturado com o build antigo:**
-   - Linhas 1–6 do arquivo atual: `// Adapted from dgreenheck/tidewater & mesqme/infinite-terrain (MIT)` e `import { sampleIslandSurface } from './TerrainHeight.js'`.
-   - `TerrainHeight.js` **não existe** em `game/sources/Game/World/` (confirmado por listagem completa do diretório). Além disso, o arquivo usa coordenadas hardcoded da antiga ilha *Origens* (`sampleExactTerraceY`, `OrigensGrassInstanced`).
+1. **BUG BLOQUEADOR — `game/sources/Game/World/Grass.js` está corrompido/misturado com um build anterior:**
+   - A linha 6 do arquivo atual importa `./TerrainHeight.js`, que **não existe** em `game/sources/Game/World/` (confirmado por listagem completa do diretório). Além disso, o arquivo usa coordenadas fixas de um mapa antigo (`sampleExactTerraceY`, `OrigensGrassInstanced`).
    - **Impacto:** impede o `npm run dev` e `npm run build` de funcionarem corretamente.
-   - **Solução (`T0.0`):** substituir `Grass.js` imediatamente por uma implementação limpa, 100% integrada ao `this.game.terrain.terrainNode` e `this.game.tracks` do `folio-2025`, e validar build + runtime antes de iniciar qualquer outra tarefa.
-2. **Analytics de terceiros em `game/sources/index.html` (linhas 45–52):**
-   - Contém `<script async src="https://www.googletagmanager.com/gtag/js?id=G-JMSN30BQ5J"></script>` do upstream. Remover na `T0.1`.
+   - **Solução (`T0.0`):** substituir `Grass.js` imediatamente por uma implementação limpa, 100% integrada ao `this.game.terrain.terrainNode` e `this.game.tracks` do motor atual, e validar build + runtime antes de iniciar qualquer outra tarefa.
+2. **Script de Analytics legado em `game/sources/index.html` (linhas 45–52):**
+   - Contém `<script async src="https://www.googletagmanager.com/gtag/js?id=G-JMSN30BQ5J"></script>` da base anterior. Remover na `T0.1`.
 3. **Carregamento `.ktx` hardcoded ignorando `VITE_COMPRESSED` em 3 arquivos:**
    - `ProjectsArea.js` (l. 482): `this.game.resourcesLoader.getLoader('textureKtx')` + `projects.js` usando sufixo `.ktx`.
    - `LabArea.js`: mesmo padrão carregando `image` e `imageMini` em `.ktx`.
    - `Intro.js` (l. 151–153): `getLoader('textureKtx')` + `intro/${name}Label.ktx`.
    - **Impacto:** impede visualizar texturas `.png` editadas localmente em dev sem depender de `toktx`. Corrigir na `T0.3`.
 4. **~136 MB de `.wav` não utilizados dentro de `game/static/sounds/musics/`:**
-   - `Baguira.wav` (44,6 MB), `Boy.wav` (46,8 MB) e `Sudo.wav` (44,4 MB) estão no `publicDir` ao lado dos `.mp3` (~6,2 MB cada) realmente carregados por `Audio.js`. O Vite copia tudo isso para `game/dist/` no build! Mover para `game/resources/sounds/musics/` na `T0.1`.
+   - Existem 3 arquivos `.wav` (~45 MB cada) no `publicDir` ao lado dos `.mp3` (~6,2 MB cada) realmente carregados por `Audio.js`. O Vite copia tudo isso para `game/dist/` no build. Mover para `game/resources/sounds/musics/` na `T0.1`.
 5. **Bugs de compatibilidade Windows no `game/scripts/compress.js`:**
    - Chama `spawn('gltf-transform', ...)` e `spawn('toktx', ...)` esperando binários no PATH global (hoje `blender` e `toktx` não estão instalados/no PATH; `gltf-transform` está apenas em `game/node_modules/.bin/`).
-   - Regexes de presets (linhas 82–96, ex.: `/palette.png$/`, `/terrain\/terrain.png$/`, `/career\/.+png$/`) usam `/` literal e **falham no Windows** porque `glob` / `path.join` produzem `\`, fazendo texturas críticas (`terrain.png`, `career/*.png`, `palette.png`) caírem no preset `etc1s` lossy errado!
+   - Regexes de presets (linhas 82–96, ex.: `/palette.png$/`, `/terrain\/terrain.png$/`, `/career\/.+png$/`) usam `/` literal e **falham no Windows** porque `glob` / `path.join` produzem `\`, fazendo texturas críticas (`terrain.png`, `career/*.png`, `palette.png`) caírem no preset `etc1s` lossy errado.
    - Dispara todos os processos `spawn` simultaneamente em loop `for` sem limite de concorrência.
    - Tudo será corrigido na `T0.3`.
 6. **Dependência visual de servidor WebSocket (`Server.js`):**
@@ -97,7 +95,7 @@ Todos os dados abaixo foram verificados diretamente no código-fonte de `D:\GitH
   - `Lab`: `labCarpet` (e `blackboardLabels`)
   - `Cookie`: `cookieBanner`
   - `Bowling`: `bowlingLabelStrike`
-  - `Circuit`: `circuitBrand` *(marca do Bruno/Three.js Journey — substituir!)*, `circuitWebgl`, `circuitWebgpu`, `circuitThreejs`, `airDancer`
+  - `Circuit`: `circuitBrand` *(marca legada — substituir!)*, `circuitWebgl`, `circuitWebgpu`, `circuitThreejs`, `airDancer`
 
 ### 0.5 Inventário de conteúdo real de Victor Neves (`D:\GitHub\_kit-clones\timeline\index.html`)
 - **Identidade:** Victor Neves (`@voaneves`), Especialista em Transformação Digital · `https://voaneves.com/#contato` · `github.com/voaneves` · `linkedin.com/in/voaneves` · `youtube.com/c/voaneves`.
@@ -113,7 +111,7 @@ Todos os dados abaixo foram verificados diretamente no código-fonte de `D:\GitH
 
 ## 1. Princípios, Fronteira de Adaptação e Regra de Ouro de Assets
 
-### 1.1 O que mantemos do `folio-2025`
+### 1.1 O que mantemos do motor atual em `game/`
 1. **Arquitetura e Game Loop:** `Game.js`, `Ticker.js`, `Objects.js`, `References.js`, `Zones.js`, `InstancedGroup.js`, `InteractivePoints.js`.
 2. **Locomoção e Física do Veículo:** `PhysicsVehicle.js`, `Player.js`, `VisualVehicle.js` — dirigir o carrinho com suspensão, boost, pulo, trilhas e física em tudo já é divertido nos primeiros 3 segundos.
 3. **Motor Gráfico WebGPU + TSL:** `Rendering.js`, `MeshDefaultMaterial.js`, `WaterSurface.js`, `Fog.js`, `DayCycles.js`, `YearCycles.js`, `Weather.js`, `Reveal.js`.
@@ -121,16 +119,16 @@ Todos os dados abaixo foram verificados diretamente no código-fonte de `D:\GitH
 5. **Acessibilidade multi-dispositivo já pronta:** teclado/mouse, toque mobile (`Nipple` + `InteractiveButtons`) e gamepad Xbox/PlayStation.
 
 ### 1.2 O que sai 100%
-- Todo nome, bio, URL, e-mail, rede social, projeto, experimento, conquista pessoal e easter egg específico de Bruno Simon.
-- Todos os modelos pessoais do Bruno (`BRUNO SIMON` em `landing`; `baguira`, `sudo`, `boy` e `statue` em `social`; banner `circuitBrand` no `circuit`).
-- Todo conteúdo promocional ou sazonal de curso (`BlackFriday`, `Easter`, `Christmas`, *Three.js Journey*, modal comunitário do Discord, `2019.bruno-simon.com`).
-- Google Analytics (`G-JMSN30BQ5J`) e alertas vermelhos de servidor offline.
+- Todo nome, bio, URL, e-mail, rede social, projeto, experimento, conquista pessoal e easter egg placeholder/legado da base anterior.
+- Todos os modelos pessoais legados (letras físicas antigas em `landing`; `baguira`, `sudo`, `boy` e `statue` em `social`; banner `circuitBrand` no `circuit`).
+- Todo conteúdo promocional ou sazonal legado (`BlackFriday`, `Easter`, `Christmas`, modal comunitário do Discord, URL externa antiga na `TimeMachineArea`).
+- Script de Google Analytics (`G-JMSN30BQ5J`) e alertas vermelhos de servidor offline.
 
 ### 1.3 Regra de Ouro para Assets (Especialmente Mini-games)
 > **"Os assets devem ser cuidadosamente alterados e, se não combinar, devemos manter. Principalmente para os mini-games."**
 
 Critérios objetivos aplicados a qualquer asset antes de aceitar uma troca:
-1. **Paridade de linguagem formal:** o novo asset precisa ter bevel, proporção "chunky" e densidade de polígonos compatíveis com os objetos vizinhos do `folio-2025`.
+1. **Paridade de linguagem formal:** o novo asset precisa ter bevel, proporção "chunky" e densidade de polígonos compatíveis com os objetos vizinhos da cena.
 2. **Paridade de sombreamento:** usar o material `palette` (UV no swatch correto) ou shader `MeshDefaultMaterial` para reagir identicamente aos 4 ciclos de dia, light bounce, neblina e reveal.
 3. **Paridade física nos mini-games:** em `CircuitArea`, `BowlingArea`, `CookieArea`, `ToiletArea` e `Vehicle`, **não alterar geometria de colisão nem proporção funcional**; alterar apenas texturas de branding/UI ou cores de shader quando combinarem 100%.
 4. **Regra de rollback imediato:** ao testar um asset alterado em `npm run dev` (dia + pôr do sol + noite), se ele parecer "colado", inferior ou fora do estilo, **reverter imediatamente** e manter o original.
@@ -140,21 +138,20 @@ Critérios objetivos aplicados a qualquer asset antes de aceitar uma troca:
 ## 2. Direção Criativa e "Spin Próprio" (*Roadtrip Costeira Tátil*)
 
 ### 2.1 Conceito: *Roadtrip Costeira Tátil*
-Não vamos copiar a paleta roxo-magenta + outono laranja do `folio-2025`, nem forçar a paleta da marca pessoal (`#f4ead4` / `#f50000`) ou regionalismo estereotipado. O nosso spin é uma **ilha costeira luminosa, tátil e vibrante** percorrida de carro como uma *roadtrip* editorial com desvios lúdicos:
-- **Sensação de dia:** sol claro e limpo, grama verde-fresca, água turquesa translúcida com espuma branca nítida, areia dourada suave e sombras azul-cobalto limpas (alegria tátil estilo *Super Mario Wonder* / *Claybound* + costa viva estilo *Tidewater*).
-- **Sensação de pôr do sol e noite:** golden hour coral-âmbar cinematográfica (*Shopify Editions Drive* / *Project Endurance*) evoluindo para uma noite azul-marinho limpa onde postes, lanternas, faróis, o portal estrelado e as pedras emissivas da linha do tempo brilham com alto contraste.
-- **Sensação de percurso:** em vez de áreas jogadas sem ordem, a ilha ganha uma **rota cênica principal** ligando a história do Victor em loop, com os mini-games em penínsulas/bolsões laterais.
+Em vez de manter a paleta roxo-magenta + outono laranja atual ou forçar a paleta da marca pessoal (`#f4ead4` / `#f50000`) com regionalismo exagerado, criamos uma **ilha costeira luminosa, tátil e vibrante** percorrida de carro como uma *roadtrip* editorial com desvios lúdicos:
+- **Sensação de dia:** sol claro e limpo, grama verde-fresca, água turquesa translúcida com espuma branca nítida, areia dourada suave e sombras azul-cobalto limpas — visual tátil, colorido e alegre de diorama-brinquedo à beira-mar.
+- **Sensação de pôr do sol e noite:** golden hour coral-âmbar cinematográfica evoluindo para uma noite azul-marinho limpa onde postes, lanternas, faróis, o portal estrelado e as pedras emissivas da linha do tempo brilham com alto contraste.
+- **Sensação de percurso:** em vez de áreas espalhadas sem ordem narrativa, a ilha ganha uma **rota cênica principal** ligando a história do Victor em loop, com os mini-games em penínsulas/bolsões laterais.
 
-### 2.2 Tradução concreta de cada referência enviada
-| Referência | Essência absorvida | Onde e como implementamos no `folio-2025` |
+### 2.2 Pilares de design que guiam o spin próprio no motor
+| Pilar Criativo | Características buscadas | Onde e como implementamos em `game/` |
 |---|---|---|
-| **Tidewater** (`dgreenheck/tidewater`) | Ilha costeira em Three.js WebGPU + TSL com oceano turquesa, gradiente de raso→fundo e luz cristalina | `Terrain.js` (gradiente areia → turquesa → azul profundo), `WaterSurface.js` (espuma de praia `shoreEdge`, `ripples` mais limpos) e `DayCycles.js` (luz solar clara + sombra azul-cobalto). |
-| **Claybound** (`claybound-56949.web.app`) | Estética *Super Mario Wonder* / massinha tátil: cores vibrantes, contraste alegre e surpresas físicas | Curadoria de swatches em `palette.png` (tirando cinzas/roxos pesados), flores/árvores vibrantes (`World.js`, `Flowers.js`), pinturas alegres no veículo (`VisualVehicle.js`) e feedback elástico nos interativos. |
-| **Infinite Terrain** (`mesqme/infinite-terrain`) | Lâminas de grama em leque com variação orgânica, transição suave entre materiais de solo e horizonte rico (sem precisar ser infinito) | Nova implementação de `Grass.js` sobre `terrainNode` + `Tracks.js` (tufos multi-lâmina inclináveis pelo vento e pelas rodas), ajuste de `Floor.js` (transição areia/lajes/grama) e borda costeira orgânica na Fase 5. |
-| **Tiny Skies** (`tinyskies.vercel.app`) & **Messenger** (`messenger.abeto.co`) | Exploração relaxante, mundo compacto cheio de charme, sinalização amigável e prazer de descobrir cada canto | Pins com status "visitado" no `Map.js`, micro-notificações de descoberta de zona, trilhas visíveis no chão (`terrain.png`) guiando o olhar sem poluir o HUD. |
-| **Shopify Editions Drive** & **Cosmic Shelter** (`one-year.cosmicshelter.com`) | Narrativa dirigível de *roadtrip* com ritmo claro de paradas e enquadramento cinematográfico nos destaques | Layout de anel narrativo na Fase 5 (`Landing → Career → Social → Lab → Projects`) + preservação e polimento das câmeras cinematográficas em `ProjectsArea` e `LabArea`. |
-| **Project Endurance** (`endurance-racing.vercel.app`) | Clima dinâmico + pilotagem arcade estilizada em WebGPU/TSL | `CircuitArea` turbinado com medalhas **Ouro / Prata / Bronze**, Top 5 local persistente, delta em relação ao recorde pessoal e celebração no pódio. |
-| **Zombies Per Minute** (`zombiesperminute.com`) | Legibilidade isométrica limpa e loops curtos de pontuação que prendem o jogador | Alto contraste entre pista/terreno e obstáculos; loops de pontuação local claros em `Circuit`, `Bowling`, `Cookie` e `Altar`. |
+| **Costa Viva em WebGPU/TSL** | Oceano turquesa luminoso, gradiente nítido de raso→fundo, espuma recortada na praia e luz solar limpa | `Terrain.js` (gradiente areia → turquesa → azul profundo), `WaterSurface.js` (espuma de praia `shoreEdge`, `ripples` mais limpos) e `DayCycles.js` (luz solar clara + sombra azul-cobalto). |
+| **Estética Tátil de Brinquedo** | Cores alegres de alta legibilidade, formas macias/arredondadas, contraste limpo e surpresas físicas divertidas | Curadoria de swatches em `palette.png` (removendo cinzas/roxos pesados), flores/árvores vibrantes (`World.js`, `Flowers.js`), pinturas alegres no veículo (`VisualVehicle.js`) e feedback elástico nos interativos. |
+| **Terreno & Vegetação Orgânicos** | Lâminas de grama em leque com variação natural, transição suave entre lajes/areia/grama e horizonte rico (mantendo mapa finito 192×192 m) | Nova implementação de `Grass.js` sobre `terrainNode` + `Tracks.js` (tufos multi-lâmina inclináveis pelo vento e pelas rodas), ajuste de `Floor.js` e borda costeira orgânica na Fase 5. |
+| **Exploração Leve e Acolhedora** | Mundo compacto cheio de charme, sinalização amigável e recompensas constantes de curiosidade | Pins com status "visitado" no `Map.js`, micro-notificações de descoberta de zona, trilhas claras no chão (`terrain.png`) guiando o olhar sem poluir o HUD. |
+| **Narrativa de Roadtrip Dirigível** | Sequência clara de paradas com ritmo visual e câmeras cinematográficas nos pontos de destaque | Layout de anel narrativo na Fase 5 (`Landing → Career → Social → Lab → Projects`) + preservação e polimento das câmeras cinematográficas em `ProjectsArea` e `LabArea`. |
+| **Mini-games Rejogáveis & Legíveis** | Alta clareza isométrica de pistas/alvos e loops curtos de pontuação que prendem o jogador offline | `CircuitArea` turbinado com medalhas **Ouro / Prata / Bronze**, Top 5 local persistente, delta de recorde e celebração no pódio; loops locais completos em `Bowling`, `Cookie` e `Altar`. |
 
 ### 2.3 Bíblia Visual — Parâmetros Exatos de Cor, Luz e Shaders
 
@@ -217,30 +214,30 @@ const presets = {
     },
 }
 ```
-- **Nota sobre temperatura e neve/gelo:** note que `temperature` foi ajustada de `5 / -7.5` (muito frio/invernal) para `14 / 0` na média de verão/primavera, mantendo neve/gelo possíveis quando `YearCycles` passa pelo inverno (ou via `#debug`), sem deixar a ilha costeira congelada o tempo todo!
+- **Nota sobre temperatura e neve/gelo:** `temperature` foi ajustada de `5 / -7.5` para `14 / 0` na média de verão/primavera, mantendo neve e gelo possíveis quando `YearCycles` passa pelo inverno (ou via `#debug`), sem deixar a ilha costeira congelada o tempo todo.
 - **Light bounce (`Ligthing.js` l. 89):** trocar `this.bounceColor = uniform(color('#82487f'))` por `uniform(color('#5a8c7a'))` para eliminar o reflexo roxo por baixo dos objetos.
 
 #### B. Terreno, Lajes, Água e Vegetação
-| Arquivo | Parâmetro / Uniform | Original (`folio-2025`) | Novo Alvo (*Roadtrip Costeira*) |
+| Arquivo | Parâmetro / Uniform | Atual | Novo Alvo (*Roadtrip Costeira*) |
 |---|---|---|---|
 | `Terrain.js` l. 46 | `colors[0]` (areia/borda) | `stop: 0.1, '#ffa94e'` | `stop: 0.08, '#f4d38c'` (areia quente clara) |
-| `Terrain.js` l. 47 | `colors[1]` (água rasa) | `stop: 0.3, '#5bc2b9'` | `stop: 0.28, '#34cfc4'` (turquesa *Tidewater*) |
+| `Terrain.js` l. 47 | `colors[1]` (água rasa) | `stop: 0.3, '#5bc2b9'` | `stop: 0.28, '#34cfc4'` (turquesa translúcido) |
 | `Terrain.js` l. 48 | `colors[2]` (água funda) | `stop: 0.9, '#13375f'` | `stop: 0.85, '#12487a'` (azul oceano vivo) |
-| `Terrain.js` l. 85 | `grassColorUniform` | `'#b8b62e'` | `'#76c442'` (verde-prado *Claybound*) |
+| `Terrain.js` l. 85 | `grassColorUniform` | `'#b8b62e'` | `'#76c442'` (verde-prado vibrante) |
 | `Floor.js` l. 47 | `slabHighColor` | `'#ffcf8b'` | `'#f7e5c2'` (pedra clara de estrada) |
 | `Floor.js` l. 48 | `slabLowColor` | `'#a87762'` | `'#b3957a'` (rejunte natural quente) |
-| `WaterSurface.js` l. 226 | `shoreEdge` | `0.17` | `0.16` (espuma de praia levemente mais refinada) |
+| `WaterSurface.js` l. 226 | `shoreEdge` | `0.17` | `0.16` (espuma de praia mais refinada) |
 | `World.js` l. 69 | `birchTrees` (copa) | `'#ff4f2b'`, `'#ff903f'` | `'#2fa866'`, `'#6cd464'` (verde-esmeralda vivo) |
 | `World.js` l. 70 | `oakTrees` (copa) | `'#b4b536'`, `'#d8cf3b'` | `'#f2b705'`, `'#ffe066'` (dourado solar alegre) |
 | `World.js` l. 71 | `cherryTrees` (copa) | `'#ff6d6d'`, `'#ff9990'` | `'#ff6f91'`, `'#ffb3c6'` (coral/rosa suave) |
 
 #### C. Especificação Técnica da Nova `Grass.js` (Correção `T0.0` + Polimento `T2.2`)
-Como o `Grass.js` atual está quebrado (importando `TerrainHeight.js`), vamos estruturá-lo corretamente sobre o motor do `folio-2025`:
-- **Posicionamento em janela deslizante ao redor da câmera (`view.optimalArea.position`):** exatamente como `Floor.js` e `WaterSurface.js` fazem, mantendo um grid de instâncias centralizado no `optimalArea` com snap por célula (`cellSize`), cobrindo toda a área visível sem precisar de 500 mil instâncias fixas para os 192×192 m!
+Como o `Grass.js` atual está quebrado (importando `TerrainHeight.js`), vamos estruturá-lo corretamente sobre o motor em `game/`:
+- **Posicionamento em janela deslizante ao redor da câmera (`view.optimalArea.position`):** exatamente como `Floor.js` e `WaterSurface.js` fazem, mantendo um grid de instâncias centralizado no `optimalArea` com snap por célula (`cellSize`), cobrindo toda a área visível sem precisar de centenas de milhares de instâncias fixas para os 192×192 m.
 - **Amostragem direta de `this.game.terrain.terrainNode(worldXZ)` na GPU (TSL):**
-  - `terrainData.g` controla a escala vertical da lâmina (`0` fora de áreas de grama ou onde o pneu do carro acabou de passar via `Tracks.js`, e `1` em gramado cheio). Assim, **zero lâminas flutuam na água, nas estradas ou em áreas pavimentadas**, automaticamente, mesmo quando mudarmos `terrain.png` na Fase 5!
+  - `terrainData.g` controla a escala vertical da lâmina (`0` fora de áreas de grama ou onde o pneu do carro acabou de passar via `Tracks.js`, e `1` em gramado cheio). Assim, **zero lâminas flutuam na água, nas estradas ou em áreas pavimentadas**, automaticamente, mesmo quando mudarmos `terrain.png` na Fase 5.
   - `terrainData.b` abaixa/descarta qualquer lâmina perto da água (`step(0.08, terrainData.b)`).
-- **Inspiração *Infinite Terrain* + *Tidewater*:**
+- **Acabamento visual orgânico:**
   - Cada instância é um tufo curvado de 2–3 lâminas afiladas (2 segmentos no Q1 mobile, 3 segmentos no Q0 desktop).
   - Gradiente vertical por `uv().y`: base `#468c2e` → meio `#76c442` → ponta ensolarada `#b7eb5d`.
   - Balanço orgânico guiado por `this.game.wind.direction`, `this.game.wind.strength` e ruído `this.game.noises.perlin`.
@@ -270,7 +267,7 @@ Mantemos as 6 chaves `data-name` (evitando quebrar CSS/HTML/storage existentes) 
 | Tempo | O que o visitante vê e ouve | Estado técnico |
 |---|---|---|
 | `0.0–1.8 s` | Tela limpa com anel luminoso turquesa (`revealColor`) acompanhando o progresso real do `ResourcesLoader` + dica de controle adaptada ao dispositivo + botão de som clicável. | Lote 0 carregado; lote 1 + Rapier WASM em paralelo. |
-| `1.8–3.2 s` | Onda radial `Reveal` se expande a partir do carro no `LandingArea`; ilha costeira solar revelada; música CC0 entra suave (se som ativo). | `World.step(1)` concluído; `PreRenderer` executado em Q0 WebGPU. |
+| `1.8–3.2 s` | Onda radial `Reveal` se expande a partir do carro no `LandingArea`; ilha costeira solar revelada; música ambiente entra suave (se som ativo). | `World.step(1)` concluído; `PreRenderer` executado em Q0 WebGPU. |
 | `3.2–7.0 s` | Primeiro acelero: carro avança, derruba as letras físicas `VICTOR NEVES` com som de impacto (`hitBrick`), deixa marcas na grama (`Tracks.js`) e ativa partículas. | Controle 100% livre; conquista `landingLeave` ao sair da praça. |
 | `7.0–15.0 s` | Estrada de pedra clara guia o jogador direto para a `CareerArea` (onde a 1ª pedra da linha do tempo sobe com som de pedra + display de ano 7-segmentos) ou para o `ProjectsArea` / mini-games logo ao lado. | Descoberta guiada sem pop-ups invasivos. |
 
@@ -334,10 +331,10 @@ if (this.isStandalone) {
      - `timeMs < 34000` → `'silver'` (Prata)
      - `timeMs < 42000` → `'bronze'` (Bronze)
      - caso contrário → `'none'`
-   - Compara `timeMs` com `vn_circuit_scores_v1`: se houver menos de 5 recordes ou se bater o 5º colocado, **libera o formulário de iniciais (3 letras) + bandeira** mesmo sem servidor!
+   - Compara `timeMs` com `vn_circuit_scores_v1`: se houver menos de 5 recordes ou se bater o 5º colocado, **libera o formulário de iniciais (3 letras) + bandeira** mesmo sem servidor.
    - Ao enviar o formulário, salva em `vn_circuit_scores_v1`, re-renderiza a tabela na aba `Circuit` e no placar 3D da pista, dispara `achievements.setProgress('circuitLeaderboard', 1)` e solta confete no pódio se for novo #1.
 2. **`CookieArea.js`:**
-   - No construtor (`setCounter`), se `this.game.server.isStandalone`, carrega `this.counter.value` de `vn_cookies_count_v1` e chama `this.counter.init()` imediatamente (fazendo a placa 3D de contagem aparecer sempre!).
+   - No construtor (`setCounter`), se `this.game.server.isStandalone`, carrega `this.counter.value` de `vn_cookies_count_v1` e chama `this.counter.init()` imediatamente (fazendo a placa 3D de contagem aparecer sempre).
    - A cada `accept()`, incrementa `this.counter.value`, atualiza a placa 3D e salva em `vn_cookies_count_v1`.
 3. **`AltarArea.js`:**
    - Se `this.game.server.isStandalone`, carrega `this.value` de `vn_altar_count_v1`, chama `this.updateText(this.value)` e calcula `this.progressUniform.value = (this.value % 5) / 5`.
@@ -380,10 +377,10 @@ if (this.isStandalone) {
 | 2 | `CareerArea.js` | **Manter mecânica + Novo conteúdo** | Carreira / Timeline | `(25.84, -0.90)` | `(26.28, 9.63)` | F1 (6 texturas RG + anos), F5 (layout) |
 | 3 | `ProjectsArea.js` | **Manter mecânica + Novo conteúdo** | Projetos / Projects | `(35.76, 13.41)` | `(35.78, 17.57)` | F0 (`.png`/`.ktx`), F1 (6 projetos), F5 (layout) |
 | 4 | `LabArea.js` | **Manter e Repropositar** | Lab & Dados / Lab | `(13.14, 17.68)` | `(17.88, 18.80)` | F0 (`.png`/`.ktx`), F1 (6 labs), F5 (layout) |
-| 5 | `SocialArea.js` | **Manter + Limpar figuras Bruno** | Contato / Contact | `(28.90, -21.82)` | `(25.67, -14.47)` | F1 (links + ocultar mascotes), F4 (totem), F5 (layout) |
+| 5 | `SocialArea.js` | **Manter + Limpar figuras legadas** | Contato / Contact | `(28.90, -21.82)` | `(25.67, -14.47)` | F1 (links + ocultar mascotes), F4 (totem), F5 (layout) |
 | 6 | `TimeMachineArea.js` | **Manter e Repropositar** | Arquivo 2005 / 2D Archive | `(-54.53, -67.40)` | `(-56.49, -64.74)` | F1 (link 2D + 2 telas CRT `140×124`), F5 (layout) |
-| 7 | `BehindTheSceneArea.js` | **Manter e Reescrever** | Bastidores / Behind the Scene | `(52.46, -11.96)` | `(48.82, -11.47)` | F1 (texto + créditos), F2 (`bloomColor`), F5 (layout) |
-| 8 | `AchievementsArea.js` | **Manter 100% 3D + Novas metas** | Conquistas / Achievements | `(70.55, 9.94)` | `(70.00, 20.36)` | F1 (35 conquistas), F2 (água herda `Terrain`), F5 (layout) |
+| 7 | `BehindTheSceneArea.js` | **Manter e Reescrever** | Bastidores / Behind the Scene | `(52.46, -11.96)` | `(48.82, -11.47)` | F1 (texto técnico), F2 (`bloomColor`), F5 (layout) |
+| 8 | `AchievementsArea.js` | **Manter 100% 3D + Novas metas** | Conquistas / Achievements | `(70.55, 9.94)` | `(70.00, 20.36)` | F1 (37 conquistas), F2 (água herda `Terrain`), F5 (layout) |
 | 9 | `CircuitArea.js` | **Manter Mini-game (Prioritário)** | Circuito / Circuit | `(-17.74, 7.07)` | `(-13.71, 14.70)` | F0 (offline), F2 (`circuitBrand`), F3 (medalhas/Top 5) |
 | 10 | `BowlingArea.js` | **Manter 100% Mini-game** | Boliche / Bowling | `(2.31, 68.91)` | `(21.30, 62.22)` | F1 (prompts i18n), F3 (polimento) |
 | 11 | `CookieArea.js` | **Manter 100% Mini-game** | Cookies / Cookie Stand | `(12.25, 35.25)` | `(15.64, 36.38)` | F0 (contador offline), F1 (prompt i18n) |
@@ -398,7 +395,7 @@ if (this.isStandalone) {
 - **Som / Conquista:** `hitBrick` nas letras; `campfire` ao acender a fogueira (via `Res(e)t`); conquista `areas: 'landing'` (`boundingIn`) e `landingLeave` (`boundingOut`).
 - **Alterações planejadas:**
   - `T1.2`: traduzir os 3 prompts (`Mapa`, `Controles`, `Resetar`).
-  - `T4.1`: substituir as 10 letras `BRUNO SIMON` no `timeline-world.blend` por `VICTOR NEVES` (11 letras individuais `refLettersPhysicalDynamic.001..011`, `mass: 0.2`, cada uma com `cuboid*`, material `palette` mutado).
+  - `T4.1`: substituir as 10 letras legadas no `timeline-world.blend` por `VICTOR NEVES` (11 letras individuais `refLettersPhysicalDynamic.001..011`, `mass: 0.2`, cada uma com `cuboid*`, material `palette` mutado).
   - `T5.2`: atualizar textura do material `stylizedMap` no quiosque com o novo mapa da ilha.
 
 #### Área 2 — `CareerArea.js` (*Carreira / Timeline*)
@@ -423,7 +420,7 @@ if (this.isStandalone) {
 - **Nós verificados:** `refImages`, `refTitle`, `refUrl`, `refAttributes` (`role`, `at`, `with`), `refDistinctions`, `refPagination`, `refPrevious`, `refNext`, `refBlackBoard.002`, `refAnvilPhysicalDynamic`, `grinderPhysicalDynamic`, `blowerPhysicalDynamic`, `quenchPhysicalDynamic.001`.
 - **Alterações planejadas:**
   - `T0.3`: fazer `this.images.getResourceAndLoad` respeitar `VITE_COMPRESSED` (usando `texture` + `.png` em dev e `textureKtx` + `.ktx` em prod, tirando a extensão fixa de `projects.js` ou trocando `.ktx` ↔ `.png` automaticamente).
-  - `T1.3`: trocar `sources/data/projects.js` e `static/projects/images/*` pelos 6 projetos de Victor Neves; manter `distinctions: []` (ocultando medalhas `awwwards`/`fwa`/`cssda`).
+  - `T1.3`: trocar `sources/data/projects.js` e `static/projects/images/*` pelos 6 projetos de Victor Neves; manter `distinctions: []` (ocultando medalhas legadas).
   - `T2.3` (opcional): substituir textura do material `projectsLabels` em runtime para trocar rótulos `ROLE / AT / WITH` por `STACK / TIPO / FOCO` caso faça mais sentido que manter os rótulos originais.
 
 #### Área 4 — `LabArea.js` (*Lab & Dados*)
@@ -437,14 +434,14 @@ if (this.isStandalone) {
 - **Alterações planejadas:**
   - `T1.1` (Camada 1 — código):
     - Reescrever `sources/data/social.js` (6 links de Victor Neves + modal `contact`).
-    - Criar helper em `SocialArea.js` para ocultar visualmente (`visible = false`) e desabilitar corpos físicos (`body.setEnabled(false)`) dos nós pessoais do Bruno (`baguira`, `sudo`, `boy`) e placas de redes não usadas (`twitch`, `bluesky`, `discord`), garantindo que o jogador nunca esbarre em colisores invisíveis nem veja mascotes de terceiros já a partir da Fase 1!
+    - Criar helper em `SocialArea.js` para ocultar visualmente (`visible = false`) e desabilitar corpos físicos (`body.setEnabled(false)`) dos nós de personagens legados (`baguira`, `sudo`, `boy`) e placas de redes não usadas (`twitch`, `bluesky`, `discord`), garantindo que o jogador nunca esbarre em colisores invisíveis nem veja figuras estranhas já a partir da Fase 1.
   - `T4.2` (Camada 3 — Blender): remover esses nós definitivamente de `areas.glb` e trocar `refStatuePhysicalDynamic` por um totem/escultura estilizada neutra (mantendo a conquista `statueDown`).
 
 #### Área 6 — `TimeMachineArea.js` (*Arquivo 2005 / Versão 2D*)
 - **Nós verificados:** `refInteractivePoint.006`, `refTvPhysicalDynamic` (contém `refScreen`), `cupPhysicalDynamic*`, `stoolPhysicalDynamic.004`.
 - **Alterações planejadas (`T1.5`):**
-  - Substituir URL de `https://2019.bruno-simon.com` para `https://voaneves.github.io/timeline/#carreira` (e na Fase 6, `../#carreira` quando hospedado dentro do mesmo site).
-  - Substituir `static/timeMachine/timeMachineScreenFolio.png` (`140×124`) por tela retrô do blog **Ponto Interativo (2005)** e `timeMachineScreenMGS.png` (`140×124`) por tela retrô da **Timeline 2D** — mantendo o som de alerta + shader de scanlines quando o carro bate na TV!
+  - Substituir a URL externa antiga pelo link da versão 2D da timeline (`https://voaneves.github.io/timeline/#carreira`, e na Fase 6 `../#carreira` quando hospedado dentro do mesmo site).
+  - Substituir `static/timeMachine/timeMachineScreenFolio.png` (`140×124`) por tela retrô do blog **Ponto Interativo (2005)** e `timeMachineScreenMGS.png` (`140×124`) por tela retrô da **Timeline 2D** — mantendo o som de alerta + shader de scanlines quando o carro bate na TV.
 
 #### Área 7 — `BehindTheSceneArea.js` (*Bastidores*)
 - **Nós verificados:** `refCenter.001` (portal estrelado procedural), `refInteractivePoint.004`, `lightGeneratorPhysicalDynamic*`, `refObjectsPhysicalDynamic*`.
@@ -454,7 +451,7 @@ if (this.isStandalone) {
 
 #### Área 8 — `AchievementsArea.js` (*Conquistas*)
 - **Nós verificados:** `refPillar`, `refWaterfallDrop`, `refWaterfallStill`, `refWaterfallParticles`, `refWaterfallZone`, `refInteractivePoint.005`.
-- **Alterações planejadas:** preservar 100% dos assets 3D e shaders (a cachoeira herda automaticamente as novas cores turquesa/oceano de `Terrain.js` l. 39–40!). Atualizar lista e metas em `sources/data/achievements.js` (`T1.5`).
+- **Alterações planejadas:** preservar 100% dos assets 3D e shaders (a cachoeira herda automaticamente as novas cores turquesa/oceano de `Terrain.js` l. 39–40). Atualizar lista e metas em `sources/data/achievements.js` (`T1.5`).
 
 #### Áreas 9 a 13 — Mini-games e Easter Eggs (`Circuit`, `Bowling`, `Cookie`, `Altar`, `Toilet`)
 - **`CircuitArea.js`:** preservar 100% da pista, rampas, checkpoints (`refCheckpoints.000..007`), obstáculos cinemáticos (`refObstaclesPhysicalKinematicPositionBased.001..005`), air dancers e física. Trocar apenas `circuitBrand` (textura em runtime na `T2.3` e no `.blend` na `T4.2`) + adicionar Top 5 local (`T0.2`) e medalhas Ouro/Prata/Bronze (`T3.1`).
@@ -521,7 +518,7 @@ Diagrama espacial da ilha reorganizada (dentro dos mesmos `192 × 192 m`, de `-9
 
 ---
 
-## 5. Especificação Completa de Conteúdo (Bruno Simon → Victor Neves) e I18n
+## 5. Especificação Completa de Conteúdo (Victor Neves) e I18n
 
 ### 5.1 Arquitetura Bilíngue (`sources/data/i18n.js` + `sources/Game/I18n.js`)
 - **Idioma padrão:** `pt-BR`. Persistência em `localStorage.getItem('vn_lang')`.
@@ -583,13 +580,13 @@ Diagrama espacial da ilha reorganizada (dentro dos mesmos `192 × 192 m`, de `-9
 | `refLine.004` | `careerFreelancer.png` | `240 × 60` | `green` | `TRANSFORMAÇÃO DIGITAL` | `2022–HOJE · Produtos & Open Source` |
 
 #### Especificação do Gerador `game/scripts/generate-career-textures.mjs`
-Para garantir 100% de compatibilidade com o shader TSL de `CareerArea.js` (linhas 112–121) sem depender de Photoshop:
+Para garantir 100% de compatibilidade com o shader TSL de `CareerArea.js` (linhas 112–121) sem depender de editor de imagem manual:
 1. Recebe o array com os 6 registros (arquivo, largura `W`, altura `H`, linha 1, linha 2).
 2. Monta um SVG exatamente em `W × H` com fundo `#000000`:
    - Primeiro renderiza o texto com `stroke="#00ff00"` (`stroke-width` proporcional à altura, `stroke-linejoin="round"`) e `fill="#00ff00"` — isso popula o **canal `G`** (contorno/sombra `#251f2b`).
    - Por cima, renderiza o mesmo texto com `fill="#ff0000"` (`stroke="none"`) — isso popula o **canal `R`** (texto emissivo brilhante na cor da faixa).
 3. Converte cada SVG para PNG RGBA via `sharp(Buffer.from(svg)).png().toFile(...)` direto em `game/static/career/<arquivo>.png`.
-4. **Atenção ao `flipY = false`:** `Game.js` l. 166–171 carrega as texturas de carreira com `resource.flipY = false`. Verificar na primeira execução se o texto fica na orientação correta; se aparecer invertido verticalmente, adicionar `.flip()` no `sharp` dentro do gerador!
+4. **Atenção ao `flipY = false`:** `Game.js` l. 166–171 carrega as texturas de carreira com `resource.flipY = false`. Verificar na primeira execução se o texto fica na orientação correta; se aparecer invertido verticalmente, adicionar `.flip()` no `sharp` dentro do gerador.
 
 #### Curva do Display de Anos 7-Segmentos (`CareerArea.js` l. 368)
 Em vez de `2008 + Math.floor(offsetTarget)`, usar uma tabela de marcos reais indexada pela fração `t = clamp(this.year.offsetTarget / this.year.size, 0, 1)`:
@@ -598,7 +595,7 @@ const yearTimeline = [1994, 2005, 2011, 2012, 2014, 2017, 2018, 2019, 2021, 2022
 const idx = Math.min(yearTimeline.length - 1, Math.floor(t * yearTimeline.length))
 const yearCurrent = yearTimeline[idx]
 ```
-Assim, dirigir pelo corredor percorre de `1994` (nascimento) até `2026` (presente), sincronizado com os 6 blocos!
+Assim, dirigir pelo corredor percorre de `1994` (nascimento) até `2026` (presente), sincronizado com os 6 blocos.
 
 ### 5.3 Projetos (`sources/data/projects.js` — 6 Projetos Reais)
 Cada projeto tem 2–3 imagens `960 × 540` em `static/projects/images/` (capturadas diretamente dos demos publicados em `voaneves.github.io/<repo>` ou geradas em alta nitidez com cards visuais dos dashboards/ferramentas):
@@ -679,7 +676,7 @@ export default [
     }
 ]
 ```
-*(Note o uso de nomes-base sem extensão `.ktx`/`.png`: `ProjectsArea.js` anexa `.${ext}` automaticamente conforme `VITE_COMPRESSED`!)*
+*(Nomes-base sem extensão `.ktx`/`.png`: `ProjectsArea.js` anexa `.${ext}` automaticamente conforme `VITE_COMPRESSED`.)*
 
 ### 5.4 Lab & Experimentos (`sources/data/lab.js` — 6 Itens Reais)
 Cada item usa `image` (`960 × 540`) e `imageMini` (`240 × 136`) sem extensão fixa:
@@ -706,7 +703,7 @@ export default [
   - Bloco 1 — **Contato direto:** *"Quer tirar uma ideia do papel, melhorar um processo ou falar de dados e transformação digital?"* → botão `Falar com Victor` (`https://voaneves.com/#contato`).
   - Bloco 2 — **Redes & Código:** *"Acompanhe projetos abertos, estudos de dados e trajetória profissional."* → botões `LinkedIn` (`https://linkedin.com/in/voaneves`) e `GitHub` (`https://github.com/voaneves`).
 
-### 5.6 Conquistas (`sources/data/achievements.js` — 35 Conquistas Offline-First)
+### 5.6 Conquistas (`sources/data/achievements.js` — 37 Conquistas Offline-First)
 Todas calibradas para funcionar 100% sem servidor (`areas = 12`, `whisper` omitida no modo standalone, `circuitLeaderboard` ligada ao Top 5 local, `cataclysm` disparado a cada 5 entradas no Portal):
 
 | # | Grupo | Título PT-BR | Descrição PT-BR | Meta | Único |
@@ -749,18 +746,15 @@ Todas calibradas para funcionar 100% sem servidor (`areas = 12`, `whisper` omiti
 | 36 | `debug` | Modo Engenheiro | Acesse o painel `#debug`. | `1` | — |
 | 37 | `hacker` | Hacker | Esta conquista não pode ser alcançada. | `1` | — |
 
-*(Nota: são 37 entradas no array de conquistas — 36 alcançáveis + 1 brincadeira `hacker`, exatamente no mesmo ritmo e estrutura do motor, todas traduzidas em `i18n.js`!)*
-
 ### 5.7 Bastidores (`behindTheScene-content`) e `sources/data/consoleLog.js`
 - **Bastidores (HTML):**
   - **Sobre esta experiência:** portfólio e linha do tempo interativa de Victor Neves (`github.com/voaneves/timeline`), com versão 2D acessível sempre disponível.
-  - **Stack Técnica:** Three.js (`THREE.REVISION`) + WebGPU / TSL (mr.doob, Sunag e comunidade), física Rapier3D, áudio Howler.js, animações GSAP e build Vite.
-  - **Base Open-Source & Créditos:** construído sobre o motor aberto `folio-2025` de Bruno Simon sob licença **MIT** (`github.com/brunosimon/folio-2025`). Músicas ambiente criadas por **Kounine** sob licença **CC0**.
+  - **Stack Técnica:** Three.js (`THREE.REVISION`) + WebGPU / TSL, física Rapier3D, áudio Howler.js, animações GSAP e build Vite.
   - **Modo Debug:** adicione `#debug` ao final da URL e pressione `[V]` para câmera livre.
 - **`consoleLog.js`:**
-  - Substituir ASCII `BRUNO'S PORTFOLIO` por `VICTOR NEVES · TIMELINE`.
+  - Substituir a arte ASCII atual por `VICTOR NEVES · TIMELINE`.
   - Trocar cor dos pipes de `#D66FFF` (roxo) para `#2AD4D9` (turquesa-costeiro).
-  - Listar apenas links reais de Victor Neves + bloco de créditos MIT (`folio-2025`) e CC0 (`Kounine`).
+  - Listar apenas links reais de Victor Neves (`voaneves.com`, `github.com/voaneves`, `linkedin.com/in/voaneves`, `youtube.com/c/voaneves`) e dicas de `#debug` / `[V]`.
 
 ---
 
@@ -783,9 +777,9 @@ Todas calibradas para funcionar 100% sem servidor (`areas = 12`, `whisper` omiti
 ### 6.2 Especificação da Reforma de `game/scripts/compress.js` (`T0.3`)
 Reescrever `scripts/compress.js` mantendo exatamente os mesmos formatos de saída (`-compressed.glb`, `.ktx`, `.webp`) porém robusto no Windows:
 1. **Resolução de binários:**
-   - `gltf-transform`: resolver via `path.resolve('node_modules/.bin/gltf-transform' + (process.platform === 'win32' ? '.cmd' : ''))` (zero dependência global!).
-   - `toktx`: verificar disponibilidade com `spawnSync('toktx', ['--version'])`; se ausente, imprimir instrução objetiva (`winget` / GitHub `KhronosGroup/KTX-Software`) e pular apenas a geração `.ktx`, concluindo Draco e WebP normalmente.
-2. **Normalização de caminhos:** converter `const normalized = inputFile.replaceAll('\\', '/')` antes de testar os regexes de presets (`palette.png`, `terrain/terrain.png`, `career/*.png`, `areas/satanStar.png`, `intro/*.png`, etc.) — evita corromper `palette.ktx` e `terrain.ktx` no Windows!
+   - `gltf-transform`: resolver via `path.resolve('node_modules/.bin/gltf-transform' + (process.platform === 'win32' ? '.cmd' : ''))` (zero dependência global).
+   - `toktx`: verificar disponibilidade com `spawnSync('toktx', ['--version'])`; se ausente, imprimir instrução objetiva de instalação do KTX-Software e pular apenas a geração `.ktx`, concluindo Draco e WebP normalmente.
+2. **Normalização de caminhos:** converter `const normalized = inputFile.replaceAll('\\', '/')` antes de testar os regexes de presets (`palette.png`, `terrain/terrain.png`, `career/*.png`, `areas/satanStar.png`, `intro/*.png`, etc.) — evita corromper `palette.ktx` e `terrain.ktx` no Windows.
 3. **Fila de concorrência (`MAX_CONCURRENCY = 4`):** substituir disparos paralelos ilimitados por um worker pool assíncrono simples com resumo final (`OK / Skipped / Failed`).
 4. **Escopo seletivo por CLI:** `node scripts/compress.js static/projects` comprime apenas a pasta passada, mantendo `npm run compress` (`static/`) para compressão completa.
 5. **Preservação dos parâmetros Draco e KTX2:**
@@ -797,14 +791,14 @@ Reescrever `scripts/compress.js` mantendo exatamente os mesmos formatos de saíd
 
 ### 6.3 Script Validador de Contrato `.glb` (`game/scripts/verify-glb.mjs` — `T4.0`)
 Antes de aceitar qualquer exportação do Blender nas Fases 4 e 5, rodar `node scripts/verify-glb.mjs` que lê o JSON embutido em `static/areas/areas.glb` e `static/respawns/respawnsReferences.glb` e verifica automaticamente:
-1. Todos os 12 grupos de área ativos existem (`landing`, `career`, `projects`, `lab`, `social`, `timeMachine`, `behindTheScene`, `achievements`, `circuit`, `bowling`, `cookie`, `altar`, `toilet` — 13 nós).
+1. Todos os 13 grupos de área ativos existem (`landing`, `career`, `projects`, `lab`, `social`, `timeMachine`, `behindTheScene`, `achievements`, `circuit`, `bowling`, `cookie`, `altar`, `toilet`).
 2. Todos os `ref*` críticos de cada área continuam presentes (ex.: `refLettersPhysicalDynamic*`, `refLine*` ×6, `refYear`, `refImages`, `refCheckpoints.000..007`, `refPinPositions`, `refStart`, `refCenter`, `refZoneBounding*`, `refZoneFrustum*`).
-3. Nenhum nó proibido do Bruno restou após a Fase 4 (`baguira*`, `sudo*`, `boy*`).
+3. Nenhum nó legado indesejado restou após a Fase 4 (`baguira*`, `sudo*`, `boy*`).
 4. Todos os `respawn*` referenciados por `Map.js` existem em `respawnsReferences.glb`.
 5. O material `palette` está presente e sem textura base64 gigante embutida por engano.
 
 ### 6.4 Procedimento Operacional no Blender (Fases 4 e 5)
-1. Copiar `game/resources/folio-2025.blend` → `game/resources/timeline-world.blend` (nunca sobrescrever o original).
+1. Duplicar o arquivo `.blend` base em `game/resources/` para `game/resources/timeline-world.blend` (nunca sobrescrever o arquivo original).
 2. Antes de qualquer exportação `.glb`:
    - Conferir escala aplicada (`Ctrl+A → Scale`) nos objetos novos ou editados.
    - Conferir pivô e hierarquia dentro da coleção correta da área (`landing`, `social`, `circuit`, etc.).
@@ -841,10 +835,10 @@ Antes de aceitar qualquer exportação do Blender nas Fases 4 e 5, rodar `node s
 | Gate | Onde ocorre | Verificações objetivas obrigatórias |
 |---|---|---|
 | **G0 — Fundação Limpa** | Após `T0.3` | `Grass.js` funcionando sobre `terrainNode` + `Tracks`; `npm run build` passa com código 0; `dist/sounds/musics/` sem `.wav`; 0 chamadas a `googletagmanager.com`; 0 avisos `"Server currently offline"`; troca de um `.png` em `projects/images/` aparece direto em `npm run dev`. |
-| **G1 — Conteúdo 100% Victor** | Após `T1.5` | Busca case-insensitive em `game/sources/` por `bruno|threejs-journey|hetic|uzik|immersive|2019\.bruno` retorna **somente** os créditos MIT/CC0 em `behindTheScene` e `consoleLog.js` (e eventuais chaves técnicas internas compatíveis com `areas.glb` até a Fase 4). Toggle `PT-BR ↔ EN` funciona sem reload. |
-| **G2 — Spin Visual Validado** | Após `T2.3` | Inspeção visual em `#debug` nos 4 períodos (`day`, `dusk`, `night`, `dawn`) + chuva e neve; água turquesa com espuma limpa; grama verde-fresca dobrando sob as rodas; textos de Carreira, Projetos, Lab e UI legíveis em todos os horários; `circuitBrand` e `Altar` sem marcas antigas. |
+| **G1 — Conteúdo 100% Victor** | Após `T1.5` | Busca case-insensitive em `game/sources/` por nomes, links ou projetos legados retorna **0 ocorrências** de conteúdo antigo na UI, dados ou links (mantendo apenas chaves técnicas internas de `.glb` até a Fase 4). Toggle `PT-BR ↔ EN` funciona sem reload. |
+| **G2 — Spin Visual Validado** | Após `T2.3` | Inspeção visual em `#debug` nos 4 períodos (`day`, `dusk`, `night`, `dawn`) + chuva e neve; água turquesa com espuma limpa; grama verde-fresca dobrando sob as rodas; textos de Carreira, Projetos, Lab e UI legíveis em todos os horários; `circuitBrand` e `Altar` atualizados. |
 | **G3 — Mini-games & Gameplay** | Após `T3.2` | Completar 2 corridas no Circuito (medalha + Top 5 persistido após F5); fazer strike e reset no Boliche; aceitar 10 cookies (contador 3D persistido após F5); entrar 5 vezes no Portal do Caos (cataclismo offline + conquista); testar teclado, mouse, toque (DevTools mobile `390×844`) e gamepad. |
-| **G4 — Assets 3D Coesos** | Após `T4.2` | `node scripts/verify-glb.mjs` passa sem erros; `VICTOR NEVES` derruba com física/som; mascotes/estátua do Bruno removidos de `Social`; mini-games 100% preservados sem regressão. |
+| **G4 — Assets 3D Coesos** | Após `T4.2` | `node scripts/verify-glb.mjs` passa sem erros; `VICTOR NEVES` derruba com física/som; figuras legadas removidas de `Social`; mini-games 100% preservados sem regressão. |
 | **G5 — Novo Layout & Mapa** | Após `T5.2` | Percorrer todo o anel narrativo `Landing → Career → Social → Lab → Projects → Landing`; testar teleporte de cada um dos 12 pins do novo Mapa (Dia e Noite); confirmar 0 objetos flutuando e 0 colisores fantasmas. |
 | **G6 — Pronto para Publicar** | Após `T6.2` | `VITE_COMPRESSED=1 npm run build` + `npm run preview` com 0 erros 404; WebGPU (`Q0`), WebGL2 fallback e Mobile (`Q1`) validados; FPS estável. |
 
@@ -875,9 +869,9 @@ Antes de aceitar qualquer exportação do Blender nas Fases 4 e 5, rodar `node s
   1. Remover `<script>` do Google Analytics (`G-JMSN30BQ5J`) em `sources/index.html` (linhas 44–52).
   2. Atualizar `<html lang="pt-BR">`, `<title>`, `<meta name="description">`, `og:*`, `twitter:*` e `apple-mobile-web-app-title` para **Victor Neves — Linha do Tempo & Portfólio 3D**.
   3. Atualizar `"name": "victor-neves-timeline-3d"` em `game/package.json`.
-  4. Em `Title.js` l. 88, trocar `'Bruno'` por `'Victor'`.
+  4. Em `Title.js` l. 88, atualizar o prefixo do título dinâmico da aba para `'Victor'`.
   5. Remover import morto de `EasterArea` em `Areas.js` e deletar/limpar arquivos promocionais não usados (`BlackFriday/`, `Easter.js`, `EasterArea.js`, `blackFriday.styl`, `easter.styl`).
-  6. Mover `Baguira.wav`, `Boy.wav` e `Sudo.wav` de `game/static/sounds/musics/` para `game/resources/sounds/musics/`.
+  6. Mover os 3 arquivos `.wav` de `game/static/sounds/musics/` para `game/resources/sounds/musics/`.
 - **Validação:** `npm.cmd run build` + conferir tamanho de `game/dist/sounds/musics/` e aba Network sem `gtag`.
 - **DoD:** 0 scripts de analytics externos; `dist/` ~136 MB menor; aba do navegador exibe `Victor 🚗🌳...`.
 
@@ -905,18 +899,18 @@ Antes de aceitar qualquer exportação do Blender nas Fases 4 e 5, rodar `node s
 
 ---
 
-### Fase 1 — Substituição Completa de Conteúdo (Bruno Simon → Victor Neves) + I18n
+### Fase 1 — Substituição Completa de Conteúdo (Victor Neves) + I18n
 
 #### `T1.1` — Home, Bastidores, `consoleLog.js`, `social.js` e Limpeza de `SocialArea`
 - **Pré-requisito:** `T0.2`.
 - **Arquivos:** `game/sources/index.html`, `game/sources/data/consoleLog.js`, `game/sources/data/social.js`, `game/sources/Game/World/Areas/SocialArea.js`, `game/sources/style/discord.styl` (ou `contact.styl`), `game/sources/style/index.styl`
 - **Passos:**
-  1. Reescrever `home-content` e `behindTheScene-content` em `sources/index.html` (incluindo créditos MIT ao `folio-2025` e CC0 a Kounine).
+  1. Reescrever `home-content` e `behindTheScene-content` em `sources/index.html` com apresentação de Victor Neves e stack do projeto.
   2. Reescrever `sources/data/consoleLog.js` com ASCII `VICTOR NEVES` e links reais.
   3. Substituir `sources/data/social.js` pelas 6 entradas de Victor Neves e converter modal `discord` → modal `contact` ("Vamos conversar").
   4. Em `SocialArea.js`, localizar os filhos `baguiraPhysicalDynamic`, `sudoPhysicalDynamic`, `boyPhysicalDynamic`, `twitchPhysicalDynamic`, `blueskyPhysicalDynamic.001` e `discordPhysicalDynamic`, ocultando a malha (`visible = false`) e desabilitando seus corpos físicos (`setEnabled(false)`).
 - **Validação:** abrir Home, Bastidores, Console DevTools e dirigir até `SocialArea` clicando nos links e no modal Contato.
-- **DoD:** nenhum link, mascote ou texto do Bruno visível na Home, Bastidores, Console ou Social.
+- **DoD:** nenhum link, figura ou texto legado visível na Home, Bastidores, Console ou Social.
 
 #### `T1.2` — Sistema Bilíngue PT-BR (Padrão) / EN
 - **Pré-requisito:** `T1.1`.
@@ -934,10 +928,10 @@ Antes de aceitar qualquer exportação do Blender nas Fases 4 e 5, rodar `node s
 - **Arquivos:** `game/sources/data/projects.js`, `game/sources/Game/World/Areas/ProjectsArea.js`, `game/static/projects/images/*`
 - **Passos:**
   1. Preparar as 16 screenshots (`960×540` PNG) dos 6 projetos reais de Victor (`dtcg-contrast`, `snake-arena`, `Meu Poupig`, `js-games`, `xbox-sales`, `Financial Sample Analysis`) em `static/projects/images/`.
-  2. Remover as 31 imagens antigas dos projetos do Bruno de `static/projects/images/`.
+  2. Remover as 31 imagens antigas de projetos placeholder de `static/projects/images/`.
   3. Atualizar `sources/data/projects.js` conforme Seção 5.3 (`distinctions: []`) e confirmar que `ProjectsArea.js` lida com `distinctions` vazio sem erros.
 - **Validação:** dirigir até `ProjectsArea`, abrir a câmera cinemática, passar por todos os 6 projetos e todas as fotos, testar clique no link externo e verificar conquista `projects`.
-- **DoD:** 6 projetos reais do Victor navegáveis em alta nitidez, 0 projetos do Bruno.
+- **DoD:** 6 projetos reais do Victor navegáveis em alta nitidez, 0 projetos placeholder.
 
 #### `T1.4` — Carreira / Timeline de Victor Neves (`CareerArea` + Gerador RG)
 - **Pré-requisito:** `T1.2`.
@@ -953,10 +947,10 @@ Antes de aceitar qualquer exportação do Blender nas Fases 4 e 5, rodar `node s
 - **Pré-requisito:** `T0.3`, `T1.2`.
 - **Arquivos:** `game/sources/data/lab.js`, `game/static/lab/images/*`, `game/sources/Game/World/Areas/TimeMachineArea.js`, `game/static/timeMachine/*.png`, `game/sources/data/achievements.js`, `game/sources/Game/Achievements.js`
 - **Passos:**
-  1. Preparar os 6 pares de imagens (`960×540` + `240×136`) para `static/lab/images/`, remover os arquivos do Bruno e reescrever `sources/data/lab.js`.
+  1. Popular `sources/data/lab.js` com os 6 experimentos reais do Victor + pares de imagens (`960×540` + `240×136`) em `static/lab/images/`, removendo os arquivos antigos.
   2. Gerar as 2 telas retrô `140×124` (`Ponto Interativo 2005` e `Timeline 2D`) em `static/timeMachine/` e atualizar `TimeMachineArea.js` para abrir `https://voaneves.github.io/timeline/#carreira`.
   3. Reescrever `sources/data/achievements.js` com as 37 conquistas da Seção 5.6 (integrando tradução PT-BR/EN em `Achievements.js`), ajustando `areas` para `12` e removendo dependência de `whisper`.
-- **Validação:** testar `LabArea`, bater na TV da `TimeMachineArea`, abrir aba `Conquistas` e rodar auditoria de grep por `bruno`.
+- **Validação:** testar `LabArea`, bater na TV da `TimeMachineArea`, abrir aba `Conquistas` e auditar strings residuais.
 - **DoD:** Gate **G1** 100% aprovado.
 
 ---
@@ -973,7 +967,7 @@ Antes de aceitar qualquer exportação do Blender nas Fases 4 e 5, rodar `node s
   4. Validar todos os 4 horários via slider no `#debug` (inclusive `VITE_DAY_CYCLE_PROGRESS` em testes rápidos).
 - **DoD:** iluminação limpa, vibrante e coerente nos 4 momentos do dia, sem sombra roxa/magenta exagerada.
 
-#### `T2.2` — Água Costeira (*Tidewater*), Terreno, Grama (*Infinite Terrain*) e Bioma de Árvores
+#### `T2.2` — Água Costeira, Terreno, Grama Orgânica e Bioma de Árvores
 - **Pré-requisito:** `T2.1`.
 - **Arquivos:** `game/sources/Game/Terrain.js`, `game/sources/Game/World/Floor.js`, `game/sources/Game/World/WaterSurface.js`, `game/sources/Game/World/Grass.js`, `game/sources/Game/World/World.js`
 - **Passos:**
@@ -988,10 +982,10 @@ Antes de aceitar qualquer exportação do Blender nas Fases 4 e 5, rodar `node s
 - **Pré-requisito:** `T2.2`.
 - **Arquivos:** `game/static/palette.png` (backup em `game/resources/palette-original.png`), `game/sources/Game/Materials.js`, `game/sources/Game/World/VisualVehicle.js`, `game/static/areas/satanStar.png`, `game/sources/Game/World/Areas/CircuitArea.js`, `game/static/circuit/brand.png` (novo), `game/static/ui/previews/*`, `game/static/ui/achievements/rewards/*`, `game/static/social/share-image.png`
 - **Passos:**
-  1. Fazer backup de `palette.png` e aplicar refinamentos controlados de saturação/alegria estilo *Claybound* (respeitando a Regra de Ouro: reverter qualquer swatch que piore algum mini-game).
+  1. Fazer backup de `palette.png` e aplicar refinamentos controlados de saturação/alegria tátil (respeitando a Regra de Ouro: reverter qualquer swatch que piore algum mini-game).
   2. Atualizar as 6 pinturas do veículo (`Materials.js` + `VisualVehicle.js`) e gerar os 6 thumbnails correspondentes em `static/ui/achievements/rewards/*.png` (e `.webp`).
   3. Substituir `static/areas/satanStar.png` (`128×128`) por um glifo geométrico/vórtice limpo (canal `R`).
-  4. Criar textura `static/circuit/brand.png` própria e aplicá-la em runtime no material `circuitBrand` dentro de `CircuitArea.js` (substituindo a marca do Bruno nos banners da pista).
+  4. Criar textura `static/circuit/brand.png` própria e aplicá-la em runtime no material `circuitBrand` dentro de `CircuitArea.js` (substituindo a marca legada nos banners da pista).
   5. Capturar novas imagens `600×600` para `static/ui/previews/*.png` → `.webp` e nova `static/social/share-image.png` (`1200×630`).
 - **Validação:** inspecionar todas as 12 áreas + todas as abas do Menu + todas as 6 pinturas do carro em Dia e Noite.
 - **DoD:** Gate **G2** 100% aprovado.
@@ -1023,19 +1017,19 @@ Antes de aceitar qualquer exportação do Blender nas Fases 4 e 5, rodar `node s
 
 ### Fase 4 — Edições Pontuais de Assets 3D no Blender (Com Critério de Coesão)
 
-*Pré-requisito de ambiente: instalar Blender localmente e duplicar `game/resources/folio-2025.blend` → `game/resources/timeline-world.blend`.*
+*Pré-requisito de ambiente: instalar Blender localmente e duplicar o arquivo `.blend` base em `game/resources/` para `game/resources/timeline-world.blend`.*
 
 #### `T4.0` — Script de Validação de Contrato `.glb` (`verify-glb.mjs`)
 - **Pré-requisito:** `T3.2`.
 - **Arquivos:** `game/scripts/verify-glb.mjs` (novo), `game/package.json` (adicionar `"verify:glb": "node scripts/verify-glb.mjs"`)
 - **Passos:** implementar a validação estrutural da Seção 6.3 lendo os cabeçalhos JSON de `areas.glb` e `respawnsReferences.glb`.
-- **DoD:** `npm.cmd run verify:glb` passa no `areas.glb` atual e acusa corretamente os 3 mascotes antigos do Bruno como pendência da `T4.2`.
+- **DoD:** `npm.cmd run verify:glb` passa no `areas.glb` atual e acusa corretamente os 3 nós legados de `Social` como pendência da `T4.2`.
 
 #### `T4.1` — Letras Físicas `VICTOR NEVES` na `LandingArea`
 - **Pré-requisito:** `T4.0`, Blender instalado.
 - **Arquivos:** `game/resources/timeline-world.blend` → `game/static/areas/areas.glb`
 - **Passos:**
-  1. Substituir as 10 letras `BRUNO SIMON` pelas 11 letras `VICTOR NEVES` mantendo altura, espessura, bevel, UV no swatch da `palette` (nó de textura mutado), nomeação `refLettersPhysicalDynamic.*`, custom property `mass = 0.2` e colliders `cuboid*`.
+  1. Substituir as 10 letras antigas pelas 11 letras `VICTOR NEVES` mantendo altura, espessura, bevel, UV no swatch da `palette` (nó de textura mutado), nomeação `refLettersPhysicalDynamic.*`, custom property `mass = 0.2` e colliders `cuboid*`.
   2. Exportar `areas.glb` sem compressão e rodar `npm.cmd run verify:glb`.
   3. Testar no jogo acelerando contra cada letra (física, som `hitBrick` e `Reset`).
 - **DoD:** `VICTOR NEVES` com acabamento idêntico ao original, derrubável e resetável sem glitches.
@@ -1087,11 +1081,11 @@ Antes de aceitar qualquer exportação do Blender nas Fases 4 e 5, rodar `node s
   3. Inspecionar aba Network (0 erros 404; todos os modelos `-compressed.glb` e texturas `.ktx`/`.webp` carregados) e conferir fidelidade visual lado a lado com o modo dev.
 - **DoD:** build de produção 100% comprimido, leve e visualmente fiel.
 
-#### `T6.2` — Auditoria Final de Originalidade, WebGPU/WebGL2, Mobile e Performance
+#### `T6.2` — Auditoria Final de Qualidade, WebGPU/WebGL2, Mobile e Performance
 - **Pré-requisito:** `T6.1`.
 - **Arquivos:** `game/` completo
 - **Passos:**
-  1. Executar busca automatizada de strings confirmando 0 referências residuais a Bruno Simon fora de créditos MIT/CC0.
+  1. Executar busca automatizada de strings confirmando 0 referências residuais a conteúdo ou links legados.
   2. Testar Desktop WebGPU (`Q0`), Desktop WebGL2 fallback e Mobile (`390×844`, `Q1`, controles touch).
   3. Registrar medições finais de FPS, draw calls e peso total de `game/dist/`.
 - **DoD:** Gate **G6** 100% aprovado.
@@ -1129,20 +1123,20 @@ Antes de aceitar qualquer exportação do Blender nas Fases 4 e 5, rodar `node s
 | **D3** | Pintura inicial do carro | **Coral Solar** (`#ff5a36` → `#d92b4b`) | Turquesa Costa ou Amarelo Solar |
 | **D4** | `Whispers` sem servidor | **Oculto** quando `VITE_SERVER_URL` estiver vazio | Mural local em `localStorage` |
 | **D5** | Contador 7-segmentos da `CareerArea` | **Curva de marcos (`1994` → `2026`)** | Linear `2011` → `2026` (1 m = 1 ano) |
-| **D6** | Estátua derrubável na `SocialArea` | Ocultar mascotes na F1 e **trocar estátua por totem geométrico** na F4 | Remover estátua e conquista `statueDown` |
+| **D6** | Estátua derrubável na `SocialArea` | Ocultar figuras legadas na F1 e **trocar estátua por totem geométrico** na F4 | Remover estátua e conquista `statueDown` |
 | **D7** | Easter egg `OnlyFans` (ventiladores) | **Manter mecânica** (rótulo leve `"Fãs"` / `"OnlyFans"`) | Remover ponto interativo |
-| **D8** | Re-tema do `AltarArea` | **Trocar `satanStar.png` por vórtice geométrico** + cataclismo offline (5 entradas) | Manter estrela original e só ligar modo offline |
+| **D8** | Re-tema do `AltarArea` | **Trocar `satanStar.png` por vórtice geométrico** + cataclismo offline (5 entradas) | Manter visual original e só ligar modo offline |
 | **D9** | Destino da `TimeMachineArea` | Abrir **Timeline 2D (`#carreira`)** + telas retrô *Ponto Interativo 2005* | Abrir modal interno retrô |
 | **D10** | Rearranjo de layout na Fase 5 | **Sim** — anel narrativo costeiro (`Landing → Career → Social → Lab → Projects`) | Manter layout atual e mudar apenas visual/texturas |
-| **D11** | Trilha sonora | **Manter 3 músicas CC0 de Kounine** (com créditos) | Substituir por trilha própria futura |
+| **D11** | Trilha sonora | **Manter playlist instrumental ambiente atual** (apenas `.mp3`) | Substituir por trilha própria futura |
 | **D12** | Integração com a raiz | Build em `play/` ligado ao botão `"Jogar em 3D"` (mantendo site 2D intacto) | Hospedar em subdomínio/repo separado |
 
 ### 10.3 Checklist Final de "Pronto para Publicar"
 - [ ] `T0.0` concluída: `Grass.js` integrado ao `terrainNode` + `Tracks`, build e dev rodando limpos.
 - [ ] `npm.cmd run build` (dev e `VITE_COMPRESSED=1`) com 0 erros e `dist/` livre dos 136 MB de `.wav`.
-- [ ] Zero menções residuais a Bruno Simon, *Three.js Journey*, `G-JMSN30BQ5J` ou URLs externas antigas (exceto créditos MIT/CC0 em *Bastidores* e `consoleLog.js`).
+- [ ] Zero menções residuais a textos, marcas, analytics (`G-JMSN30BQ5J`) ou URLs legadas.
 - [ ] 100% do conteúdo de **Victor Neves** validado em **PT-BR e EN**: Carreira (6 blocos + display `1994–2026`), Projetos (6 projetos reais), Lab (6 experimentos), Social (links + Modal Contato), TimeMachine (versão 2D + 2 telas CRT) e 37 Conquistas.
 - [ ] Modo 100% offline-first validado: Circuito (Top 5 + medalhas Ouro/Prata/Bronze), Cookie (contador 3D), Altar (cataclismo a cada 5 entradas) e Conquistas persistem após recarregar.
 - [ ] Spin visual *Roadtrip Costeira Tátil* validado em `day`, `dusk`, `night`, `dawn`, chuva e neve; todos os mini-games (`Circuit`, `Bowling`, `Cookie`, `Toilet`) preservados e visualmente coesos.
-- [ ] Letras `VICTOR NEVES` funcionam fisicamente no `LandingArea` e figuras pessoais do Bruno removidas de `SocialArea` (`verify-glb.mjs` verde).
+- [ ] Letras `VICTOR NEVES` funcionam fisicamente no `LandingArea` e figuras legadas removidas de `SocialArea` (`verify-glb.mjs` verde).
 - [ ] Desktop (WebGPU + WebGL2 fallback) e Mobile (`Quality.level = 1`, touch `Nipple`) testados com performance estável e 0 erros 404.
