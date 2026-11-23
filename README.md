@@ -8,11 +8,14 @@
   <img alt="Timeline logo: a T whose crossbar is a timeline path, with a red dot for now" src="https://raw.githubusercontent.com/voaneves/timeline/main/assets/logo/logo-light.svg" width="112" height="112" />
 </picture>
 
-<h1>Super Victor Timeline</h1>
+<h1>Victor Neves Timeline</h1>
 
 <p>
-  <strong>A personal career timeline as a side-scrolling stage: click a pipe to reveal a milestone.</strong><br />
-  <sub>Super Mario World style, plain HTML, CSS and JavaScript</sub>
+  <strong>Semantic 2D career timeline with an interactive 3D diorama &amp; driveable vehicle world built on Three.js WebGPU and Rapier physics.</strong><br />
+  <sub>
+    Progressive enhancement from accessible HTML/DTCG tokens to 3D physics —
+    <kbd>Three.js 0.187</kbd> · <kbd>WebGPURenderer</kbd> · <kbd>Rapier3D WASM</kbd> · <kbd>esbuild</kbd> · <kbd>Vite 8</kbd>
+  </sub>
 </p>
 
 <p>
@@ -20,17 +23,20 @@
   <a href="#how-it-works"><picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/voaneves/timeline/main/assets/buttons/how-dark.svg" /><img alt="How it works" src="https://raw.githubusercontent.com/voaneves/timeline/main/assets/buttons/how-light.svg" height="40" /></picture></a>
 </p>
 
-<p><sub>Need something like this? <a href="https://voaneves.com/en/#contact"><strong>Let's talk →</strong></a></sub></p>
+<p><sub>Need an interactive experience like this? <a href="https://voaneves.com/en/#contact"><strong>Let's talk →</strong></a></sub></p>
 
 <p>
   <a href="https://github.com/voaneves/timeline/blob/main/LICENSE"><img src="https://img.shields.io/github/license/voaneves/timeline?style=flat-square&color=0A0A0A" alt="MIT License" /></a>
-  <img src="https://img.shields.io/badge/HTML%20%C2%B7%20CSS%20%C2%B7%20JS-no%20dependencies-b80000?style=flat-square" alt="HTML, CSS and JavaScript with no runtime dependencies" />
+  <img src="https://img.shields.io/badge/Three.js-0.187_(WebGPU)-B80000?style=flat-square" alt="Three.js WebGPU" />
+  <img src="https://img.shields.io/badge/Physics-Rapier3D_WASM-0A0A0A?style=flat-square" alt="Rapier3D WASM" />
+  <a href="./dtcg-contrast.config.json"><img src="https://img.shields.io/badge/Contrast-DTCG_Gated-5C5446?style=flat-square" alt="Contrast Gated" /></a>
 </p>
 
 <p>
   <a href="https://voaneves.github.io/timeline/">Live demo</a> ·
-  <a href="#how-it-works">How it works</a> ·
-  <a href="#running-locally">Running locally</a> ·
+  <a href="#about-the-project">About</a> ·
+  <a href="#how-it-works">Architecture</a> ·
+  <a href="#running-locally">Running Locally</a> ·
   <a href="#project-structure">Structure</a> ·
   <a href="#contact">Contact</a>
 </p>
@@ -43,55 +49,74 @@
   <img alt="" src="https://raw.githubusercontent.com/voaneves/timeline/main/assets/brand/rule-light.svg" width="100%" />
 </picture>
 
+<a id="about-the-project"></a>
 ## About the project
 
-An interactive timeline of Victor Neves's life and career, presented as a Super Mario World-style side-scrolling stage: click a pipe and Mario walks to it to reveal that milestone.
+Explore Victor Neves's career milestones either as a lightweight semantic 2D page or inside an interactive 3D Toy Island diorama powered by `Three.js` and `Rapier3D`.
 
-**Demo:** <https://voaneves.github.io/timeline/>
+**Live demo:** <https://voaneves.github.io/timeline/>
 
-The page content is in Brazilian Portuguese.
+### Progressive 2D-to-3D Architecture
 
+The root site (`index.html`, `assets/styles/main.css`, `tokens/`) loads fast with accessible semantic HTML and verified W3C DTCG contrast (`dtcg-contrast.config.json`). Alongside it sits the optional WebGPU 3D diorama (`assets/js/world/world.min.js`) and the full Vite-powered 3D world workspace under [`game/`](./game/readme.md).
+
+<a id="how-it-works"></a>
 ## How it works
 
-- Each milestone is an entry (`year`, `month_name`, `title`) in the `timeline` array in `assets/js/timeline.js`.
-- On load, the script creates one pipe (`<li>`) per entry inside the `#events` list. The "Peach" milestone gets its own style.
-- Clicking a pipe slides the stage and the ground to that pipe with a CSS transform, plays the walking animation on Mario (left or right, depending on direction) and, when he arrives, activates the pipe to show the milestone.
-- Sound effects and the background theme are loaded with the Web Audio API after the first click (`assets/audio/`).
-- Other pieces: a light/dark theme toggle (`assets/js/app.js`), a side menu, a custom cursor (`assets/js/cursor.js`), a service worker for caching (`sw.js`, `worker.js`) and a web app manifest (`manifest.json`).
+```mermaid
+flowchart LR
+  DOM["Semantic 2D Timeline (index.html + main.css)"] --> GATE["dtcg-contrast + check-size"]
+  BOOT["assets/js/boot.min.js"] --> WORLD["Three.js 0.187 WebGPURenderer (WebGL2 fallback)"]
+  GAME["game/ Engine (Rapier3D + TSL + Howler + GSAP)"] --> WORLD
+  GAME --> COMP["scripts/compress.js (KTX2 + Draco GLB)"]
+```
 
-It is a static site: plain HTML, CSS and JavaScript, with no runtime dependencies.
+<dl>
+  <dt><strong>Rendering &amp; TSL Shaders (<code>THREE.WebGPURenderer</code>)</strong></dt>
+  <dd>Uses Node-based <code>MeshLambertNodeMaterial</code> shaders with palette textures, directional shadows, water reflections, and radial fog — automatically falling back to WebGL2 on unsupported browsers.</dd>
+  <dt><strong>Deterministic Physics &amp; Vehicle Controller (<code>@dimforge/rapier3d</code>)</strong></dt>
+  <dd>Simulates a <code>192 × 192 m</code> heightfield island with Rapier WASM rigid-body collisions, 4-wheel suspension, boost trails, ground tracks, keyboard/touch/gamepad inputs, and persistent achievements.</dd>
+  <dt><strong>Audio &amp; Quality Tiers</strong></dt>
+  <dd>Spatial audio groups and ambient soundtrack powered by <code>Howler.js</code> alongside adaptive desktop/mobile rendering presets (DOF, bloom, shadow resolution).</dd>
+</dl>
 
+<a id="running-locally"></a>
 ## Running locally
 
-Serve the folder with any static file server (the service worker and audio loading need `http://`, not `file://`). For example:
+### Root 2D Timeline &amp; Diorama Bundle
 
-```sh
+Requires **Node.js** (`npm run build` bundles `world.min.js` with `esbuild` and validates bundle size and token contrast):
+
+```bash
+git clone https://github.com/voaneves/timeline.git
+cd timeline
+npm install
+npm run check          # build world bundle + check size
+npm run contrast       # verify dtcg-contrast.config.json
 python -m http.server 8000
 ```
 
-Then open <http://localhost:8000/>.
+### Full 3D Interactive World (`game/`)
 
-## Project structure
-
-```
-index.html        Page markup, meta tags and inline styles
-manifest.json     Web app manifest
-sw.js, worker.js  Service worker registration and caching
-                  (plus .min.js versions)
-assets/
-  audio/          Sound effects and theme music
-  fonts/          Header font
-  img/            Icons, logo and social images
-  js/             app, cursor, console and timeline scripts
-                  (plus .min.js versions)
-  styles/         SCSS sources and compiled timeline.css
-  logo/           README logo (SVG and PNG)
-  buttons/        README buttons
-  brand/          README divider and author mark
+```bash
+cd game
+npm install
+npm run dev            # Vite 8 dev server (HTTPS/WASM)
+npm run build          # production bundle -> dist
 ```
 
-`index.html` loads the `.min.js` versions of the scripts; the unminified files are the sources.
+<a id="project-structure"></a>
+## Project structure &amp; Licensing
 
+| Path | Role |
+| :--- | :--- |
+| [`index.html`](./index.html) &amp; `src/` | Semantic 2D timeline entry, PWA manifest &amp; service worker (`worker.js`) |
+| `assets/` | Bundled styles (`main.css`), WOFF2 fonts, AVIF headers &amp; `world.min.js` |
+| [`game/`](./game/readme.md) | Modular 3D Three.js + Rapier engine, assets &amp; KTX2/Draco compression scripts |
+| [`docs/PLAN-3D.md`](./docs/PLAN-3D.md) | Architecture notes and 3D world adaptation roadmap |
+| [`LICENSES.md`](./LICENSES.md) | Third-party licenses (`three.js` MIT, Schibsted Grotesk &amp; JetBrains Mono SIL OFL) |
+
+<a id="contact"></a>
 ## Contact
 
 <p>
@@ -105,6 +130,6 @@ assets/
   <img alt="VOANEVES mark" src="https://raw.githubusercontent.com/voaneves/timeline/main/assets/brand/mark-duo.svg" width="32" height="32" />
 </p>
 
-<p align="center"><sub>Released under the <a href="https://github.com/voaneves/timeline/blob/main/LICENSE">MIT License</a>.</sub></p>
+<p align="center"><sub>Released under the <a href="./LICENSE">MIT License</a> · Third-party notices in <a href="./LICENSES.md">LICENSES.md</a> · © 2026 <a href="https://github.com/voaneves">Victor Neves</a> · <strong>VOANEVES.</strong></sub></p>
 
 <p align="center"><sub><a href="#top">↑ Back to top</a></sub></p>
