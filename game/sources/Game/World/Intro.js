@@ -9,6 +9,7 @@ export class Intro
     constructor()
     {
         this.game = Game.getInstance()
+        this.destroyed = false
 
         const respawn = this.game.respawns.getDefault()
         this.center = respawn.position.clone()
@@ -156,6 +157,12 @@ export class Intro
                     resourcePath,
                     (loadedTexture) =>
                     {
+                        if(this.destroyed)
+                        {
+                            loadedTexture.dispose()
+                            return
+                        }
+
                         if(!compressed)
                         {
                             loadedTexture.flipY = false
@@ -323,6 +330,7 @@ export class Intro
 
     destroy()
     {
+        this.destroyed = true
         this.label.removeFromParent()
 
         // Geometries

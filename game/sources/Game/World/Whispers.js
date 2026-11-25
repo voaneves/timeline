@@ -13,7 +13,8 @@ export class Whispers
     {
         this.game = Game.getInstance()
 
-        this.count = parseInt(import.meta.env.VITE_WHISPERS_COUNT)
+        const parsedCount = parseInt(import.meta.env.VITE_WHISPERS_COUNT, 10)
+        this.count = Number.isFinite(parsedCount) && parsedCount > 0 ? parsedCount : 30
 
         this.setSounds()
         this.setFlames()

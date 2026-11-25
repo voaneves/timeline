@@ -81,7 +81,8 @@ export class World
         }
         else if(step === 2)
         {
-            this.whispers = new Whispers()
+            if(!this.game.server.isStandalone)
+                this.whispers = new Whispers()
         }
     }
 
