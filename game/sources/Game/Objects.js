@@ -159,6 +159,22 @@ export class Objects
             _model.name = name.replaceAll(cleanUpRegexp, '')
 
             // Colliders
+            const getPositionsArray = (geometry) =>
+            {
+                const pos = geometry.attributes.position
+                if(!pos.isInterleavedBufferAttribute)
+                    return pos.array
+
+                const out = new Float32Array(pos.count * 3)
+                for(let i = 0; i < pos.count; i++)
+                {
+                    out[i * 3 + 0] = pos.getX(i)
+                    out[i * 3 + 1] = pos.getY(i)
+                    out[i * 3 + 2] = pos.getZ(i)
+                }
+                return out
+            }
+
             const children = [..._model.children]
             for(const _child of children)
             {
@@ -169,12 +185,12 @@ export class Objects
                 if(_child.name.match(/^trimesh/i))
                 {
                     collider.shape = 'trimesh'
-                    collider.parameters = [ _child.geometry.attributes.position.array, _child.geometry.index.array ]
+                    collider.parameters = [ getPositionsArray(_child.geometry), _child.geometry.index.array ]
                 }
                 else if(_child.name.match(/^hull/i))
                 {
                     collider.shape = 'hull'
-                    collider.parameters = [ _child.geometry.attributes.position.array, _child.geometry.index.array ]
+                    collider.parameters = [ getPositionsArray(_child.geometry), _child.geometry.index.array ]
                 }
                 else if(_child.name.match(/^cuboid/i))
                 {

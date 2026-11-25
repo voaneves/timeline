@@ -5,7 +5,7 @@ import { statSync } from 'node:fs'
 import { resolve, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import * as THREE from 'three'
-import { NodeIO, PropertyType } from '@gltf-transform/core'
+import { NodeIO, PropertyType, VertexLayout } from '@gltf-transform/core'
 import { ALL_EXTENSIONS } from '@gltf-transform/extensions'
 import { prune } from '@gltf-transform/functions'
 
@@ -329,7 +329,7 @@ const disposeSubtree = (node, rootNode) =>
     node.dispose()
 }
 
-const io = new NodeIO().registerExtensions(ALL_EXTENSIONS)
+const io = new NodeIO().registerExtensions(ALL_EXTENSIONS).setVertexLayout(VertexLayout.SEPARATE)
 const beforeSize = statSync(areasPath).size
 const doc = await io.read(areasPath)
 const gltfRoot = doc.getRoot()
