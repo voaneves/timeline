@@ -367,12 +367,11 @@ const totalWidth = builtLetters.reduce((sum, item, idx) =>
     sum + item.width + (idx < builtLetters.length - 1 && !item.space && !builtLetters[idx + 1].space ? letterSpacing : 0)
 , 0)
 
-// Alinhamento diagonal original do Landing (facing +X/+Z, baseline -X/+Z)
+// Alinhamento diagonal original do Landing: +theta (25 deg) -> local +X aponta da esquerda (V) para a direita (S)
 const rotationQuat = [ 0, 0.2164, 0, 0.9763 ]
 const angle = 2 * Math.asin(0.2164)
-// Para rotacao Y positiva (+theta), local -X aponta da esquerda visual (J/V) para direita visual (O/S)
-const alongX = -Math.cos(angle)
-const alongZ = Math.sin(angle)
+const alongX = Math.cos(angle)
+const alongZ = -Math.sin(angle)
 const center = [ -5.211, -2.528, 3.086 ]
 
 let cursor = -totalWidth / 2
@@ -472,6 +471,8 @@ statueNode.addChild(totemCollider)
 await doc.transform(prune({
     keepLeaves: true,
     keepExtras: true,
+    keepAttributes: true,
+    keepIndices: true,
     propertyTypes: [
         PropertyType.SKIN,
         PropertyType.MESH,
