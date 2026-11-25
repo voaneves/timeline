@@ -169,7 +169,7 @@ export const pt = {
 
     // Mapa
     'map.achievements': 'Conquistas',
-    'map.altar': 'Altar',
+    'map.altar': 'Santuário',
     'map.behindTheScene': 'Bastidores',
     'map.bowling': 'Boliche',
     'map.career': 'Carreira',
@@ -345,7 +345,7 @@ export const en = {
     'prompt.bowling.song': 'Change song',
 
     'map.achievements': 'Achievements',
-    'map.altar': 'Altar',
+    'map.altar': 'Sanctuary',
     'map.behindTheScene': 'Behind<br /> the scene',
     'map.bowling': 'Bowling',
     'map.career': 'Career',

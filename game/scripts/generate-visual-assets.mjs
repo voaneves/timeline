@@ -42,40 +42,27 @@ const setPalette = async() =>
     await sharp(out, { raw: { width: info.width, height: info.height, channels: info.channels } }).png({ compressionLevel: 9 }).toFile(stat('palette.png'))
 }
 
-// ---------------------------------------------------------------- satanStar.png (vortice geometrico, canal R)
-const setVortex = async() =>
+// ---------------------------------------------------------------- celestialStar.png (Estrela Celestial de 8 pontas, canal R)
+const setCelestialStar = async() =>
 {
     const cx = 64, cy = 64
-    let arms = ''
-    const N = 5
-    for(let a = 0; a < N; a++)
+    const pts8 = []
+    for(let i = 0; i < 16; i++)
     {
-        const pts = []
-        for(let t = 0; t <= 1.0001; t += 0.04)
-        {
-            const r = 6 + t * 50
-            const ang = (a / N) * Math.PI * 2 + t * 2.1
-            pts.push(`${(cx + Math.cos(ang) * r).toFixed(2)},${(cy + Math.sin(ang) * r).toFixed(2)}`)
-        }
-        arms += `<polyline points="${pts.join(' ')}" fill="none" stroke="#fff" stroke-width="${a % 2 ? 4 : 5.5}" stroke-linecap="round"/>`
-    }
-    const star = []
-    for(let i = 0; i < 10; i++)
-    {
-        const r = i % 2 ? 10 : 22
-        const ang = -Math.PI / 2 + (i / 10) * Math.PI * 2
-        star.push(`${(cx + Math.cos(ang) * r).toFixed(2)},${(cy + Math.sin(ang) * r).toFixed(2)}`)
+        const r = i % 2 === 0 ? (i % 4 === 0 ? 50 : 34) : 13
+        const ang = -Math.PI / 2 + (i / 16) * Math.PI * 2
+        pts8.push(`${(cx + Math.cos(ang) * r).toFixed(2)},${(cy + Math.sin(ang) * r).toFixed(2)}`)
     }
     const body = `<rect width="128" height="128" fill="#000"/>
-        <circle cx="${cx}" cy="${cy}" r="60" fill="none" stroke="#fff" stroke-width="3"/>
-        ${arms}
-        <polygon points="${star.join(' ')}" fill="#000" stroke="#fff" stroke-width="3" stroke-linejoin="round"/>
-        <circle cx="${cx}" cy="${cy}" r="3.5" fill="#fff"/>`
+        <circle cx="${cx}" cy="${cy}" r="59" fill="none" stroke="#fff" stroke-width="3"/>
+        <circle cx="${cx}" cy="${cy}" r="51" fill="none" stroke="#fff" stroke-width="1.8" stroke-dasharray="6 5"/>
+        <polygon points="${pts8.join(' ')}" fill="#000" stroke="#fff" stroke-width="3" stroke-linejoin="round"/>
+        <circle cx="${cx}" cy="${cy}" r="7" fill="#fff"/>`
     const { data, info } = await sharp(svg(128, 128, body)).removeAlpha().raw().toBuffer({ resolveWithObject: true })
     // Canal R carrega a mascara; G e B espelham para evitar franjas se algum shader ler outro canal
     const out = Buffer.alloc(128 * 128 * 3)
     for(let i = 0; i < 128 * 128; i++) { const v = data[i * info.channels]; out[i * 3] = v; out[i * 3 + 1] = v; out[i * 3 + 2] = v }
-    await sharp(out, { raw: { width: 128, height: 128, channels: 3 } }).png({ compressionLevel: 9 }).toFile(stat('areas', 'satanStar.png'))
+    await sharp(out, { raw: { width: 128, height: 128, channels: 3 } }).png({ compressionLevel: 9 }).toFile(stat('areas', 'celestialStar.png'))
 }
 
 // ---------------------------------------------------------------- circuit/brand.png (512x128)
@@ -107,7 +94,7 @@ const paints = {
     white: ['#fffaf0', '#d4cfc4'],
     black: ['#4a5568', '#1a202c'],
     flames: ['#ffd166', '#ff4d2e'],
-    abyssal: ['#0a1f4d', '#050a24'],
+    celestial: ['#143d7a', '#0a1f4d'],
 }
 const setRewards = async() =>
 {
@@ -119,16 +106,16 @@ const setRewards = async() =>
             extra = `<path d="M0 80 C10 52 20 62 26 36 C32 54 42 44 44 18 C52 40 60 34 62 50 C68 40 74 46 80 28 V80 Z" fill="#ff4d2e" opacity="0.55"/>
                 <path d="M0 80 C14 62 24 70 32 52 C38 66 48 58 52 40 C58 58 68 54 80 44 V80 Z" fill="#ffd166" opacity="0.5"/>`
         }
-        else if(key === 'abyssal')
+        else if(key === 'celestial')
         {
             let stars = ''
             for(let i = 0; i < 26; i++)
             {
                 const x = (Math.sin(i * 12.9898) * 43758.5453 % 1 + 1) % 1 * 80
                 const y = (Math.sin(i * 78.233) * 24634.6345 % 1 + 1) % 1 * 80
-                stars += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${(0.6 + (i % 3) * 0.5).toFixed(1)}" fill="${i % 4 === 0 ? '#2ae8ff' : '#fff'}" opacity="0.85"/>`
+                stars += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${(0.6 + (i % 3) * 0.5).toFixed(1)}" fill="${i % 4 === 0 ? '#ffd97d' : '#fff'}" opacity="0.9"/>`
             }
-            extra = `<radialGradient id="g" cx="50%" cy="50%" r="55%"><stop offset="60%" stop-color="#2ae8ff" stop-opacity="0"/><stop offset="100%" stop-color="#2ae8ff" stop-opacity="0.55"/></radialGradient>
+            extra = `<radialGradient id="g" cx="50%" cy="50%" r="55%"><stop offset="55%" stop-color="#7ce8ff" stop-opacity="0"/><stop offset="100%" stop-color="#7ce8ff" stop-opacity="0.6"/></radialGradient>
                 <rect width="80" height="80" fill="url(#g)"/>${stars}`
         }
         const body = `<defs><linearGradient id="p" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${a}"/><stop offset="1" stop-color="${b}"/></linearGradient></defs>
@@ -140,16 +127,16 @@ const setRewards = async() =>
 // ---------------------------------------------------------------- previews 600x600 + share-image 1200x630
 const monsterTruck = (x, y, s, body, trim) => `
     <g transform="translate(${x} ${y}) scale(${s})">
-        <ellipse cx="0" cy="62" rx="120" ry="20" fill="#0b2f52" opacity="0.28"/>
-        <path d="M-92 14 L-70 -20 L-16 -34 L38 -34 L76 -4 L96 6 L96 38 L-92 38 Z" fill="${body}"/>
-        <path d="M-60 -16 L-12 -28 L10 -28 L10 0 L-64 0 Z" fill="#cfeefe" opacity="0.9"/>
-        <path d="M18 -28 L38 -28 L64 -2 L18 0 Z" fill="#a8d4ff" opacity="0.9"/>
-        <rect x="-96" y="30" width="196" height="16" rx="6" fill="${trim}"/>
-        <rect x="76" y="14" width="22" height="8" rx="3" fill="#ffe066"/>
-        <rect x="-98" y="14" width="10" height="8" rx="3" fill="#ff6f91"/>
-        <g fill="#1a202c"><circle cx="-56" cy="46" r="30"/><circle cx="58" cy="46" r="30"/></g>
-        <g fill="${C.sand}"><circle cx="-56" cy="46" r="13"/><circle cx="58" cy="46" r="13"/></g>
-        <g fill="${trim}"><circle cx="-56" cy="46" r="5"/><circle cx="58" cy="46" r="5"/></g>
+        <ellipse cx="0" cy="58" rx="116" ry="18" fill="#0b2f52" opacity="0.28"/>
+        <path d="M-96 18 L-92 -4 L-66 -6 L-36 -34 L22 -34 L58 -6 L96 4 L96 34 L-96 34 Z" fill="${body}"/>
+        <path d="M-104 -18 L-76 -16 L-76 -4 L-96 -4 Z" fill="${body}"/>
+        <path d="M-54 -4 L-28 -28 L16 -28 L46 -4 Z" fill="#8ee4ff" opacity="0.92"/>
+        <rect x="-98" y="28" width="198" height="12" rx="5" fill="${trim}"/>
+        <rect x="82" y="10" width="16" height="8" rx="3" fill="#ffe066"/>
+        <rect x="-98" y="10" width="10" height="8" rx="3" fill="#ff5a36"/>
+        <g fill="#1a202c"><circle cx="-58" cy="40" r="24"/><circle cx="58" cy="40" r="24"/></g>
+        <g fill="#575a5e"><circle cx="-58" cy="40" r="14"/><circle cx="58" cy="40" r="14"/></g>
+        <g fill="${body}"><circle cx="-58" cy="40" r="9"/><circle cx="58" cy="40" r="9"/></g>
     </g>`
 
 const tree = (x, y, s, c1, c2) => `
@@ -222,7 +209,7 @@ const setShare = async() =>
 }
 
 await setPalette()
-await setVortex()
+await setCelestialStar()
 await setBrand()
 await setRewards()
 await setPreviews()

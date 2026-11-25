@@ -71,16 +71,16 @@ export class Map
         this.locations = {}
         this.locations.items = [
             { key: 'map.achievements', respawnName: 'achievements', offset: { x: 0, y: -0.01 } },
-            { key: 'map.altar', respawnName: 'altar', offset: { x: 0, y: -0.05 } },
-            { key: 'map.behindTheScene', respawnName: 'behindTheScene', offset: { x: 0.01, y: 0 } },
-            { key: 'map.bowling', respawnName: 'bowling', offset: { x: -0.08, y: 0.03 } },
-            { key: 'map.career', respawnName: 'career', offset: { x: 0, y: -0.06 } },
-            { key: 'map.circuit', respawnName: 'circuit', offset: { x: -0.08, y: -0.05 } },
-            { key: 'map.cookie', respawnName: 'cookie', offset: { x: -0.02, y: -0.01 } },
-            { key: 'map.lab', respawnName: 'lab', offset: { x: -0.03, y: 0 } },
+            { key: 'map.altar', respawnName: 'altar', offset: { x: 0, y: -0.02 } },
+            { key: 'map.behindTheScene', respawnName: 'behindTheScene', offset: { x: 0, y: 0 } },
+            { key: 'map.bowling', respawnName: 'bowling', offset: { x: -0.04, y: 0.01 } },
+            { key: 'map.career', respawnName: 'career', offset: { x: 0, y: -0.03 } },
+            { key: 'map.circuit', respawnName: 'circuit', offset: { x: 0.04, y: 0.02 } },
+            { key: 'map.cookie', respawnName: 'cookie', offset: { x: -0.01, y: 0 } },
+            { key: 'map.lab', respawnName: 'lab', offset: { x: -0.01, y: 0 } },
             { key: 'map.landing', respawnName: 'landing', offset: { x: 0.02, y: 0 } },
-            { key: 'map.projects', respawnName: 'projects', offset: { x: 0, y: -0.02 } },
-            { key: 'map.social', respawnName: 'social', offset: { x: -0.01, y: -0.04 } },
+            { key: 'map.projects', respawnName: 'projects', offset: { x: 0, y: -0.01 } },
+            { key: 'map.social', respawnName: 'social', offset: { x: 0, y: -0.02 } },
             { key: 'map.timeMachine', respawnName: 'timeMachine', offset: { x: 0, y: 0 } },
         ]
 

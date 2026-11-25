@@ -16,7 +16,7 @@ export class AltarArea extends Area
         if(this.game.debug.active)
         {
             this.debugPanel = this.game.debug.panel.addFolder({
-                title: '💀 Altar',
+                title: '✨ Santuário Celestial',
                 expanded: false,
             })
         }
@@ -24,8 +24,8 @@ export class AltarArea extends Area
         this.value = 0
         this.position = this.references.items.get('altar')[0].position.clone()
 
-        this.color = uniform(color('#ff544d'))
-        this.emissive = uniform(8)
+        this.color = uniform(color('#ffd97d'))
+        this.emissive = uniform(4.5)
         this.progressUniform = uniform(0)
 
         this.setSounds()
@@ -33,7 +33,7 @@ export class AltarArea extends Area
         this.setBeamParticles()
         this.setGlyphs()
         this.setCounter()
-        this.setDeathZone()
+        this.setSanctuaryZone()
         this.setData()
         this.setAchievement()
 
@@ -79,26 +79,26 @@ export class AltarArea extends Area
     {
         this.sounds = {}
 
-        this.sounds.chimers = this.game.audio.register({
-            path: 'sounds/magic/Ghostly Whisper Background Loop 9.mp3',
+        this.sounds.chimes = this.game.audio.register({
+            path: 'sounds/magic/Mountain Audio - Small Chimes - Loop.mp3',
             autoplay: true,
             loop: true,
-            volume: 0.15,
+            volume: 0.14,
             positions: this.references.items.get('altar')[0].position,
             distanceFade: 20
         })
 
-        this.sounds.deathBell1 = this.game.audio.register({
-            path: 'sounds/bell/Death Hit.mp3',
+        this.sounds.blessing1 = this.game.audio.register({
+            path: 'sounds/reveal/reveal-1.mp3',
             autoplay: false,
             loop: false,
-            volume: 0.4
+            volume: 0.35
         })
-        this.sounds.deathBell2 = this.game.audio.register({
-            path: 'sounds/bell/Epic Bell Impact Hit.mp3',
+        this.sounds.blessing2 = this.game.audio.register({
+            path: 'sounds/achievements/Money Reward 2.mp3',
             autoplay: false,
             loop: false,
-            volume: 0.4
+            volume: 0.35
         })
     }
 
@@ -126,13 +126,12 @@ export class AltarArea extends Area
             // Emissive
             const emissiveColor = this.color.mul(this.emissive)
 
-            // Goo
-            const gooColor = this.game.fog.strength.mix(vec3(0), this.game.fog.color) // Fog
+            // Mist
+            const skyMistColor = this.game.fog.strength.mix(color('#dff6ff'), this.game.fog.color)
 
             // Mix
-            // const gooMask = step(noise, 0.95)
-            const gooMask = step(0.65, noise)
-            const finalColor = mix(emissiveColor, gooColor, gooMask)
+            const mistMask = step(0.65, noise)
+            const finalColor = mix(emissiveColor, skyMistColor, mistMask)
 
             // Discard
             noise.greaterThan(1).discard()
@@ -145,26 +144,26 @@ export class AltarArea extends Area
         this.game.scene.add(cylinder)
         this.objects.hideable.push(cylinder)
 
-        // Bottom
+        // Bottom (Estrela Celestial)
         const bottomGeometry = new THREE.PlaneGeometry(radius * 2, radius * 2, 1, 1)
 
-        const satanStarTexture = this.game.resources.satanStarTexture
-        satanStarTexture.minFilter = THREE.NearestFilter
-        satanStarTexture.magFilter = THREE.NearestFilter
-        satanStarTexture.generateMipmaps = false
+        const celestialStarTexture = this.game.resources.celestialStarTexture
+        celestialStarTexture.minFilter = THREE.NearestFilter
+        celestialStarTexture.magFilter = THREE.NearestFilter
+        celestialStarTexture.generateMipmaps = false
         
         const bottomMaterial = new THREE.MeshBasicNodeMaterial({ transparent: true })
         bottomMaterial.outputNode = Fn(() =>
         {
-            const newUv = uv().sub(0.5).mul(1.7).add(0.5)
+            const newUv = uv().sub(0.5).mul(1.5).add(0.5)
             newUv.y.assign(newUv.y.oneMinus())
-            const satanStar = texture(satanStarTexture, newUv).r
+            const celestialStar = texture(celestialStarTexture, newUv).r
 
-            const gooColor = this.game.fog.strength.mix(vec3(0), this.game.fog.color) // Fog
+            const skyMistColor = this.game.fog.strength.mix(color('#ccefff'), this.game.fog.color)
 
             const emissiveColor = this.color.mul(this.emissive)
             
-            const finalColor = mix(gooColor, emissiveColor, satanStar)
+            const finalColor = mix(skyMistColor, emissiveColor, celestialStar)
 
             return vec4(finalColor, 1)
         })()
@@ -228,9 +227,9 @@ export class AltarArea extends Area
         particlesMaterial.outputNode = Fn(() =>
         {
             const distanceToCenter = uv().sub(0.5).length()
-            const gooColor = this.game.fog.strength.mix(vec3(0), this.game.fog.color) // Fog
+            const skyMistColor = this.game.fog.strength.mix(color('#dff6ff'), this.game.fog.color)
             const emissiveColor = this.color.mul(this.emissive)
-            const finalColor = mix(gooColor, emissiveColor, step(distanceToCenter, 0.35))
+            const finalColor = mix(skyMistColor, emissiveColor, step(distanceToCenter, 0.35))
 
             // Discard
             distanceToCenter.greaterThan(0.5).discard()
@@ -397,9 +396,9 @@ export class AltarArea extends Area
         material.outputNode = Fn(() =>
         {
             const textData = texture(this.textTexture, uv())
-            const gooColor = this.game.fog.strength.mix(vec3(0), this.game.fog.color) // Fog
+            const skyMistColor = this.game.fog.strength.mix(color('#12487a'), this.game.fog.color)
             const emissiveColor = this.color.mul(this.emissive)
-            const finalColor = mix(gooColor, emissiveColor, textData.g)
+            const finalColor = mix(skyMistColor, emissiveColor, textData.g)
 
             // Discard
             textData.r.add(textData.g).lessThan(0.5).discard()
@@ -412,7 +411,7 @@ export class AltarArea extends Area
         this.references.items.get('counter')[0].add(this.mesh)
     }
 
-    setDeathZone()
+    setSanctuaryZone()
     {
         const position = this.position.clone()
         position.y -= 1.25
@@ -429,11 +428,23 @@ export class AltarArea extends Area
                     this.localInsert()
                 else
                     this.updateText(this.value + 1)
-                this.game.player.die()
-                this.sounds.deathBell2.play()
-                gsap.delayedCall(2.2, () =>
+
+                if(this.game.world.confetti)
                 {
-                    this.sounds.deathBell1.play()
+                    this.game.world.confetti.pop(this.position.clone().add(new THREE.Vector3(0, 1.5, 0)))
+                }
+
+                // Impulso suave na luz + retorno sereno ao Santuario
+                const body = this.game.physicalVehicle.chassis.physical.body
+                body.applyImpulse({ x: 0, y: 18, z: 0 }, true)
+                this.sounds.blessing1.play()
+                gsap.delayedCall(0.6, () =>
+                {
+                    this.sounds.blessing2.play()
+                })
+                gsap.delayedCall(1.6, () =>
+                {
+                    this.game.player.respawn('altar')
                 })
                 this.game.achievements.setProgress('sacrifice', 1)
             }
@@ -450,7 +461,7 @@ export class AltarArea extends Area
         try { localStorage.setItem(AltarArea.STORAGE_KEY, String(value)) }
         catch(error) {}
 
-        // Cataclysm every 5 sacrifices
+        // Celestial breeze every 5 visits
         if(value % 5 === 0)
         {
             this.game.tornado.start()

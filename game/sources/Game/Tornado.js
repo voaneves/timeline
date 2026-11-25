@@ -21,7 +21,7 @@ export class Tornado
         if(this.game.debug.active)
         {
             this.debugPanel = this.game.debug.panel.addFolder({
-                title: '🌪️ Tornado',
+                title: '✨ Celestial Breeze',
                 expanded: false
             })
         }
@@ -152,27 +152,27 @@ export class Tornado
         // Strength
         gsap.to(this, { strength: 1, duration: 20, ease: 'linear', overwrite: true })
         
-        // Weather
+        // Weather (luminosa e serena, sem tempestade sombria)
         this.game.weather.override.start(
             {
-                humidity: 1,
-                electricField: 0.5,
-                clouds: 1,
-                wind: 1
+                humidity: 0,
+                electricField: 0,
+                clouds: 0.35,
+                wind: 0.75
             },
             20
         )
 
-        // Day cycles
+        // Day cycles (aurora celeste dourada e azul)
         this.game.dayCycles.override.start(
             {
-                lightColor: new THREE.Color('#ff4141'),
-                lightIntensity: 1.2,
-                shadowColor: new THREE.Color('#4e009c'),
-                fogColorA: new THREE.Color('#3e53ff'),
-                fogColorB: new THREE.Color('#ff4ce4'),
-                fogNearRatio: 0,
-                fogFarRatio: 1.25
+                lightColor: new THREE.Color('#fff0c2'),
+                lightIntensity: 1.55,
+                shadowColor: new THREE.Color('#3b6cb8'),
+                fogColorA: new THREE.Color('#80e5ff'),
+                fogColorB: new THREE.Color('#ffe299'),
+                fogNearRatio: 0.25,
+                fogFarRatio: 1.3
             },
             20
         )

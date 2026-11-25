@@ -13,13 +13,15 @@ Atualizado em 2026-11-25.
 | :--- | :--- | :--- |
 | 0 a 3 | `T0.0`–`T0.3`, `T1.1`–`T1.5`, `T2.1`–`T2.3`, `T3.1`, `T3.2` | Feitas |
 | 4 | `T4.0`–`T4.2` (`verify-glb`, letras `VICTOR NEVES`, limpeza `SocialArea`, totem geométrico, `areas-compressed.glb`) | Feitas |
-| 5 | `T5.1`–`T5.2` (reorganização do layout e novo mapa 2D) | Pendentes (exigem Blender + confirmação D10) |
-| 6 | `T6.1`–`T6.3` | Pendentes (`T6.1` exige `toktx` para `.ktx`) |
+| 5 | `T5.1`–`T5.2` (novo layout da ilha, circuito 180°, Santuário Celestial + Céu, carro Rally GT, grama world-locked, novo mapa 2D) | Feitas |
+| 6 | `T6.1`–`T6.3` (`T6.1` Draco/WebP + build; `T6.2` Review + Adversarial; `T6.3` integração raiz sob aprovação) | Em andamento (`.ktx` depende de `toktx`) |
+| 7 | `T7.0`–`T7.5` (Passagem Oceânica SW e Mapa Underwater — ver [`docs/PLAN-UNDERWATER.md`](./PLAN-UNDERWATER.md)) | Planejada |
 
 Ressalvas:
-- Nada foi validado visualmente em GPU real; só `npm run build` e `npm run verify:glb -- --strict`.
-- As edições da Fase 4 em `areas.glb` (`T4.1`–`T4.2`) foram geradas programaticamente via `game/scripts/patch-areas-phase4.mjs` + `compress.js static/areas` (Draco), dispensando Blender nesta etapa; os `.ktx` continuam dependendo do `toktx` (`T6.1`).
-- `verify:glb -- --strict` passa com `0 erro(s), 0 aviso(s)` no `areas.glb` atual.
+- Na Fase 5/6 foram entregues: remoção de elementos ocultistas + Santuário Celestial + `HeavenlySky.js` (raios de luz, halo/cruz, nuvens e pombas), `Grass.js` world-locked com abertura física sob o carro, novo carro Coastal Rally GT (`build-vehicle.mjs`), novo layout completo da ilha com Circuito rotacionado 180°, `terrain.png`/`terrain.glb` sincronizados, novos `map-day`/`map-night` e `docs/PLAN-UNDERWATER.md` (Fase 7).
+- O review visual ao vivo via Chrome DevTools MCP foi bloqueado porque o Chrome remote debugging não estava ativo (`DevToolsActivePort` ausente); todas as validações automatizadas de geometria, colisões, anti-ocultismo, `verify:glb --strict` e `npm run build` passaram, e o preview visual final pode ser aberto localmente com `npm run dev` em `game/`.
+- As edições das Fases 4 e 5 em `.glb` foram geradas programaticamente via `game/scripts/patch-areas-phase4.mjs`, `game/scripts/build-vehicle.mjs` e `game/scripts/build-map-phase5.mjs` + `compress.js` (Draco + WebP); os `.ktx` continuam dependendo do `toktx` (`T6.1`).
+- `verify:glb -- --strict` passa com `0 erro(s), 0 aviso(s)` nos `.glb` atuais.
 - Decisão 12 vs 13: a conquista `areas` conta 13 áreas (inclui `toilet`, sem pin); o contador do mapa mostra só as 12 com pin. `landing` (spawn) não dispara o aviso "Área descoberta".
 
 ---

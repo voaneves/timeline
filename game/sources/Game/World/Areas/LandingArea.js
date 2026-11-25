@@ -39,6 +39,23 @@ export class LandingArea extends Area
 
     setKiosk()
     {
+        // Atualiza textura do mapa no quiosque 3D com o novo mapa da ilha
+        const mapMaterial = this.game.materials.getFromName('stylizedMap')
+        if(mapMaterial)
+        {
+            new THREE.ImageBitmapLoader().setOptions({ imageOrientation: 'none' }).load('ui/map/map-day.png', (image) =>
+            {
+                const mapTexture = new THREE.Texture(image)
+                mapTexture.flipY = false
+                mapTexture.colorSpace = THREE.SRGBColorSpace
+                mapTexture.minFilter = THREE.LinearFilter
+                mapTexture.magFilter = THREE.LinearFilter
+                mapTexture.needsUpdate = true
+                mapMaterial.map = mapTexture
+                mapMaterial.needsUpdate = true
+            })
+        }
+
         // Interactive point
         const interactivePoint = this.game.interactivePoints.create(
             this.references.items.get('kioskInteractivePoint')[0].position,

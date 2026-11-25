@@ -183,12 +183,12 @@ export class VisualVehicle
             }
         }
         
-        // Abyssal
+        // Celestial
         {
             const material = new THREE.MeshBasicMaterial({ wireframe: false })
-            const fresnelColor = uniform(color('#2ae8ff'))
-            const fresnelIntensity = uniform(30)
-            const starsIntensity = uniform(10)
+            const fresnelColor = uniform(color('#7ce8ff'))
+            const fresnelIntensity = uniform(22)
+            const starsIntensity = uniform(12)
 
             material.outputNode = Fn(() =>
             {
@@ -206,13 +206,13 @@ export class VisualVehicle
                 return vec4(finalColor, 1)
             })()
 
-            this.paints.choices.abyssal = material
+            this.paints.choices.celestial = material
 
             // Debug
             if(this.game.debug.active && this.game.materials.debugPanel)
             {
                 const debugPanel = this.game.materials.debugPanel.addFolder({
-                    title: 'abyssal',
+                    title: 'celestial',
                     expanded: true,
                 })
                 this.game.debug.addThreeColorBinding(debugPanel, fresnelColor.value, 'fresnelColor')
@@ -400,7 +400,7 @@ export class VisualVehicle
         // Energy
         if(this.parts.energy)
         {
-            const emissiveOuput = this.game.materials.getFromName('emissivePurpleRadialGradient').outputNode
+            const emissiveOuput = this.game.materials.getFromName('emissiveBlueRadialGradient').outputNode
             const defaultOutput = this.parts.energy.material.outputNode
 
             const material = new THREE.MeshLambertNodeMaterial()

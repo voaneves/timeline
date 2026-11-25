@@ -35,10 +35,16 @@ for(const ref of refs)
     if(![ ...areaNames ].some(name => name.startsWith(ref)))
         errors.push(`ref critico ausente: ${ref}*`)
 
-// 3. nos legados (pendencia da T4.2)
-const legacy = [ ...areaNames ].filter(name => /^(baguira|sudo|boy)/.test(name))
+// 3. nos legados (pendencia da T4.2 + limpeza Fase 5)
+const legacy = [ ...areaNames ].filter(name => /^(baguira|sudo|boy|refSkullEyes)/.test(name))
 if(legacy.length)
-    warnings.push(`3 personagens legados de Social pendentes (T4.2), ${legacy.length} nos: ${legacy.join(', ')}`)
+    warnings.push(`nos legados ainda presentes em areas.glb (${legacy.length}): ${legacy.join(', ')}`)
+
+const terrainJson = readHeader('static/terrain/terrain.glb')
+const terrainPosAccIdx = terrainJson.meshes?.[0]?.primitives?.[0]?.attributes?.POSITION
+const terrainVertCount = terrainPosAccIdx !== undefined ? terrainJson.accessors?.[terrainPosAccIdx]?.count : 0
+if(terrainVertCount !== 16641)
+    errors.push(`terrain.glb deve ter 16641 vertices (129x129), encontrado: ${terrainVertCount}`)
 
 // 4. respawns usados pelo Map.js
 const respawns = [ 'achievements', 'altar', 'behindTheScene', 'bowling', 'career', 'circuit', 'cookie', 'lab', 'landing', 'projects', 'social', 'timeMachine' ]

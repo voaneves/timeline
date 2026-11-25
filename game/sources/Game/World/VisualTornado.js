@@ -55,8 +55,8 @@ export class VisualTornado
     {
         // Uniforms
         this.visibility = uniform(1)
-        const baseColor = uniform(color('#ff544d'))
-        const emissive = uniform(8)
+        const baseColor = uniform(color('#ffe082'))
+        const emissive = uniform(4.5)
         const timeScale = uniform(0.15)
         const parabolStrength = uniform(1.7)
         const parabolOffset = uniform(0.4)
@@ -124,8 +124,8 @@ export class VisualTornado
             const gooNoise = gooNoise1.mul(gooNoise2).add(heightModifier).add(visibilityModifier)
             const gooMix = step(0.2, gooNoise)
 
-            // Color
-            const gooColor = this.game.fog.strength.mix(vec3(0), this.game.fog.color) // Fog
+            // Color (nuvem clara celeste)
+            const gooColor = this.game.fog.strength.mix(color('#e6f8ff'), this.game.fog.color) // Fog
 
             /**
              * Alpha

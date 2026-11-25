@@ -1260,9 +1260,9 @@ export class LabArea extends Area
         {
             this.cauldron.liquid = {}
             
-            const colorA = uniform(color('#ff0083'))
-            const colorB = uniform(color('#3018eb'))
-            const intensity = uniform(1.7)
+            const colorA = uniform(color('#2ad4d9'))
+            const colorB = uniform(color('#0d6e9e'))
+            const intensity = uniform(1.5)
     
             const material = new THREE.MeshBasicNodeMaterial({ transparent: true })
             const mixedColor = mix(colorA, colorB, uv().sub(0.5).length().mul(2))
@@ -1275,7 +1275,7 @@ export class LabArea extends Area
             if(this.game.debug.active)
             {
                 const debugPanel = this.debugPanel.addFolder({
-                    title: 'cauldron',
+                    title: 'dataVat',
                     expanded: false,
                 })
                 this.game.debug.addThreeColorBinding(debugPanel, colorA.value, 'colorA')

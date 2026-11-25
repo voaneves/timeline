@@ -208,7 +208,8 @@ export class Achievements
         // Current
         this.rewards.current = this.rewards.default
 
-        const localRewardName = localStorage.getItem('achievementsReward')
+        const rawRewardName = localStorage.getItem('achievementsReward')
+        const localRewardName = rawRewardName === 'abyssal' ? 'celestial' : rawRewardName
         if(localRewardName)
         {
             const item = this.rewards.items.get(localRewardName)

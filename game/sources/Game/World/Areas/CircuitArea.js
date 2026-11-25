@@ -140,7 +140,8 @@ export class CircuitArea extends Area
         this.startingLights.mesh.visible = false
         this.startingLights.redMaterial = this.game.materials.getFromName('emissiveOrangeRadialGradient')
         this.startingLights.greenMaterial = this.game.materials.getFromName('emissiveGreenRadialGradient')
-        this.startingLights.baseZ = this.startingLights.mesh.position.z
+        this.startingLights.basePosition = this.startingLights.mesh.position.clone()
+        this.startingLights.forwardDir = new THREE.Vector3(0, 0, 1).applyQuaternion(this.startingLights.mesh.quaternion)
 
         // this.startingLights.mesh.visible = true
         // this.startingLights.mesh.position.z = this.startingLights.baseZ + 0.03
@@ -635,17 +636,17 @@ export class CircuitArea extends Area
         {
             this.sounds.countdown1.play()
             this.startingLights.mesh.visible = true
-            this.startingLights.mesh.position.z = this.startingLights.baseZ + 0.01
+            this.startingLights.mesh.position.copy(this.startingLights.basePosition).addScaledVector(this.startingLights.forwardDir, 0.01)
         })
         this.startAnimation.timeline.add(gsap.delayedCall(this.startAnimation.interDuration, () =>
         {
             this.sounds.countdown1.play()
-            this.startingLights.mesh.position.z = this.startingLights.baseZ + 0.02
+            this.startingLights.mesh.position.copy(this.startingLights.basePosition).addScaledVector(this.startingLights.forwardDir, 0.02)
         }))
         this.startAnimation.timeline.add(gsap.delayedCall(this.startAnimation.interDuration, () =>
         {
             this.sounds.countdown1.play()
-            this.startingLights.mesh.position.z = this.startingLights.baseZ + 0.03
+            this.startingLights.mesh.position.copy(this.startingLights.basePosition).addScaledVector(this.startingLights.forwardDir, 0.03)
         }))
         this.startAnimation.timeline.add(gsap.delayedCall(this.startAnimation.interDuration, () =>
         {
