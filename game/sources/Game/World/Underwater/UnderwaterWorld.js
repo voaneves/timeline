@@ -63,6 +63,20 @@ export class UnderwaterWorld
         this.kelpForest = new KelpForest(this.group)
         this.marineLife = new MarineLife(this.group)
 
+        this.hud = {
+            statusEl: document.querySelector('.js-uw-status'),
+            metaEl: document.querySelector('.js-uw-meta'),
+            lastStatus: '',
+            lastMeta: '',
+        }
+        this.game.i18n.events.on('change', () =>
+        {
+            this.hud.lastStatus = ''
+            this.hud.lastMeta = ''
+            if(this.active)
+                this.updateHud()
+        })
+
         this.game.ticker.events.on('tick', () =>
         {
             if(this.active)
@@ -299,6 +313,13 @@ export class UnderwaterWorld
         column.position.set(this.beaconPos.x, baseY + 12, this.beaconPos.z)
         this.group.add(column)
 
+        const haloMat = new THREE.MeshBasicNodeMaterial()
+        haloMat.outputNode = Fn(() => vec4(MeshDefaultMaterial.revealDiscardNodeBuilder(this.game, color('#ffe066').mul(2.1)), 1))()
+        this.returnHalo = new THREE.Mesh(new THREE.TorusGeometry(2.1, 0.11, 8, 32), haloMat)
+        this.returnHalo.rotation.x = Math.PI * 0.5
+        this.returnHalo.position.set(this.beaconPos.x, baseY + 6.5, this.beaconPos.z)
+        this.group.add(this.returnHalo)
+
         this.game.interactivePoints.create(
             new THREE.Vector3(this.beaconPos.x, baseY + 1.8, this.beaconPos.z),
             () => this.game.i18n.t('prompt.underwater.surface'),
@@ -433,7 +454,56 @@ export class UnderwaterWorld
             this.course.running = false
             this.course.nextIndex = 0
             for(let i = 0; i < this.course.rings.length; i++)
+            {
                 this.course.rings[i].mesh.material = i === 0 ? this.course.activeMat : this.course.idleMat
+                this.course.rings[i].mesh.scale.setScalar(1)
+            }
+            this.updateHud()
+        }
+    }
+
+    updateHud()
+    {
+        if(!this.hud?.statusEl || !this.hud?.metaEl)
+            return
+
+        let statusText = ''
+        let metaText = ''
+
+        if(this.course.running)
+        {
+            const elapsed = Math.max(0, this.game.ticker.elapsed - this.course.startTime).toFixed(1)
+            statusText = this.game.i18n.t('hud.underwater.ring', {
+                current: this.course.nextIndex + 1,
+                total: this.course.rings.length,
+                time: elapsed
+            })
+        }
+        else
+        {
+            statusText = this.game.i18n.t('hud.underwater.title')
+        }
+
+        const capGroup = this.game.achievements.groups.get('underwaterCapsules')
+        const capCount = capGroup && capGroup.progress instanceof Set ? capGroup.progress.size : 0
+        let bestMs = Infinity
+        try { bestMs = parseInt(localStorage.getItem(UW_CIRCUIT_BEST_KEY), 10) || Infinity } catch(e) {}
+        const bestPart = Number.isFinite(bestMs)
+            ? this.game.i18n.t('hud.underwater.best', { time: `${(bestMs / 1000).toFixed(2)}s` })
+            : this.game.i18n.t('hud.underwater.noBest')
+        const depthVal = Math.max(0, Math.round((22 - (this.game.player?.position?.y ?? 2)) * 2) / 2).toFixed(1)
+        const depthPart = this.game.i18n.t('hud.underwater.depth', { depth: depthVal })
+        metaText = `${this.game.i18n.t('hud.underwater.capsules', { count: capCount, total: 4 })} · ${depthPart} · ${bestPart}`
+
+        if(statusText !== this.hud.lastStatus)
+        {
+            this.hud.statusEl.textContent = statusText
+            this.hud.lastStatus = statusText
+        }
+        if(metaText !== this.hud.lastMeta)
+        {
+            this.hud.metaEl.textContent = metaText
+            this.hud.lastMeta = metaText
         }
     }
 
@@ -445,10 +515,23 @@ export class UnderwaterWorld
         this.kelpForest.update()
         this.marineLife.update()
 
+        if(this.returnHalo)
+        {
+            this.returnHalo.position.y = UnderwaterWorld.sampleSeabedHeight(this.beaconPos.x, this.beaconPos.z) + 6.5 + Math.sin(t * 2.0) * 0.35
+            this.returnHalo.rotation.z = t * 0.65
+        }
+
         for(const c of this.capsules)
         {
             c.orb.position.y = c.baseY + Math.sin(t * 1.6 + c.phase) * 0.28
             c.orb.rotation.y = t * 0.8 + c.phase
+        }
+
+        // Pulso visual no proximo anel ativo do slalom
+        for(let i = 0; i < this.course.rings.length; i++)
+        {
+            const s = i === this.course.nextIndex ? 1 + Math.sin(t * 4.2) * 0.065 : 1
+            this.course.rings[i].mesh.scale.setScalar(s)
         }
 
         // Checar progresso nas argolas 3D
@@ -463,6 +546,7 @@ export class UnderwaterWorld
             }
 
             target.mesh.material = this.course.doneMat
+            target.mesh.scale.setScalar(1)
             this.sounds.checkpoint.play(target.index)
             if(this.game.world.confetti)
                 this.game.world.confetti.pop(target.position.clone())
@@ -501,5 +585,7 @@ export class UnderwaterWorld
                 this.course.rings[this.course.nextIndex].mesh.material = this.course.activeMat
             }
         }
+
+        this.updateHud()
     }
 }

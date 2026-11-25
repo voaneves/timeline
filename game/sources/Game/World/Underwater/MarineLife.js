@@ -1,5 +1,5 @@
 import * as THREE from 'three/webgpu'
-import { attribute, color, float, Fn, instancedArray, mix, positionLocal, sin, smoothstep, step, uniform, uv, vec3, vec4 } from 'three/tsl'
+import { attribute, color, float, Fn, instancedArray, mix, positionLocal, sin, smoothstep, step, uniform, uv, varying, vec3, vec4 } from 'three/tsl'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import { Game } from '../../Game.js'
 import { MeshDefaultMaterial } from '../../Materials/MeshDefaultMaterial.js'
@@ -17,6 +17,7 @@ export class MarineLife
 
         this.setSchools()
         this.setBubbles()
+        this.setPlankton()
     }
 
     setSchools()
@@ -143,6 +144,58 @@ export class MarineLife
         bubbles.count = count
         bubbles.frustumCulled = false
         this.parentGroup.add(bubbles)
+    }
+
+    setPlankton()
+    {
+        const count = 120
+        const positions = new Float32Array(count * 3)
+        const seeds = new Float32Array(count)
+
+        for(let i = 0; i < count; i++)
+        {
+            const ang = Math.random() * Math.PI * 2
+            const r = 4 + Math.random() * 64
+            positions[i * 3 + 0] = Math.cos(ang) * r
+            positions[i * 3 + 1] = 0.8 + Math.random() * 13.5
+            positions[i * 3 + 2] = Math.sin(ang) * r
+            seeds[i] = Math.random()
+        }
+
+        const posAttr = instancedArray(positions, 'vec3').toAttribute()
+        const seedAttr = instancedArray(seeds, 'float').toAttribute()
+        const vSeed = varying(seedAttr, 'vPlanktonSeed')
+
+        const mat = new THREE.SpriteNodeMaterial({
+            transparent: true,
+            depthWrite: false,
+            blending: THREE.AdditiveBlending
+        })
+        mat.positionNode = Fn(() =>
+        {
+            const p = posAttr.toVar()
+            p.x.addAssign(sin(this.timeUniform.mul(0.55).add(seedAttr.mul(14.0))).mul(1.2))
+            p.y.addAssign(sin(this.timeUniform.mul(0.75).add(seedAttr.mul(19.0))).mul(0.6))
+            return p
+        })()
+        mat.scaleNode = Fn(() =>
+        {
+            const glow = sin(this.timeUniform.mul(2.2).add(seedAttr.mul(17.0))).mul(0.5).add(0.5)
+            return float(0.08).add(glow.mul(0.09))
+        })()
+        mat.outputNode = Fn(() =>
+        {
+            const d = uv().sub(0.5).length()
+            d.greaterThan(0.5).discard()
+            const soft = smoothstep(float(0.5), float(0.0), d)
+            const c = mix(color('#34cfc4'), color('#ffe599'), vSeed).mul(1.7)
+            return vec4(MeshDefaultMaterial.revealDiscardNodeBuilder(this.game, c), soft.mul(0.75))
+        })()
+
+        const motes = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), mat)
+        motes.count = count
+        motes.frustumCulled = false
+        this.parentGroup.add(motes)
     }
 
     update()

@@ -252,7 +252,8 @@ export class VisualVehicle
         this.submarineKit = {
             active: false,
             group: new THREE.Group(),
-            propellers: []
+            propellers: [],
+            bubbles: []
         }
         this.submarineKit.group.visible = false
         this.parts.chassis.add(this.submarineKit.group)
@@ -315,6 +316,24 @@ export class VisualVehicle
         beam.rotation.z = -Math.PI * 0.5
         beam.position.set(4.65, 0.05, 0)
         this.submarineKit.group.add(beam)
+
+        // Rastro de bolhas atras das turbinas hidro
+        const bubbleGeo = new THREE.SphereGeometry(0.085, 7, 6)
+        const bubbleMat = new THREE.MeshBasicNodeMaterial({ transparent: true, opacity: 0.72 })
+        bubbleMat.colorNode = color('#a8f4ff')
+        for(let i = 0; i < 18; i++)
+        {
+            const b = new THREE.Mesh(bubbleGeo, bubbleMat)
+            const side = (i % 2 === 0 ? -0.92 : 0.92) + (Math.random() - 0.5) * 0.16
+            this.submarineKit.group.add(b)
+            this.submarineKit.bubbles.push({
+                mesh: b,
+                phase: i / 18,
+                baseZ: side,
+                driftY: (Math.random() - 0.3) * 0.45,
+                driftZ: (Math.random() - 0.5) * 0.3,
+            })
+        }
     }
 
     setSubmarineMode(active)
@@ -625,9 +644,24 @@ export class VisualVehicle
 
         if(this.submarineKit?.active)
         {
-            const spin = (Math.abs(physicalVehicle.forwardSpeed) + 3) * this.game.ticker.deltaScaled * 3.5
+            const speedMag = Math.abs(physicalVehicle.forwardSpeed)
+            const spin = (speedMag + 3) * this.game.ticker.deltaScaled * 3.5
             for(const prop of this.submarineKit.propellers)
                 prop.rotation.x += spin
+
+            const t = this.game.ticker.elapsedScaled
+            const wakeLen = 1.6 + Math.min(2.6, speedMag * 0.12)
+            for(const b of this.submarineKit.bubbles)
+            {
+                const p = (t * (0.9 + speedMag * 0.04) + b.phase) % 1
+                b.mesh.position.set(
+                    -1.55 - p * wakeLen,
+                    0.02 + p * (0.45 + b.driftY),
+                    b.baseZ + Math.sin(t * 6 + b.phase * 10) * 0.06 + p * b.driftZ
+                )
+                const s = Math.sin(p * Math.PI) * (0.65 + (b.phase % 0.4))
+                b.mesh.scale.setScalar(Math.max(0.01, s))
+            }
         }
     }
 }

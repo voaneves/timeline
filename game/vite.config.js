@@ -59,7 +59,7 @@ function walkFiles(dir, out = [])
     return out
 }
 
-const pruneDistPlugin = (env) => ({
+const pruneDistPlugin = (compressed, compressedModels) => ({
     name: 'prune-dist-assets',
     apply: 'build',
     closeBundle()
@@ -67,9 +67,6 @@ const pruneDistPlugin = (env) => ({
         const distDir = resolve(gameDir, 'dist')
         if(!existsSync(distDir))
             return
-
-        const compressed = env.VITE_COMPRESSED === '1' || env.VITE_COMPRESSED === 'true'
-        const compressedModels = compressed || env.VITE_COMPRESSED_MODELS === '1' || env.VITE_COMPRESSED_MODELS === 'true'
 
         let removedCount = 0
         let removedBytes = 0
@@ -135,12 +132,20 @@ const pruneDistPlugin = (env) => ({
 export default ({ mode }) =>
 {
     const env = loadEnv(mode, gameDir, '')
+    const compressed = env.VITE_COMPRESSED === '1' || env.VITE_COMPRESSED === 'true'
+    const compressedModels = mode === 'production'
+        ? (env.VITE_COMPRESSED_MODELS !== '0')
+        : (compressed || env.VITE_COMPRESSED_MODELS === '1' || env.VITE_COMPRESSED_MODELS === 'true')
 
     return {
         root: 'sources/', // Sources files (typically where index.html is)
         envDir: '../',  // Directory where the env file is located
         publicDir: '../static/', // Path from "root" to static assets (files that are served as they are)
         base: './', // Public path (what's after the domain)
+        define:
+        {
+            'import.meta.env.VITE_COMPRESSED_MODELS': JSON.stringify(compressedModels ? '1' : ''),
+        },
         server:
         {
             // https: true,
@@ -158,7 +163,7 @@ export default ({ mode }) =>
             wasm(),
             restart({ restart: [ '../static/**', ] }), // Restart server on static file change
             safeNodePolyfills(),
-            pruneDistPlugin(env),
+            pruneDistPlugin(compressed, compressedModels),
             // basicSsl()
         ]
     }

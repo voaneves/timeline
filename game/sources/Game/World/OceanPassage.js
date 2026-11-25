@@ -66,6 +66,29 @@ export class OceanPassage
         disc.position.y = 0.02
         this.group.add(disc)
 
+        // Coluna luminosa suave e halo flutuante para orientar o jogador a distancia
+        const beamMat = new THREE.MeshBasicNodeMaterial({
+            transparent: true,
+            depthWrite: false,
+            blending: THREE.AdditiveBlending,
+            side: THREE.DoubleSide
+        })
+        beamMat.outputNode = Fn(() =>
+        {
+            const vFade = smoothstep(float(0.0), float(0.18), uv().y)
+                .mul(smoothstep(float(1.0), float(0.25), uv().y))
+            const pulse = sin(uv().y.mul(14.0).sub(this.timeUniform.mul(3.2))).mul(0.5).add(0.5)
+            const c = mix(color('#34cfc4'), color('#ffe599'), pulse).mul(1.7)
+            return vec4(MeshDefaultMaterial.revealDiscardNodeBuilder(this.game, c), vFade.mul(0.26))
+        })()
+        const beam = new THREE.Mesh(new THREE.CylinderGeometry(1.0, 2.2, 11, 20, 1, true), beamMat)
+        beam.position.y = 5.5
+        this.group.add(beam)
+
+        this.skyRing = new THREE.Mesh(new THREE.TorusGeometry(1.4, 0.09, 8, 32), ringMat)
+        this.skyRing.position.y = 2.6
+        this.group.add(this.skyRing)
+
         // 4 boias guias ao redor do anel
         const buoyGeo = new THREE.SphereGeometry(0.32, 12, 10)
         const buoyMat = new MeshDefaultMaterial({
@@ -170,6 +193,12 @@ export class OceanPassage
         this.timeUniform.value = t
 
         this.ring.position.y = 0.08 + Math.sin(t * 2.0) * 0.05
+        if(this.skyRing)
+        {
+            this.skyRing.position.y = 2.6 + Math.sin(t * 1.8) * 0.25
+            this.skyRing.rotation.y = t * 0.9
+            this.skyRing.rotation.x = Math.sin(t * 1.1) * 0.22
+        }
         for(let i = 0; i < this.buoys.length; i++)
             this.buoys[i].position.y = 0.12 + Math.sin(t * 2.4 + i * 1.5) * 0.08
     }

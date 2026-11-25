@@ -481,4 +481,68 @@ html:not(.is-server-online) .online-element
                 font-size 15px
                 line-height 1
 
+.underwater-hud
+    display none
+    position absolute
+    top 16px
+    left 50%
+    transform translateX(-50%)
+    z-index 8
+    padding 8px 18px
+    background linear-gradient(135deg, rgba(6, 36, 62, 0.84), rgba(13, 86, 108, 0.78))
+    border 1px solid rgba(139, 238, 255, 0.45)
+    box-shadow 0 6px 24px rgba(2, 16, 32, 0.45)
+    backdrop-filter blur(6px)
+    color #e9faff
+    text-align center
+    pointer-events none
+    -webkit-user-select none
+    -moz-user-select none
+    user-select none
+    transition transform 0.2s, opacity 0.2s
+
+    html.is-started.is-underwater &
+        display block
+
+    html.input-filter-menu &,
+    html.input-filter-modal &,
+    html.input-filter-intro &,
+    html.input-filter-cinematic &
+        opacity 0
+        transform translateX(-50%) translateY(-16px)
+
+    .uw-status
+        font-size 13px
+        font-weight 700
+        letter-spacing 0.06em
+        text-transform uppercase
+        color #8beeff
+
+    .uw-meta
+        font-size 12px
+        font-weight 600
+        margin-top 2px
+        color #ffffff
+
+    .uw-hint
+        font-size 11px
+        margin-top 2px
+        opacity 0.78
+        color #bfefff
+
+    @media only screen and (max-width 640px)
+        top 10px
+        padding 6px 12px
+        max-width calc(100vw - 130px)
+
+        .uw-status
+            font-size 11px
+
+        .uw-meta
+            font-size 11px
+
+        .uw-hint
+            display none
+
+
 

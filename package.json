@@ -2,14 +2,18 @@
   "name": "timeline",
   "version": "1.0.0",
   "private": true,
-  "description": "Victor Neves timeline: semantic 2D page with an optional 3D diorama.",
+  "description": "Victor Neves 3D interactive timeline & underwater portfolio (Three.js WebGPU + Rapier3D).",
   "type": "module",
   "license": "MIT",
   "scripts": {
-    "build": "node scripts/build.mjs",
-    "check-size": "node scripts/check-size.mjs",
+    "dev": "npm --prefix game run dev",
+    "build": "npm --prefix game run build",
+    "preview": "npm --prefix game run preview",
+    "verify:glb": "npm --prefix game run verify:glb",
+    "audit:dist": "npm --prefix game run audit:dist",
+    "compress": "npm --prefix game run compress",
     "contrast": "dtcg-contrast --config=dtcg-contrast.config.json",
-    "check": "npm run build && npm run check-size"
+    "check": "npm --prefix game run verify:glb -- --strict && npm --prefix game run build && npm --prefix game run audit:dist"
   },
   "dependencies": {
     "three": "0.187.0"

@@ -24,7 +24,7 @@ export class TimeMachineArea extends Area
             InteractivePoints.STATE_CONCEALED,
             () =>
             {
-                window.open('https://voaneves.github.io/timeline/#carreira')
+                window.open('https://github.com/voaneves/timeline', '_blank', 'noopener,noreferrer')
             },
             () =>
             {

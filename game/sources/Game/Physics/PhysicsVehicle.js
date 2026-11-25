@@ -512,18 +512,55 @@ export class PhysicsVehicle
         const delta = this.game.quality.level === 1 ? 1/60 : Math.min(1/60, this.game.ticker.deltaAverage)
         this.controller.updateVehicle(delta)
 
-        // Empuxo hidro vertical no modo submarino (segurar Espaco sobe suavemente)
-        if(this.isUnderwater && this.game.inputs.actions.get('suspensions').active && this.position.y < 14)
+        // Modo submarino: empuxo vertical, propulsao mid-water, leme e estabilizacao
+        if(this.isUnderwater)
         {
-            const lift = 1.55 * this.chassis.mass * Math.min(0.05, this.game.ticker.deltaScaled) * 60
-            this.chassis.physical.body.applyImpulse({ x: 0, y: lift, z: 0 })
+            const dt = Math.min(0.05, this.game.ticker.deltaScaled)
+            const body = this.chassis.physical.body
+
+            if(this.game.inputs.actions.get('suspensions').active && this.position.y < 14)
+            {
+                const lift = 1.45 * this.chassis.mass * dt * 60
+                body.applyImpulse({ x: 0, y: lift, z: 0 })
+            }
+
+            // Propulsao hidro quando fora do chao arenoso
+            if(this.wheels.inContactCount < 2)
+            {
+                const accel = this.game.player.accelerating
+                if(Math.abs(accel) > 0.05 && this.speed < topSpeed)
+                {
+                    const horizLen = Math.hypot(this.forward.x, this.forward.z) || 1
+                    const thrust = accel * (1 + this.game.player.boosting * 0.65) * 0.85 * this.chassis.mass * dt * 60
+                    body.applyImpulse({
+                        x: (this.forward.x / horizLen) * thrust,
+                        y: 0,
+                        z: (this.forward.z / horizLen) * thrust,
+                    })
+                }
+            }
+
+            // Estabilizacao suave (auto-leveling) + leme em Y no nado 3D
+            const steerYaw = this.wheels.inContactCount < 2
+                ? this.game.player.steering * 0.95 * this.chassis.mass * dt * 60
+                : 0
+            const levelScale = 0.55 * this.chassis.mass * dt * 60
+            // cross(this.upward, UP(0,1,0)) = (upward.z, 0, -upward.x)
+            body.applyTorqueImpulse({
+                x: this.upward.z * levelScale,
+                y: steerYaw,
+                z: -this.upward.x * levelScale,
+            })
         }
     }
 
     setUnderwaterMode(active)
     {
         this.isUnderwater = !!active
-        this.chassis.physical.body.setGravityScale(this.isUnderwater ? 0.38 : 1.0, true)
+        const body = this.chassis.physical.body
+        body.setGravityScale(this.isUnderwater ? 0.38 : 1.0, true)
+        body.setLinearDamping(this.isUnderwater ? 0.65 : 0.1)
+        body.setAngularDamping(this.isUnderwater ? 1.25 : 0.1)
         this.topSpeedBoost = this.isUnderwater ? 32 : 40
     }
 

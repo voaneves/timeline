@@ -31,7 +31,7 @@ function walk(dir, out = [])
 function collectRuntimeAssetUrls(env)
 {
     const compressed = env.VITE_COMPRESSED === '1' || env.VITE_COMPRESSED === 'true'
-    const compressedModels = compressed || env.VITE_COMPRESSED_MODELS === '1' || env.VITE_COMPRESSED_MODELS === 'true'
+    const compressedModels = compressed || env.VITE_COMPRESSED_MODELS !== '0'
     const compressedModelSuffix = compressedModels ? '-compressed' : ''
     const compressedTextureExtension = compressed ? 'ktx' : 'png'
 
