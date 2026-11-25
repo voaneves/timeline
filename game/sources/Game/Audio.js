@@ -710,6 +710,32 @@ export class Audio
 
     }
 
+    setUnderwaterFilter(active)
+    {
+        try
+        {
+            const ctx = Howler.ctx
+            const master = Howler.masterGain
+            if(!ctx || !master)
+                return
+
+            if(!this.underwaterFilter)
+            {
+                this.underwaterFilter = ctx.createBiquadFilter()
+                this.underwaterFilter.type = 'lowpass'
+                this.underwaterFilter.frequency.value = 22000
+                this.underwaterFilter.Q.value = 0.7
+                master.disconnect()
+                master.connect(this.underwaterFilter)
+                this.underwaterFilter.connect(ctx.destination)
+            }
+
+            const targetFreq = active ? 650 : 22000
+            this.underwaterFilter.frequency.setTargetAtTime(targetFreq, ctx.currentTime, 0.15)
+        }
+        catch(error) {}
+    }
+
     update()
     {
         this.globalRate = this.game.time.scale / this.game.time.defaultScale

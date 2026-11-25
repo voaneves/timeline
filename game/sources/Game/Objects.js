@@ -358,6 +358,9 @@ export class Objects
 
             if(_object.physical)
             {
+                if(!_object.physical.body.isEnabled())
+                    return
+
                 // Felt in the floor => reset
                 if(position.y < this.game.water.depthElevation)
                 {

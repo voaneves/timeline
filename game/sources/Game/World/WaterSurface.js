@@ -417,6 +417,9 @@ export class WaterSurface
 
     update()
     {
+        if(this.game.worldManager?.isUnderwater)
+            return
+
         // Apply weather
         this.ripplesRatioBinding.update()
         this.iceRatioBinding.update()

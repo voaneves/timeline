@@ -26,6 +26,7 @@ export class VisualVehicle
         this.setBoostAnimation()
         this.setScreenPosition()
         this.setPaints()
+        this.setSubmarineKit()
 
         this.tickCallback = () =>
         {
@@ -244,6 +245,84 @@ export class VisualVehicle
         {
             this.paints.changeTo(reward.name)
         })
+    }
+
+    setSubmarineKit()
+    {
+        this.submarineKit = {
+            active: false,
+            group: new THREE.Group(),
+            propellers: []
+        }
+        this.submarineKit.group.visible = false
+        this.parts.chassis.add(this.submarineKit.group)
+
+        // Domo panoramico ciano sobre a cabine
+        const domeMat = new THREE.MeshLambertNodeMaterial({ transparent: true, opacity: 0.42 })
+        domeMat.colorNode = color('#7ce8ff')
+        const dome = new THREE.Mesh(new THREE.SphereGeometry(0.68, 18, 12, 0, Math.PI * 2, 0, Math.PI * 0.55), domeMat)
+        dome.position.set(-0.08, 0.38, 0)
+        dome.scale.set(1.25, 0.72, 1.0)
+        this.submarineKit.group.add(dome)
+
+        // Anel dourado da escotilha
+        const collarMat = new THREE.MeshBasicNodeMaterial()
+        collarMat.colorNode = color('#ffe082')
+        const collar = new THREE.Mesh(new THREE.TorusGeometry(0.66, 0.04, 8, 24), collarMat)
+        collar.rotation.x = Math.PI * 0.5
+        collar.position.set(-0.08, 0.39, 0)
+        collar.scale.set(1.25, 1.0, 1.0)
+        this.submarineKit.group.add(collar)
+
+        // Turbinas hidro laterais com helices giratorias
+        const podMat = new THREE.MeshLambertNodeMaterial()
+        podMat.colorNode = color('#2a4365')
+        const bladeMat = new THREE.MeshBasicNodeMaterial()
+        bladeMat.colorNode = color('#34cfc4')
+
+        for(const sz of [ -0.92, 0.92 ])
+        {
+            const pod = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.18, 0.62, 10), podMat)
+            pod.rotation.z = Math.PI * 0.5
+            pod.position.set(-1.12, -0.02, sz)
+            this.submarineKit.group.add(pod)
+
+            const hub = new THREE.Group()
+            hub.position.set(-1.46, -0.02, sz)
+            for(let k = 0; k < 3; k++)
+            {
+                const blade = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.24, 0.06), bladeMat)
+                blade.rotation.x = (k / 3) * Math.PI * 2
+                hub.add(blade)
+            }
+            this.submarineKit.group.add(hub)
+            this.submarineKit.propellers.push(hub)
+        }
+
+        // Farol submarino frontal volumetrico
+        const beamMat = new THREE.MeshBasicNodeMaterial({
+            transparent: true,
+            depthWrite: false,
+            blending: THREE.AdditiveBlending,
+            side: THREE.DoubleSide
+        })
+        beamMat.outputNode = Fn(() =>
+        {
+            const fade = uv().y.smoothstep(0.0, 0.85).oneMinus()
+            return vec4(color('#8beeff').mul(1.2), fade.mul(0.22))
+        })()
+        const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 1.65, 6.5, 16, 1, true), beamMat)
+        beam.rotation.z = -Math.PI * 0.5
+        beam.position.set(4.65, 0.05, 0)
+        this.submarineKit.group.add(beam)
+    }
+
+    setSubmarineMode(active)
+    {
+        if(!this.submarineKit)
+            return
+        this.submarineKit.active = !!active
+        this.submarineKit.group.visible = this.submarineKit.active
     }
 
     setMainGroundTrack()
@@ -543,5 +622,12 @@ export class VisualVehicle
 
         this.screenPosition.x = (vector.x * 0.5 + 0.5)
         this.screenPosition.y = (vector.y * -0.5 + 0.5)
+
+        if(this.submarineKit?.active)
+        {
+            const spin = (Math.abs(physicalVehicle.forwardSpeed) + 3) * this.game.ticker.deltaScaled * 3.5
+            for(const prop of this.submarineKit.propellers)
+                prop.rotation.x += spin
+        }
     }
 }

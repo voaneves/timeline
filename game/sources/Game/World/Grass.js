@@ -229,6 +229,9 @@ export class Grass
 
     update()
     {
+        if(this.game.worldManager?.isUnderwater)
+            return
+
         const cellX = Math.round(this.game.view.optimalArea.position.x / this.spacing)
         const cellZ = Math.round(this.game.view.optimalArea.position.z / this.spacing)
         const offsetX = cellX * this.spacing

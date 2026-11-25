@@ -175,6 +175,9 @@ export class Floor
 
     update()
     {
+        if(this.game.worldManager?.isUnderwater)
+            return
+
         this.mesh.position.x = Math.round(this.game.view.optimalArea.position.x / this.cellSize) * this.cellSize
         this.mesh.position.z = Math.round(this.game.view.optimalArea.position.z / this.cellSize) * this.cellSize
 

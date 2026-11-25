@@ -134,6 +134,9 @@ export class Area
         
         this.frustum.test = () =>
         {
+            if(this.game.worldManager?.isUnderwater)
+                return
+
             const isVisible = this.frustum.alwaysVisible || circleIntersectsPolygon(
                 this.frustum.position,
                 this.frustum.radius,

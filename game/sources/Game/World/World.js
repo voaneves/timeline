@@ -29,6 +29,8 @@ import { Fences } from './Fences.js'
 import { Benches } from './Benches.js'
 import { Scenery } from './Scenery.js'
 import { HeavenlySky } from './HeavenlySky.js'
+import { OceanPassage } from './OceanPassage.js'
+import { UnderwaterWorld } from './Underwater/UnderwaterWorld.js'
 
 export class World
 {
@@ -80,6 +82,8 @@ export class World
             this.scenery = new Scenery()
             this.areas = new Areas()
             this.heavenlySky = new HeavenlySky(this.areas.altar?.position)
+            this.oceanPassage = new OceanPassage()
+            this.underwaterWorld = new UnderwaterWorld()
         }
         else if(step === 2)
         {

@@ -40,5 +40,9 @@ export default [
     [ 'statueDown', { 'pt-BR': 'Revolução!', en: 'Revolution!' }, { 'pt-BR': 'Derrube o monumento na área Social.', en: 'Topple the monument in the Social area.' }, 1 ],
     [ 'konami', { 'pt-BR': 'Cima, Cima, Baixo, Baixo…', en: 'Up, Up, Down, Down…' }, { 'pt-BR': 'Você conhece o resto.', en: 'You know the rest.' }, 1 ],
     [ 'debug', { 'pt-BR': 'Modo Engenheiro', en: 'Engineer Mode' }, { 'pt-BR': 'Acesse o painel <strong>#debug</strong>.', en: 'Open the <strong>#debug</strong> panel.' }, 1 ],
+    [ 'underwaterDive', { 'pt-BR': 'Submarino Anfíbio', en: 'Amphibious Submarine' }, { 'pt-BR': 'Mergulhe pela Passagem Oceânica até o Recife Subaquático.', en: 'Dive through the Ocean Passage to the Underwater Reef.' }, 1 ],
+    [ 'underwaterCapsules', { 'pt-BR': 'Caçador de Cápsulas', en: 'Capsule Hunter' }, { 'pt-BR': 'Inspecione todas as <strong>4</strong> cápsulas técnicas submersas.', en: 'Inspect all <strong>4</strong> submerged tech capsules.' }, 4, true ],
+    [ 'underwaterCourse', { 'pt-BR': 'Piloto das Profundezas', en: 'Deep Sea Pilot' }, { 'pt-BR': 'Atravesse todas as <strong>8</strong> argolas do slalom subaquático.', en: 'Pass through all <strong>8</strong> rings of the underwater slalom.' }, 1 ],
+    [ 'underwaterReturn', { 'pt-BR': 'De Volta à Costa', en: 'Back to Shore' }, { 'pt-BR': 'Retorne à superfície a partir do mundo subaquático.', en: 'Return to the surface from the underwater world.' }, 1 ],
     [ 'hacker', { 'pt-BR': 'Hacker', en: 'Hacker' }, { 'pt-BR': 'Esta conquista não pode ser alcançada.', en: 'This achievement cannot be reached.' }, 1 ],
 ]

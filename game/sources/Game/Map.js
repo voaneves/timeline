@@ -1,4 +1,5 @@
 import { clamp } from 'three/src/math/MathUtils.js'
+import * as THREE from 'three/webgpu'
 import { Game } from './Game.js'
 
 export class Map
@@ -115,10 +116,109 @@ export class Map
 
             element.addEventListener('click', () =>
             {
-                this.game.player.respawn(item.respawnName, () =>
+                if(this.game.worldManager?.isUnderwater)
+                    this.game.worldManager.exitUnderwater(item.respawnName)
+                else
                 {
+                    this.game.player.respawn(item.respawnName, () =>
+                    {
+                        this.game.view.focusPoint.isTracking = true
+                    })
+                }
+                this.game.modals.close()
+            })
+        }
+
+        // Pins especiais de transicao entre reinos e capsulas subaquaticas
+        this.specialLocations = [
+            {
+                key: 'map.underwater',
+                realm: 'surface',
+                className: 'is-underwater-pin',
+                position: new THREE.Vector3(-78, 0, 68),
+                onClick: () => this.game.worldManager?.enterUnderwater()
+            },
+            {
+                key: 'map.surfaceBeacon',
+                realm: 'underwater',
+                className: 'is-surface-pin',
+                position: new THREE.Vector3(0, 0, 24),
+                onClick: () => this.game.worldManager?.exitUnderwater()
+            },
+            {
+                key: 'underwater.capsule.gitops.title',
+                realm: 'underwater',
+                className: 'is-underwater-pin',
+                position: new THREE.Vector3(-32, 0, -10),
+                onClick: () =>
+                {
+                    this.game.physicalVehicle.moveTo(new THREE.Vector3(-32, 3.0, -5), Math.PI)
                     this.game.view.focusPoint.isTracking = true
-                })
+                }
+            },
+            {
+                key: 'underwater.capsule.data.title',
+                realm: 'underwater',
+                className: 'is-underwater-pin',
+                position: new THREE.Vector3(32, 0, -12),
+                onClick: () =>
+                {
+                    this.game.physicalVehicle.moveTo(new THREE.Vector3(32, 3.0, -7), Math.PI)
+                    this.game.view.focusPoint.isTracking = true
+                }
+            },
+            {
+                key: 'underwater.capsule.webgpu.title',
+                realm: 'underwater',
+                className: 'is-underwater-pin',
+                position: new THREE.Vector3(-28, 0, -48),
+                onClick: () =>
+                {
+                    this.game.physicalVehicle.moveTo(new THREE.Vector3(-28, 3.0, -43), Math.PI)
+                    this.game.view.focusPoint.isTracking = true
+                }
+            },
+            {
+                key: 'underwater.capsule.oss.title',
+                realm: 'underwater',
+                className: 'is-underwater-pin',
+                position: new THREE.Vector3(28, 0, -48),
+                onClick: () =>
+                {
+                    this.game.physicalVehicle.moveTo(new THREE.Vector3(28, 3.0, -43), Math.PI)
+                    this.game.view.focusPoint.isTracking = true
+                }
+            },
+        ]
+
+        for(const item of this.specialLocations)
+        {
+            const mapPosition = this.worldToMap(item.position)
+            const html = /* html */`
+                <div class="pin"></div>
+                <div class="name-container">
+                    <div class="name">${this.game.i18n.t(item.key)}</div>
+                </div>
+            `
+            const element = document.createElement('div')
+            element.classList.add('location', item.className)
+            element.innerHTML = html
+            element.style.left = `${mapPosition.x * 100}%`
+            element.style.top = `${mapPosition.y * 100}%`
+            element.style.zIndex = Math.round(mapPosition.y * 1000)
+
+            this.element.append(element)
+            item.element = element
+
+            const nameElement = element.querySelector('.name')
+            this.game.i18n.events.on('change', () =>
+            {
+                nameElement.innerHTML = this.game.i18n.t(item.key)
+            })
+
+            element.addEventListener('click', () =>
+            {
+                item.onClick()
                 this.game.modals.close()
             })
         }
@@ -141,6 +241,22 @@ export class Map
 
     updateProgress()
     {
+        const isUnderwater = !!this.game.worldManager?.isUnderwater
+
+        for(const item of this.locations.items)
+            item.element.style.display = isUnderwater ? 'none' : ''
+
+        for(const item of this.specialLocations)
+            item.element.style.display = (item.realm === (isUnderwater ? 'underwater' : 'surface')) ? '' : 'none'
+
+        if(isUnderwater)
+        {
+            const uwGroup = this.game.achievements.groups.get('underwaterCapsules')
+            const uwVisited = uwGroup && uwGroup.progress instanceof Set ? uwGroup.progress.size : 0
+            this.progress.element.textContent = this.game.i18n.t('map.underwaterDiscovered', { count: uwVisited, total: 4 })
+            return
+        }
+
         const group = this.game.achievements.groups.get('areas')
         const visited = group && group.progress instanceof Set ? group.progress : new Set()
         // Conquista conta 13 areas (inclui a cabine escondida, sem pin); o mapa mostra so as com pin
@@ -172,7 +288,9 @@ export class Map
         
         this.texture.update = () =>
         {
-            const url = this.game.dayCycles.intervalEvents.get('night').inInterval ? 'ui/map/map-night.webp' : 'ui/map/map-day.webp'
+            const url = this.game.worldManager?.isUnderwater
+                ? 'ui/map/map-underwater.webp'
+                : (this.game.dayCycles.intervalEvents.get('night').inInterval ? 'ui/map/map-night.webp' : 'ui/map/map-day.webp')
 
             if(url !== this.texture.previousUrl)
             {

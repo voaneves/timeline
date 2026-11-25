@@ -185,7 +185,8 @@ export class InteractivePoints
         interactCallback = null,
         revealCallback = null,
         concealCallback = null,
-        hideCallback = null
+        hideCallback = null,
+        realm = 'surface'
     )
     {
         const newPosition = position.clone()
@@ -200,6 +201,8 @@ export class InteractivePoints
         group.rotation.y = Math.PI * 0.25
         group.position.copy(newPosition)
         group.scale.setScalar(0.85)
+        group.userData.keepInAllRealms = true
+        group.visible = (realm === (this.game.worldManager?.activeRealm ?? 'surface'))
         this.game.scene.add(group)
 
         // Materials
@@ -353,6 +356,8 @@ export class InteractivePoints
          * Item
          */
         const item = {}
+        item.realm = realm
+        item.group = group
         item.position = new THREE.Vector2(position.x, position.z)
         item.interactCallback = interactCallback
         item.revealCallback = revealCallback
@@ -608,17 +613,19 @@ export class InteractivePoints
             this.needsTest = false
             this.playerPosition.value.copy(this.game.player.position2)
 
+            const currentRealm = this.game.worldManager?.activeRealm ?? 'surface'
             let distance = Infinity
             let activeItem = null
             for(const item of this.items)
             {
                 const itemDistance = Math.hypot(item.position.x - this.game.player.position2.x, item.position.y - this.game.player.position2.y)
-                const isIn = itemDistance < 2.5
+                const isIn = item.realm === currentRealm && itemDistance < 2.5
                 
                 if(isIn)
                 {
                     if(itemDistance < distance && item.state !== InteractivePoints.STATE_HIDDEN)
                     {
+                        distance = itemDistance
                         activeItem = item
                     }
                 }
@@ -681,5 +688,18 @@ export class InteractivePoints
             if(item.recoveryState !== InteractivePoints.STATE_HIDDEN)
                 item.show()
         }
+    }
+
+    syncRealmVisibility(realm = 'surface')
+    {
+        for(const item of this.items)
+        {
+            const active = item.realm === realm
+            if(item.group)
+                item.group.visible = active
+            if(!active && item.intersect)
+                item.intersect.active = false
+        }
+        this.needsTest = true
     }
 }

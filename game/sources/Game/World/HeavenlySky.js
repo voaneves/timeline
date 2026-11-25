@@ -212,6 +212,9 @@ export class HeavenlySky
 
     update()
     {
+        if(this.game.worldManager?.isUnderwater)
+            return
+
         const t = this.game.ticker.elapsedScaled
         this.timeUniform.value = t
 

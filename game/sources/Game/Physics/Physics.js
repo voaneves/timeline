@@ -242,8 +242,16 @@ export class Physics
     {
         this.world.timestep = this.game.ticker.deltaScaled
     
+        const isUnderwater = this.game.worldManager?.isUnderwater
         for(const physical of this.physicals)
         {
+            if(isUnderwater)
+            {
+                physical.body.setLinearDamping(physical.linearDamping)
+                physical.body.setAngularDamping(physical.angularDamping)
+                continue
+            }
+
             const waterDepth = Math.max(- physical.body.translation(this.tempPosition).y, this.game.water.surfaceElevation)
             // physical.body.setGravityScale(1 + waterDepth * physical.waterGravityMultiplier)
 

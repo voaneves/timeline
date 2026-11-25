@@ -30,9 +30,9 @@ export class Zones
         }
     }
 
-    create(type = 'sphere', position, radius)
+    create(type = 'sphere', position, radius, realm = 'surface')
     {
-        const zone = { type, position, radius, isIn: false }
+        const zone = { type, position, radius, realm, isIn: false }
         zone.events = new Events()
         this.items.push(zone)
 
@@ -49,8 +49,19 @@ export class Zones
 
     update()
     {
+        const currentRealm = this.game.worldManager?.activeRealm ?? 'surface'
+
         for(const zone of this.items)
         {
+            if(zone.realm !== currentRealm)
+            {
+                if(zone.isIn)
+                {
+                    zone.isIn = false
+                    zone.events.trigger('leave', [ zone ])
+                }
+                continue
+            }
             let playerPosition = this.game.player.position
             let zonePosition = zone.position
 

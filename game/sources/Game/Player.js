@@ -468,6 +468,29 @@ export class Player
 
     respawn(respawnName = null, callback = null)
     {
+        if(this.game.worldManager?.isUnderwater)
+        {
+            if(respawnName)
+            {
+                if(typeof callback === 'function')
+                    callback()
+                this.game.worldManager.exitUnderwater(respawnName)
+                return
+            }
+
+            this.game.overlay.show(() =>
+            {
+                if(typeof callback === 'function')
+                    callback()
+
+                this.game.physicalVehicle.moveTo(new THREE.Vector3(0, 3.0, 14), Math.PI * 0.5)
+                this.game.view.focusPoint.isTracking = true
+                this.state = Player.STATE_DEFAULT
+                this.game.overlay.hide()
+            })
+            return
+        }
+
         this.game.overlay.show(() =>
         {
             if(typeof callback === 'function')

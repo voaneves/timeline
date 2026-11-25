@@ -1,5 +1,7 @@
 # Plano Técnico — Iteração Fase 7: Passagem Oceânica & Mapa Underwater
 
+> **Status:** `T7.0`–`T7.5` implementadas em **2026-11-25** (`UnderwaterAtmosphere` foi integrado diretamente em `WorldManager.js` + `UnderwaterWorld.js`, e `VisualVehicle.js` adiciona o kit submarino proceduralmente sem necessidade de reexportar `.glb`).
+
 - **Projeto:** `C:\dev\voaneves\timeline\game` (Three.js WebGPU / TSL + Rapier3D)
 - **Pré-requisito concluído na Fase 5:** Baía Oceânica Aberta no Sudoeste (`X: -92..-62, Z: +48..+92`), marcada discretamente no `map-day` / `map-night` em `(-78, 0, +68)` com um anel turquesa pontilhado.
 - **Direção criativa:** *Abismo Luminoso & Recife Vivo* — zero elementos sombrios/ocultistas; atmosfera marinha serena, luminosa e exploratória (raios de sol atravessando a superfície, cáusticas turquesa/douradas, corais coloridos, cardumes, algas ondulantes e cápsulas submersas de arquitetura/dados).

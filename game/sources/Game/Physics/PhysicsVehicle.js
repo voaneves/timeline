@@ -28,6 +28,7 @@ export class PhysicsVehicle
         this.velocity = new THREE.Vector3()
         this.direction = this.forward.clone()
         this.speed = 0
+        this.isUnderwater = false
         this.suspensionsHeights = {
             low: 0.88,
             mid: 1.23,
@@ -510,6 +511,20 @@ export class PhysicsVehicle
         // Update controller
         const delta = this.game.quality.level === 1 ? 1/60 : Math.min(1/60, this.game.ticker.deltaAverage)
         this.controller.updateVehicle(delta)
+
+        // Empuxo hidro vertical no modo submarino (segurar Espaco sobe suavemente)
+        if(this.isUnderwater && this.game.inputs.actions.get('suspensions').active && this.position.y < 14)
+        {
+            const lift = 1.55 * this.chassis.mass * Math.min(0.05, this.game.ticker.deltaScaled) * 60
+            this.chassis.physical.body.applyImpulse({ x: 0, y: lift, z: 0 })
+        }
+    }
+
+    setUnderwaterMode(active)
+    {
+        this.isUnderwater = !!active
+        this.chassis.physical.body.setGravityScale(this.isUnderwater ? 0.38 : 1.0, true)
+        this.topSpeedBoost = this.isUnderwater ? 32 : 40
     }
 
     updatePostPhysics()
