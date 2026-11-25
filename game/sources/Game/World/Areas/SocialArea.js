@@ -14,8 +14,6 @@ export class SocialArea extends Area
 
         this.center = this.references.items.get('center')[0].position
 
-        this.removeLegacyFigures()
-
         // Debug
         if(this.game.debug.active)
         {
@@ -31,26 +29,6 @@ export class SocialArea extends Area
         this.setStatue()
         // this.setFWA()
         this.setAchievement()
-    }
-
-    removeLegacyFigures()
-    {
-        // Legacy figures baked in areas.glb (names are cleaned of "PhysicalDynamic" by Objects)
-        const legacyNames = [ 'baguira', 'sudo', 'boy', 'twitch', 'bluesky', 'discord' ]
-
-        for(const object of this.objects.items)
-        {
-            const name = object.visual?.object3D?.name ?? ''
-
-            if(!legacyNames.some(legacy => name === legacy || name.startsWith(`${legacy}.`)))
-                continue
-
-            if(object.visual?.object3D)
-                object.visual.object3D.visible = false
-
-            if(object.physical?.body)
-                object.physical.body.setEnabled(false)
-        }
     }
 
     setLinks()

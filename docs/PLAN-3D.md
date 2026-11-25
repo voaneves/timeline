@@ -12,14 +12,14 @@ Atualizado em 2026-11-25.
 | Fase | Tarefas | Estado |
 | :--- | :--- | :--- |
 | 0 a 3 | `T0.0`–`T0.3`, `T1.1`–`T1.5`, `T2.1`–`T2.3`, `T3.1`, `T3.2` | Feitas |
-| 4 | `T4.0` (`npm run verify:glb`) | Feita |
-| 4 e 5 | `T4.1`–`T4.2`, `T5.1`–`T5.2` | Pendentes (exigem Blender) |
-| 6 | `T6.1`–`T6.3` | Pendentes |
+| 4 | `T4.0`–`T4.2` (`verify-glb`, letras `VICTOR NEVES`, limpeza `SocialArea`, totem geométrico, `areas-compressed.glb`) | Feitas |
+| 5 | `T5.1`–`T5.2` (reorganização do layout e novo mapa 2D) | Pendentes (exigem Blender + confirmação D10) |
+| 6 | `T6.1`–`T6.3` | Pendentes (`T6.1` exige `toktx` para `.ktx`) |
 
 Ressalvas:
-- Nada foi validado visualmente em GPU real; só `npm run build` e `npm run verify:glb`.
-- Os `.ktx` só são regenerados com `npm run compress` (exige `toktx` instalado).
-- `verify:glb` passa no `areas.glb` atual e avisa (exit 0; `--strict` dá exit 1) dos 3 personagens legados de Social (`baguira`, `boy`, `sudo`; 6 nós), pendência da `T4.2`.
+- Nada foi validado visualmente em GPU real; só `npm run build` e `npm run verify:glb -- --strict`.
+- As edições da Fase 4 em `areas.glb` (`T4.1`–`T4.2`) foram geradas programaticamente via `game/scripts/patch-areas-phase4.mjs` + `compress.js static/areas` (Draco), dispensando Blender nesta etapa; os `.ktx` continuam dependendo do `toktx` (`T6.1`).
+- `verify:glb -- --strict` passa com `0 erro(s), 0 aviso(s)` no `areas.glb` atual.
 - Decisão 12 vs 13: a conquista `areas` conta 13 áreas (inclui `toilet`, sem pin); o contador do mapa mostra só as 12 com pin. `landing` (spawn) não dispara o aviso "Área descoberta".
 
 ---
