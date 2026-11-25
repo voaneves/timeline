@@ -97,8 +97,9 @@ export class Game
         this.rendering = new Rendering()
         await this.rendering.setRenderer()
 
-        const compressed = !!import.meta.env.VITE_COMPRESSED
-        const compressedModelSuffix = compressed ? '-compressed' : ''
+        const compressed = import.meta.env.VITE_COMPRESSED === '1' || import.meta.env.VITE_COMPRESSED === 'true'
+        const compressedModels = compressed || import.meta.env.VITE_COMPRESSED_MODELS === '1' || import.meta.env.VITE_COMPRESSED_MODELS === 'true'
+        const compressedModelSuffix = compressedModels ? '-compressed' : ''
         const compressedTextureFormat = compressed ? 'textureKtx' : 'texture'
         const compressedTextureExtension = compressed ? 'ktx' : 'png'
 

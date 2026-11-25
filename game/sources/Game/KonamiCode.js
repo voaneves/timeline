@@ -51,9 +51,12 @@ export class KonamiCode
 
     async activate()
     {
+        const compressed = import.meta.env.VITE_COMPRESSED === '1' || import.meta.env.VITE_COMPRESSED === 'true'
+        const compressedModels = compressed || import.meta.env.VITE_COMPRESSED_MODELS === '1' || import.meta.env.VITE_COMPRESSED_MODELS === 'true'
+        const suffix = compressedModels ? '-compressed' : ''
         const files = [
-            'vehicle/oldSchool.glb',
-            'vehicle/default.glb'
+            `vehicle/oldSchool${suffix}.glb`,
+            `vehicle/default${suffix}.glb`
         ]
         
         const resources = await this.game.resourcesLoader.load([
@@ -62,6 +65,8 @@ export class KonamiCode
             
         this.game.world.visualVehicle.destroy()
         this.game.world.visualVehicle = new VisualVehicle(resources.vehicle.scene)
+        if(this.game.worldManager?.isUnderwater)
+            this.game.world.visualVehicle.setSubmarineMode(true)
 
         if(this.game.world.confetti)
         {

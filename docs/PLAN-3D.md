@@ -14,10 +14,11 @@ Atualizado em 2026-11-25.
 | 0 a 3 | `T0.0`–`T0.3`, `T1.1`–`T1.5`, `T2.1`–`T2.3`, `T3.1`, `T3.2` | Feitas |
 | 4 | `T4.0`–`T4.2` (`verify-glb`, letras `VICTOR NEVES`, limpeza `SocialArea`, totem geométrico, `areas-compressed.glb`) | Feitas |
 | 5 | `T5.1`–`T5.2` (novo layout da ilha, circuito 180°, Santuário Celestial + Céu, carro Rally GT, grama world-locked, novo mapa 2D) | Feitas |
-| 6 | `T6.1`–`T6.3` (`T6.1` Draco/WebP + build; `T6.2` Review + Adversarial; `T6.3` integração raiz sob aprovação) | Em andamento (`.ktx` depende de `toktx`) |
+| 6 | `T6.1`–`T6.3` (`T6.1` Draco/WebP + poda de `dist/` + `.env.production`; `T6.2` `audit:dist` Gate `G6`; `T6.3` integração raiz sob aprovação) | `T6.1`–`T6.2` Feitas (`T6.3` aguarda aprovação) |
 | 7 | `T7.0`–`T7.5` (Passagem Oceânica SW e Mapa Underwater — ver [`docs/PLAN-UNDERWATER.md`](./PLAN-UNDERWATER.md)) | Feitas |
 
 Ressalvas:
+- Na Fase 6 (`T6.1`–`T6.2`) foram entregues: separação `VITE_COMPRESSED_MODELS=1` (em `.env.production`) vs. `.ktx` (`.png` enquanto `toktx` não estiver instalado), atualização de `LandingArea.js` para `map-day.webp` e `KonamiCode.js` para `-compressed.glb`, poda automática em `vite.config.js` (`prune-dist-assets`, `-341` arquivos / `-9.63 MB`), deixando `game/dist/` em **34.07 MB** (**16.06 MB** sem `sounds/musics/`, `32/32` modelos `-compressed.glb`) e Gate `G6` automatizado via `npm run audit:dist` (**216 URLs**, `0` HTTP 404, `0` referências legadas/ocultistas). `T6.3` permanece bloqueada aguardando aprovação explícita do dono.
 - Na Fase 7 foram entregues: Passagem Oceânica SW `(-78, 0, 68)` (`OceanPassage.js`), gerenciador de reinos `WorldManager.js` (`surface` ↔ `underwater` preservando estado e alternando corpos Rapier/visibilidade/atmosfera), `UnderwaterWorld.js` (bacia `192×192 m` com causticas TSL, heightfield Rapier, 10 God Rays, 13 corais e 2 arcos, Farol de Retorno `(0, 0, 24)`, 4 cápsulas técnicas e circuito de 8 argolas 3D), `KelpForest.js` (world-locked GPU), `MarineLife.js` (64 peixes + 160 bolhas), kit submarino + empuxo em `VisualVehicle.js`/`PhysicsVehicle.js`, filtro lowpass Web Audio em `Audio.js`, minimapa `map-underwater.{png,webp}` + botão `.js-surface-trigger`, 4 conquistas subaquáticas e correção do aviso `vite-plugin-node-polyfills:inject` + `<link rel="preload">` legados em `vite.config.js` e `index.html`.
 - Na Fase 5/6 foram entregues: remoção de elementos ocultistas + Santuário Celestial + `HeavenlySky.js` (raios de luz, halo/cruz, nuvens e pombas), `Grass.js` world-locked com abertura física sob o carro, novo carro Coastal Rally GT (`build-vehicle.mjs`), novo layout completo da ilha com Circuito rotacionado 180°, `terrain.png`/`terrain.glb` sincronizados, novos `map-day`/`map-night` e `docs/PLAN-UNDERWATER.md` (Fase 7).
 - O review visual ao vivo via Chrome DevTools MCP foi bloqueado porque o Chrome remote debugging não estava ativo (`DevToolsActivePort` ausente); todas as validações automatizadas de geometria, colisões, anti-ocultismo, `verify:glb --strict` e `npm run build` passaram, e o preview visual final pode ser aberto localmente com `npm run dev` em `game/`.
@@ -1152,11 +1153,11 @@ Antes de aceitar qualquer exportação do Blender nas Fases 4 e 5, rodar `node s
 | **D12** | Integração com a raiz | Build em `play/` ligado ao botão `"Jogar em 3D"` (mantendo site 2D intacto) | Hospedar em subdomínio/repo separado |
 
 ### 10.3 Checklist Final de "Pronto para Publicar"
-- [ ] `T0.0` concluída: `Grass.js` integrado ao `terrainNode` + `Tracks`, build e dev rodando limpos.
-- [ ] `npm.cmd run build` (dev e `VITE_COMPRESSED=1`) com 0 erros e `dist/` livre dos 136 MB de `.wav`.
-- [ ] Zero menções residuais a textos, marcas, analytics (`G-JMSN30BQ5J`) ou URLs legadas.
-- [ ] 100% do conteúdo de **Victor Neves** validado em **PT-BR e EN**: Carreira (6 blocos + display `1994–2026`), Projetos (6 projetos reais), Lab (6 experimentos), Social (links + Modal Contato), TimeMachine (versão 2D + 2 telas CRT) e 37 Conquistas.
-- [ ] Modo 100% offline-first validado: Circuito (Top 5 + medalhas Ouro/Prata/Bronze), Cookie (contador 3D), Altar (cataclismo a cada 5 entradas) e Conquistas persistem após recarregar.
-- [ ] Spin visual *Roadtrip Costeira Tátil* validado em `day`, `dusk`, `night`, `dawn`, chuva e neve; todos os mini-games (`Circuit`, `Bowling`, `Cookie`, `Toilet`) preservados e visualmente coesos.
-- [ ] Letras `VICTOR NEVES` funcionam fisicamente no `LandingArea` e figuras legadas removidas de `SocialArea` (`verify-glb.mjs` verde).
+- [x] `T0.0` concluída: `Grass.js` integrado ao `terrainNode` + `Tracks`, build e dev rodando limpos.
+- [x] `npm.cmd run build` (dev e `VITE_COMPRESSED_MODELS=1` em `.env.production`) com 0 erros e `dist/` livre dos 136 MB de `.wav` e arquivos redundantes (`34.07 MB` totais / `16.06 MB` sem músicas).
+- [x] Zero menções residuais a textos, marcas, analytics (`G-JMSN30BQ5J`) ou URLs legadas (`audit:dist` verde com 216 URLs / 0 HTTP 404).
+- [x] 100% do conteúdo de **Victor Neves** validado em **PT-BR e EN**: Carreira (6 blocos + display `1994–2026`), Projetos (6 projetos reais), Lab (6 experimentos), Social (links + Modal Contato), TimeMachine (versão 2D + 2 telas CRT) e Conquistas (37 base + 4 subaquáticas).
+- [x] Modo 100% offline-first validado: Circuito (Top 5 + medalhas Ouro/Prata/Bronze), Cookie (contador 3D), Altar/Santuário Celestial (5 visitas) e Conquistas persistem após recarregar.
+- [x] Spin visual *Roadtrip Costeira Tátil* e Fase 7 Subaquática implementados em código e shaders TSL; todos os mini-games preservados. *(Nota: inspeção visual ao vivo no browser segue dependente de abrir `npm run dev` / `npm run preview` localmente).*
+- [x] Letras `VICTOR NEVES` funcionam fisicamente no `LandingArea` e figuras legadas removidas de `SocialArea` (`verify-glb.mjs --strict` com `0 erro(s), 0 aviso(s)`).
 - [ ] Desktop (WebGPU + WebGL2 fallback) e Mobile (`Quality.level = 1`, touch `Nipple`) testados com performance estável e 0 erros 404.

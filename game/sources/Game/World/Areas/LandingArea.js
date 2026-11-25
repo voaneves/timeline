@@ -43,7 +43,7 @@ export class LandingArea extends Area
         const mapMaterial = this.game.materials.getFromName('stylizedMap')
         if(mapMaterial)
         {
-            new THREE.ImageBitmapLoader().setOptions({ imageOrientation: 'none' }).load('ui/map/map-day.png', (image) =>
+            new THREE.ImageBitmapLoader().setOptions({ imageOrientation: 'none' }).load('ui/map/map-day.webp', (image) =>
             {
                 const mapTexture = new THREE.Texture(image)
                 mapTexture.flipY = false
