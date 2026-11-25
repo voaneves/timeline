@@ -7,6 +7,8 @@ import { Area } from './Area.js'
 
 export class AltarArea extends Area
 {
+    static STORAGE_KEY = 'vn_altar_count_v1'
+
     constructor(model)
     {
         super(model)
@@ -35,14 +37,35 @@ export class AltarArea extends Area
         this.setData()
         this.setAchievement()
 
-        // Offline counter
-        if(!this.game.server.connected)
-            this.updateText('...')
-            
-        this.game.server.events.on('disconnected', () =>
+        // Standalone => local persistence
+        if(this.game.server.isStandalone)
         {
-            this.updateText('...')
-        })
+            let stored = 0
+            try { stored = parseInt(localStorage.getItem(AltarArea.STORAGE_KEY), 10) } catch(error) {}
+            if(!Number.isFinite(stored) || stored < 0)
+                stored = 0
+
+            this.updateText(stored)
+            this.progressUniform.value = (stored % 5) / 5
+
+            // First draw when value is 0 (same value => skipped)
+            if(stored === 0)
+            {
+                this.value = null
+                this.updateText(0)
+            }
+        }
+        else
+        {
+            // Offline counter
+            if(!this.game.server.connected)
+                this.updateText('...')
+                
+            this.game.server.events.on('disconnected', () =>
+            {
+                this.updateText('...')
+            })
+        }
 
         // Debug
         if(this.game.debug.active)
@@ -402,7 +425,10 @@ export class AltarArea extends Area
                 this.animateBeam()
                 this.animateBeamParticles()
                 this.data.insert()
-                this.updateText(this.value + 1)
+                if(this.game.server.isStandalone)
+                    this.localInsert()
+                else
+                    this.updateText(this.value + 1)
                 this.game.player.die()
                 this.sounds.deathBell2.play()
                 gsap.delayedCall(2.2, () =>
@@ -412,6 +438,28 @@ export class AltarArea extends Area
                 this.game.achievements.setProgress('sacrifice', 1)
             }
         )
+    }
+
+    localInsert()
+    {
+        const value = (typeof this.value === 'number' ? this.value : 0) + 1
+
+        this.updateText(value)
+        this.progressUniform.value = (value % 5) / 5
+
+        try { localStorage.setItem(AltarArea.STORAGE_KEY, String(value)) }
+        catch(error) {}
+
+        // Cataclysm every 5 sacrifices
+        if(value % 5 === 0)
+        {
+            this.game.tornado.start()
+            this.game.achievements.setProgress('cataclysm', 1)
+            gsap.delayedCall(40, () =>
+            {
+                this.game.tornado.stop()
+            })
+        }
     }
 
     setData()

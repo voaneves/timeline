@@ -105,6 +105,8 @@ npm run dev            # Vite 8 dev server (HTTPS/WASM)
 npm run build          # production bundle -> dist
 ```
 
+`npm run verify:glb` valida o contrato dos `.glb` (`static/areas/areas.glb` e `static/respawns/respawnsReferences.glb`); com `--strict`, avisos viram erro. Os `.ktx` são gerados por `npm run compress` (exige `toktx`). Status das fases e pendências em [`docs/PLAN-3D.md`](./docs/PLAN-3D.md).
+
 <a id="project-structure"></a>
 ## Project structure &amp; Licensing
 

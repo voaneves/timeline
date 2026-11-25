@@ -226,7 +226,7 @@ export class BowlingArea extends Area
     {
         this.restartInteractivePoint = this.game.interactivePoints.create(
             this.references.items.get('restartInteractivePoint')[0].position,
-            'Restart',
+            () => this.game.i18n.t('prompt.bowling.restart'),
             InteractivePoints.ALIGN_RIGHT,
             InteractivePoints.STATE_HIDDEN,
             () =>
@@ -386,7 +386,7 @@ export class BowlingArea extends Area
         // Interactive point
         this.game.interactivePoints.create(
             this.references.items.get('bumpersInteractivePoint')[0].position,
-            'Bumpers',
+            () => this.game.i18n.t('prompt.bowling.bumpers'),
             InteractivePoints.ALIGN_LEFT,
             InteractivePoints.STATE_CONCEALED,
             () =>
@@ -479,7 +479,7 @@ export class BowlingArea extends Area
         // Interactive point
         this.game.interactivePoints.create(
             this.references.items.get('jukeboxInteractivePoint')[0].position,
-            'Change song',
+            () => this.game.i18n.t('prompt.bowling.song'),
             InteractivePoints.ALIGN_LEFT,
             InteractivePoints.STATE_CONCEALED,
             () =>

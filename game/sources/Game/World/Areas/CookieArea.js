@@ -270,7 +270,7 @@ export class CookieArea extends Area
     {
         this.game.interactivePoints.create(
             this.references.items.get('interactivePoint')[0].position,
-            'Accept cookie',
+            () => this.game.i18n.t('prompt.cookie'),
             InteractivePoints.ALIGN_RIGHT,
             InteractivePoints.STATE_CONCEALED,
             () =>
@@ -368,6 +368,12 @@ export class CookieArea extends Area
             // this.counter.value *= 2
             this.throttleAmount++
             this.counter.update()
+
+            if(this.counter.storageKey)
+            {
+                try { localStorage.setItem(this.counter.storageKey, String(this.counter.value)) }
+                catch(error) {}
+            }
         }
 
         this.counter.update = () =>
@@ -439,6 +445,22 @@ export class CookieArea extends Area
         if(this.game.server.initData)
         {
             this.counter.value = this.game.server.initData.cookiesCount
+        }
+
+        // Standalone => local persistence
+        if(this.game.server.isStandalone)
+        {
+            this.counter.storageKey = 'vn_cookies_count_v1'
+            try
+            {
+                const stored = parseInt(localStorage.getItem(this.counter.storageKey), 10)
+                if(Number.isFinite(stored) && stored > this.counter.value)
+                    this.counter.value = stored
+            }
+            catch(error) {}
+
+            this.counter.init()
+            return
         }
 
         // Server connect / disconnect

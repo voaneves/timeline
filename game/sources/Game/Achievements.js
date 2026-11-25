@@ -406,9 +406,9 @@ export class Achievements
 
             // HTML
             const html = /* html */`
-                <div class="title">${title}</div>
+                <div class="title">${this.game.i18n.pick(title)}</div>
                 <div class="description">
-                    <div class="text">${description}</div>
+                    <div class="text">${this.game.i18n.pick(description)}</div>
                     <div class="progress">
                         <div class="check-icon"></div>
                         <span class="check"></span>
@@ -423,6 +423,14 @@ export class Achievements
             achievement.itemElement = document.createElement('div')
             achievement.itemElement.classList.add('achievement')
             achievement.itemElement.innerHTML = html
+
+            achievement.titleElement = achievement.itemElement.querySelector('.title')
+            achievement.descriptionElement = achievement.itemElement.querySelector('.description .text')
+            this.game.i18n.events.on('change', () =>
+            {
+                achievement.titleElement.innerHTML = this.game.i18n.pick(title)
+                achievement.descriptionElement.innerHTML = this.game.i18n.pick(description)
+            })
 
             achievement.progressCurrentElement = achievement.itemElement.querySelector('.current')
             achievement.barFillElement = achievement.itemElement.querySelector('.bar .fill')
@@ -454,7 +462,7 @@ export class Achievements
                     // Notification
                     const html = /* html */`
                         <div class="top">
-                            <div class="title">${title}</div>
+                            <div class="title">${this.game.i18n.pick(title)}</div>
                             <div class="progress">
                                 <div class="check-icon"></div>
                                 <span class="check"></span>
@@ -462,7 +470,7 @@ export class Achievements
                             </div>
                         </div>
                         <div class="bottom">
-                            <div class="description">${description}</div>
+                            <div class="description">${this.game.i18n.pick(description)}</div>
                             <div class="open-icon"></div>
                         </div>
                     `
@@ -521,17 +529,17 @@ export class Achievements
 
             if(clickCount === 1)
             {
-                button.textContent = 'Are you sure?'
+                button.textContent = this.game.i18n.t('achievements.reset.confirm1')
             }
 
             else if(clickCount === 2)
             {
-                button.textContent = 'Definitely?'
+                button.textContent = this.game.i18n.t('achievements.reset.confirm2')
             }
 
             else if(clickCount === 3)
             {
-                button.textContent = 'Done!'
+                button.textContent = this.game.i18n.t('achievements.reset.done')
                 clickCount = 0
                 this.reset()
             }
@@ -542,7 +550,7 @@ export class Achievements
             event.preventDefault()
             clickCount = 0
 
-            button.textContent = 'Reset achievements'
+            button.textContent = this.game.i18n.t('achievements.reset')
         })
     }
 
@@ -558,6 +566,9 @@ export class Achievements
         if(progressDelta)
         {
             this.storage.save()
+
+            if(name === 'areas')
+                this.events.trigger('areaDiscovered', [ progress ])
         }
     }
 

@@ -48,6 +48,7 @@ import { PreRenderer } from './PreRenderer.js'
 import { Options } from './Options.js'
 import gsap from 'gsap'
 import { Map } from './Map.js'
+import { I18n } from './I18n.js'
 
 export class Game
 {
@@ -73,6 +74,7 @@ export class Game
         this.domElement = document.querySelector('.game')
         this.canvasElement = this.domElement.querySelector('.js-canvas')
         document.documentElement.classList.add('is-started')
+        this.i18n = new I18n()
 
         // First batch for intro
         this.scene = new THREE.Scene()

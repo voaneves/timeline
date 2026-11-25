@@ -58,6 +58,21 @@ export class CircuitArea extends Area
 
         this.game.materials.getFromName('circuitBrand').map.minFilter = THREE.LinearFilter
         this.game.materials.getFromName('circuitBrand').map.magFilter = THREE.LinearFilter
+
+        // Marca propria nos banners da pista (substitui a textura legada embutida no GLB)
+        const brandMaterial = this.game.materials.getFromName('circuitBrand')
+        new THREE.ImageBitmapLoader().setOptions({ imageOrientation: 'none' }).load('circuit/brand.png', (image) =>
+        {
+            // Textura nova: independe do formato embutido no GLB (PNG ou KTX2)
+            const texture = new THREE.Texture(image)
+            texture.flipY = false
+            texture.colorSpace = THREE.SRGBColorSpace
+            texture.minFilter = THREE.LinearFilter
+            texture.magFilter = THREE.LinearFilter
+            texture.needsUpdate = true
+            brandMaterial.map = texture
+            brandMaterial.needsUpdate = true
+        })
     }
 
     setSounds()
@@ -582,7 +597,7 @@ export class CircuitArea extends Area
     {
         this.interactivePoint = this.game.interactivePoints.create(
             this.references.items.get('interactivePoint')[0].position,
-            'Start race!',
+            () => this.game.i18n.t('prompt.circuit'),
             InteractivePoints.ALIGN_RIGHT,
             InteractivePoints.STATE_CONCEALED,
             () =>
@@ -1186,7 +1201,7 @@ export class CircuitArea extends Area
                             <td>${rank}</td>
                             <td>${flag}</td>
                             <td>${score[0]}</td>
-                            <td>${timeToRaceString(score[2] / 1000)}</td>
+                            <td>${timeToRaceString(score[2] / 1000)}<span class="medal-icon is-${CircuitArea.getMedal(score[2])}" title="${this.game.i18n.t(`circuit.medal.${CircuitArea.getMedal(score[2])}`)}"></span></td>
                         </tr>
                     `
 
@@ -1226,6 +1241,41 @@ export class CircuitArea extends Area
             this.game.menu.close()
         })
 
+        // Clear records button (local mode, 2 confirmations like achievements reset)
+        const clearElement = this.menu.instance.contentElement.querySelector('.js-button-clear-records')
+        if(clearElement)
+        {
+            let clickCount = 0
+            const resetLabel = () =>
+            {
+                clickCount = 0
+                clearElement.textContent = this.game.i18n.t('circuit.clear')
+            }
+
+            clearElement.addEventListener('click', (event) =>
+            {
+                event.preventDefault()
+                clickCount++
+
+                if(clickCount === 1)
+                    clearElement.textContent = this.game.i18n.t('circuit.clear.confirm1')
+                else if(clickCount === 2)
+                    clearElement.textContent = this.game.i18n.t('circuit.clear.confirm2')
+                else
+                {
+                    clickCount = 0
+                    clearElement.textContent = this.game.i18n.t('circuit.clear.done')
+                    this.clearLocalRecords()
+                }
+            })
+
+            // Reset confirmation on hover leave, blur or menu close (touch has no hover)
+            clearElement.addEventListener('mouseleave', resetLabel)
+            clearElement.addEventListener('blur', resetLabel)
+            this.menu.instance.events.on('closed', resetLabel)
+            this.game.i18n.events.on('change', resetLabel)
+        }
+
         // Controls button
         const controlsElement = this.menu.instance.contentElement.querySelector('.js-button-controls')
         controlsElement.addEventListener('click', (event) =>
@@ -1243,12 +1293,150 @@ export class CircuitArea extends Area
         })
     }
 
+    // Standalone (offline-first) local leaderboard
+    static LOCAL_SCORES_KEY = 'vn_circuit_scores_v1'
+    static LOCAL_SCORES_MAX = 5
+
+    get isStandalone()
+    {
+        return !!this.game.server.isStandalone
+    }
+
+    get canSubmitScore()
+    {
+        return this.game.server.connected || this.isStandalone
+    }
+
+    getLocalScores()
+    {
+        try
+        {
+            const parsed = JSON.parse(localStorage.getItem(CircuitArea.LOCAL_SCORES_KEY))
+            if(Array.isArray(parsed))
+            {
+                return parsed
+                    .filter(item => item && typeof item.tag === 'string' && Number.isFinite(item.timeMs))
+                    .sort((a, b) => a.timeMs - b.timeMs)
+                    .slice(0, CircuitArea.LOCAL_SCORES_MAX)
+            }
+        }
+        catch(error) {}
+        return []
+    }
+
+    // Local records in the same format as the server leaderboard: [ tag, countryCode, timeMs ]
+    getLocalLeaderboard()
+    {
+        return this.getLocalScores().map(item => [ item.tag, item.flag || '', item.timeMs ])
+    }
+
+    refreshLocalLeaderboard()
+    {
+        const scores = this.getLocalLeaderboard()
+        this.leaderboard.update(scores)
+        this.menu.updateLeaderboard(scores)
+    }
+
+    // Medal thresholds (ms)
+    static getMedal(timeMs)
+    {
+        return timeMs < 28000 ? 'gold' : timeMs < 34000 ? 'silver' : timeMs < 42000 ? 'bronze' : 'none'
+    }
+
+    static BEST_KEY = 'vn_circuit_best_v1'
+
+    getBestTime()
+    {
+        try
+        {
+            const value = Number(localStorage.getItem(CircuitArea.BEST_KEY))
+            if(Number.isFinite(value) && value > 0)
+                return value
+        }
+        catch(error) {}
+        return null
+    }
+
+    clearLocalRecords()
+    {
+        try
+        {
+            localStorage.removeItem(CircuitArea.LOCAL_SCORES_KEY)
+            localStorage.removeItem(CircuitArea.BEST_KEY)
+        }
+        catch(error) {}
+
+        this.refreshLocalLeaderboard()
+    }
+
+    // Fill the end modal with medal and delta against personal best, then store the new best
+    recordRun(timeMs)
+    {
+        const previousBest = this.getBestTime()
+        const medal = CircuitArea.getMedal(timeMs)
+        const i18n = this.game.i18n
+
+        const medalElement = this.endModal.medalElement
+        medalElement.classList.toggle('is-none', medal === 'none')
+        this.endModal.medalIconElement.className = `medal-icon is-${medal}`
+        this.endModal.medalLabelElement.textContent = i18n.t(`circuit.medal.${medal}`)
+
+        const deltaElement = this.endModal.deltaElement
+        const format = (ms) => `${(Math.abs(ms) / 1000).toFixed(3)}s`
+        deltaElement.classList.remove('is-record')
+
+        if(previousBest === null)
+        {
+            deltaElement.textContent = i18n.t('circuit.delta.first')
+            deltaElement.classList.add('is-record')
+        }
+        else if(timeMs < previousBest)
+        {
+            deltaElement.textContent = i18n.t('circuit.delta.record', { delta: format(previousBest - timeMs) })
+            deltaElement.classList.add('is-record')
+        }
+        else
+        {
+            deltaElement.textContent = i18n.t('circuit.delta.slower', { delta: `+${format(timeMs - previousBest)}` })
+        }
+
+        if(previousBest === null || timeMs < previousBest)
+        {
+            try { localStorage.setItem(CircuitArea.BEST_KEY, String(timeMs)) }
+            catch(error) {}
+        }
+    }
+
+    addLocalScore(tag, flag, timeMs)
+    {
+        const medal = CircuitArea.getMedal(timeMs)
+        const scores = this.getLocalScores()
+        const isFirst = scores.length === 0 || timeMs < scores[0].timeMs
+
+        scores.push({ tag, flag, timeMs, medal, at: new Date().toISOString() })
+        scores.sort((a, b) => a.timeMs - b.timeMs)
+
+        try
+        {
+            localStorage.setItem(CircuitArea.LOCAL_SCORES_KEY, JSON.stringify(scores.slice(0, CircuitArea.LOCAL_SCORES_MAX)))
+        }
+        catch(error) {}
+
+        this.refreshLocalLeaderboard()
+
+        return isFirst
+    }
+
     setEndModal()
     {
         this.endModal = {}
         this.endModal.instance = this.game.modals.items.get('circuit-end')
         this.endModal.timeElement = this.endModal.instance.element.querySelector('.js-time')
-        
+        this.endModal.medalElement = this.endModal.instance.element.querySelector('.js-medal')
+        this.endModal.medalIconElement = this.endModal.medalElement.querySelector('.medal-icon')
+        this.endModal.medalLabelElement = this.endModal.medalElement.querySelector('.js-medal-label')
+        this.endModal.deltaElement = this.endModal.instance.element.querySelector('.js-delta')
+
         // Restart button
         const restartElement = this.endModal.instance.element.querySelector('.js-button-restart')
         restartElement.addEventListener('click', (event) =>
@@ -1284,16 +1472,28 @@ export class CircuitArea extends Area
         {
             const sanatized = sanatize(this.menu.input.value, true, true, true, true)
             
-            if(sanatized.length === 3 && this.game.server.connected)
+            if(sanatized.length === 3 && this.canSubmitScore)
             {
+                const countryCode = this.menu.inputFlag.country ? this.menu.inputFlag.country.code : ''
+                const duration = Math.round(this.timer.elapsedTime * 1000)
+
                 // Insert
-                this.game.server.send({
-                    type: 'circuitInsert',
-                    countryCode: this.menu.inputFlag.country ? this.menu.inputFlag.country.code : '',
-                    tag: sanatized,
-                    duration: Math.round(this.timer.elapsedTime * 1000),
-                    checkpointTimings: this.checkpoints.timings
-                })
+                if(this.isStandalone)
+                {
+                    const isFirst = this.addLocalScore(sanatized, countryCode, duration)
+                    if(isFirst)
+                        this.podium.popConfetti()
+                }
+                else
+                {
+                    this.game.server.send({
+                        type: 'circuitInsert',
+                        countryCode,
+                        tag: sanatized,
+                        duration,
+                        checkpointTimings: this.checkpoints.timings
+                    })
+                }
 
                 // Achievement
                 this.game.achievements.setProgress('circuitLeaderboard', 1)
@@ -1305,7 +1505,7 @@ export class CircuitArea extends Area
 
         const updateGroup = () =>
         {
-            if(this.menu.input.value.length === 3 && this.game.server.connected)
+            if(this.menu.input.value.length === 3 && this.canSubmitScore)
                 this.menu.inputGroup.classList.add('is-valide')
             else
                 this.menu.inputGroup.classList.remove('is-valide')
@@ -1490,6 +1690,13 @@ export class CircuitArea extends Area
             this.menu.updateLeaderboard(null)
         })
 
+        // Standalone => local records
+        if(this.isStandalone)
+        {
+            this.refreshLocalLeaderboard()
+            return
+        }
+
         // Message already received
         if(this.game.server.initData)
         {
@@ -1589,6 +1796,9 @@ export class CircuitArea extends Area
                 {
                     this.game.achievements.setProgress('circuitFinish', 1)
 
+                    // Medal and personal best delta
+                    this.recordRun(Math.round(this.timer.elapsedTime * 1000))
+
                     if(this.timer.elapsedTime < 30)
                         this.game.achievements.setProgress('circuitFinishFast', 1)
                 }
@@ -1602,13 +1812,18 @@ export class CircuitArea extends Area
                     })
                 }
 
-                // Circuit en modal (if server connected)
-                if(this.game.server.connected && !forced)
+                // Circuit en modal (if server connected or standalone)
+                if(this.canSubmitScore && !forced)
                 {
                     gsap.delayedCall(1, () =>
                     {
-                        // In top 10
-                        if(this.leaderboard.scores === null || this.leaderboard.scores.length < 10 || this.timer.elapsedTime * 1000 < this.leaderboard.maxTime)
+                        // In top 10 (top 5 when standalone)
+                        const limit = this.isStandalone ? CircuitArea.LOCAL_SCORES_MAX : 10
+                        const notTopElement = this.endModal.instance.element.querySelector('.not-top-10')
+                        if(notTopElement)
+                            notTopElement.textContent = this.game.i18n.t('circuit.notTop', { limit })
+
+                        if(this.leaderboard.scores === null || this.leaderboard.scores.length < limit || this.timer.elapsedTime * 1000 < this.leaderboard.maxTime)
                             this.endModal.instance.element.classList.add('is-top-10')
                         else
                             this.endModal.instance.element.classList.remove('is-top-10')

@@ -426,6 +426,10 @@ export class Whispers
 
     setInputs()
     {
+        // Standalone: no whispers shortcut
+        if(this.game.server.isStandalone)
+            return
+
         this.game.inputs.addActions([
             { name: 'whisper', categories: [ 'wandering' ], keys: [ 'Keyboard.KeyT' ] },
         ])

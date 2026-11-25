@@ -132,16 +132,16 @@ export class VisualVehicle
 
         this.paints.choices = {}
         this.paints.choices.red = this.game.materials.getFromName('redGradient')
-        this.paints.choices.orange = this.game.materials.createGradient('orangeGradient', '#ff940d', '#af0071', this.game.materials.debugPanel?.addFolder({ title: 'orangeGradient' }))
-        this.paints.choices.white = this.game.materials.createGradient('whiteGradient', '#ffffff', '#b5b5b5', this.game.materials.debugPanel?.addFolder({ title: 'whiteGradient' }))
-        this.paints.choices.black = this.game.materials.createGradient('blackGradient', '#626262', '#262526', this.game.materials.debugPanel?.addFolder({ title: 'blackGradient' }))
+        this.paints.choices.orange = this.game.materials.createGradient('orangeGradient', '#1dd3c6', '#0d6e9e', this.game.materials.debugPanel?.addFolder({ title: 'orangeGradient' }))
+        this.paints.choices.white = this.game.materials.createGradient('whiteGradient', '#fffaf0', '#d4cfc4', this.game.materials.debugPanel?.addFolder({ title: 'whiteGradient' }))
+        this.paints.choices.black = this.game.materials.createGradient('blackGradient', '#4a5568', '#1a202c', this.game.materials.debugPanel?.addFolder({ title: 'blackGradient' }))
         
         // Flames
         {
             const material = this.paints.choices.red.clone()
             const baseOutput = material.outputNode
-            const colorA = uniform(color('#ff9c20'))
-            const colorB = uniform(color('#ff0000'))
+            const colorA = uniform(color('#ffd166'))
+            const colorB = uniform(color('#ff4d2e'))
             const emissiveStrength = uniform(7.75)
 
             material.outputNode = Fn(() =>
@@ -186,7 +186,7 @@ export class VisualVehicle
         // Abyssal
         {
             const material = new THREE.MeshBasicMaterial({ wireframe: false })
-            const fresnelColor = uniform(color('#6053ff'))
+            const fresnelColor = uniform(color('#2ae8ff'))
             const fresnelIntensity = uniform(30)
             const starsIntensity = uniform(10)
 

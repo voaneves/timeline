@@ -90,7 +90,7 @@ export class LabArea extends Area
     {
         this.interactivePoint = this.game.interactivePoints.create(
             this.references.items.get('interactivePoint')[0].position,
-            'Lab',
+            () => this.game.i18n.t('prompt.lab'),
             InteractivePoints.ALIGN_RIGHT,
             InteractivePoints.STATE_CONCEALED,
             () =>
@@ -454,7 +454,9 @@ export class LabArea extends Area
         // Get resource and load
         this.images.getResourceAndLoad = (key) =>
         {
-            const path = `lab/images/${key}`
+            const compressed = !!import.meta.env.VITE_COMPRESSED
+            const ext = compressed ? 'ktx' : 'png'
+            const path = `lab/images/${key.replace(/\.(ktx|png)$/, '')}.${ext}`
             
             // Try to retrieve resource
             let resource = this.images.resources.get(key)
@@ -465,12 +467,20 @@ export class LabArea extends Area
                 resource = {}
                 resource.loaded = false
 
-                const loader = this.game.resourcesLoader.getLoader('textureKtx')
+                const loader = this.game.resourcesLoader.getLoader(compressed ? 'textureKtx' : 'texture')
 
                 loader.load(
                     path,
                     (loadedTexture) =>
                     {
+                        if(!compressed)
+                        {
+                            loadedTexture.flipY = false
+                            loadedTexture.colorSpace = THREE.SRGBColorSpace
+                            loadedTexture.minFilter = THREE.LinearFilter
+                            loadedTexture.generateMipmaps = false
+                        }
+
                         resource.texture = loadedTexture
                         resource.colorSpace = THREE.SRGBColorSpace
                         resource.flipY = false
@@ -838,12 +848,21 @@ export class LabArea extends Area
                         if(mini.startedLoading)
                             return
 
-                        const loader = this.game.resourcesLoader.getLoader('textureKtx')
+                        const compressed = !!import.meta.env.VITE_COMPRESSED
+                        const loader = this.game.resourcesLoader.getLoader(compressed ? 'textureKtx' : 'texture')
 
                         loader.load(
-                            `lab/images/${project.imageMini}`,
+                            `lab/images/${project.imageMini.replace(/\.(ktx|png)$/, '')}.${compressed ? 'ktx' : 'png'}`,
                             (loadedTexture) =>
                             {
+                                if(!compressed)
+                                {
+                                    loadedTexture.flipY = false
+                                    loadedTexture.colorSpace = THREE.SRGBColorSpace
+                                    loadedTexture.minFilter = THREE.LinearFilter
+                                    loadedTexture.generateMipmaps = false
+                                }
+
                                 const alpha = uniform(0)
                                 const textureColor = texture(loadedTexture).rgb
                                 gsap.to(alpha, { value: 1, duration: 1, overwrite: true })

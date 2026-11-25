@@ -70,10 +70,10 @@ export class CareerArea extends Area
         const lineGroups = this.references.items.get('line')
 
         const colors = {
-            blue: uniform(color('#5390ff')),
-            orange: uniform(color('#ff8039')),
-            purple: uniform(color('#b65fff')),
-            green: uniform(color('#a2ffab'))
+            blue: uniform(color('#3b9eff')),
+            orange: uniform(color('#ff8a3d')),
+            purple: uniform(color('#34cfc4')),
+            green: uniform(color('#7ed957'))
         }
 
         for(const group of lineGroups)
@@ -155,7 +155,8 @@ export class CareerArea extends Area
         this.year.originZ = this.year.group.position.z
         this.year.size = 17
         this.year.offsetTarget = 0
-        this.year.start = 2008
+        this.year.timeline = [ 1994, 2005, 2011, 2012, 2014, 2017, 2018, 2019, 2021, 2022, 2023, 2024, 2025, 2026 ]
+        this.year.start = this.year.timeline[0]
         this.year.current = this.year.start
 
         //    Digit indexes
@@ -365,7 +366,9 @@ export class CareerArea extends Area
         const finalPositionZ = this.year.originZ - this.year.offsetTarget
         this.year.group.position.z += (finalPositionZ - this.year.group.position.z) * this.game.ticker.deltaScaled * 10
 
-        const yearCurrent = this.year.start + Math.floor(this.year.offsetTarget)
+        const t = Math.min(Math.max(this.year.offsetTarget / this.year.size, 0), 1)
+        const yearIndex = Math.min(this.year.timeline.length - 1, Math.floor(t * this.year.timeline.length))
+        const yearCurrent = this.year.timeline[yearIndex]
 
         if(yearCurrent !== this.year.current)
         {

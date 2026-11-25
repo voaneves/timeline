@@ -2,37 +2,37 @@ export default [
     {
         title: 'DTCG Contrast · OKLCH',
         url: 'https://voaneves.github.io/dtcg-contrast/',
-        image: 'black-hole.ktx',
-        imageMini: 'black-hole-mini.ktx'
+        image: 'lab-dtcg',
+        imageMini: 'lab-dtcg-mini'
     },
     {
         title: 'Snake Arena · DQN',
         url: 'https://voaneves.github.io/snake-arena/',
-        image: 'particles-system.ktx',
-        imageMini: 'particles-system-mini.ktx'
+        image: 'lab-snake-dqn',
+        imageMini: 'lab-snake-dqn-mini'
     },
     {
         title: 'JS Games · PWA',
         url: 'https://voaneves.github.io/js-games/',
-        image: 'stylized-low-poly.ktx',
-        imageMini: 'stylized-low-poly-mini.ktx'
+        image: 'lab-js-games',
+        imageMini: 'lab-js-games-mini'
     },
     {
-        title: 'Meu Poupig',
+        title: 'Meu Poupig · Finanças',
         url: 'https://voaneves.github.io/meupoupig/',
-        image: 'my-room-in-3d.ktx',
-        imageMini: 'my-room-in-3d-mini.ktx'
+        image: 'lab-poupig',
+        imageMini: 'lab-poupig-mini'
     },
     {
-        title: 'Timeline 2D',
+        title: 'Timeline 2D Acessível',
         url: 'https://voaneves.github.io/timeline/#carreira',
-        image: 'holographic-terrain.ktx',
-        imageMini: 'holographic-terrain-mini.ktx'
+        image: 'lab-timeline-2d',
+        imageMini: 'lab-timeline-2d-mini'
     },
     {
-        title: 'Open Source · GitHub',
+        title: 'Código Aberto · GitHub',
         url: 'https://github.com/voaneves',
-        image: 'attractors.ktx',
-        imageMini: 'attractors-mini.ktx'
+        image: 'lab-github',
+        imageMini: 'lab-github-mini'
     }
 ]

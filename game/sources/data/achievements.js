@@ -1,238 +1,44 @@
 import labData from './lab.js'
 import projectsData from './projects.js'
 
-export default
-[
-    [
-        'landingLeave',
-        'I’m going on an adventure!',
-        'Get out of the landing area.',
-        1
-    ],
-    [
-        'areas',
-        'Traveler',
-        'Vist every area.',
-        13,
-        true // Unique
-    ],
-    [
-        'projects',
-        'But can you fix the wifi?',
-        'Check every project in the <strong>projects</strong> area.',
-        projectsData.length,
-        true // Unique
-    ],
-    [
-        'lab',
-        'I\'m a bit of a scientist myself',
-        'Check every project in the <strong>lab</strong> area.',
-        labData.length,
-        true // Unique
-    ],
-    [
-        'cookie',
-        'Wake & bake',
-        'Accept <strong>1</strong> cookies.',
-        1
-    ],
-    [
-        'cookie',
-        'Making some dough',
-        'Accept <strong>10</strong> cookies.',
-        10
-    ],
-    [
-        'cookie',
-        'So baked right now',
-        'Accept <strong>100</strong> cookies.',
-        100
-    ],
-    [
-        'cookie',
-        'Cookie Clicker',
-        'Accept <strong>1000</strong> cookies.',
-        1000
-    ],
-    [
-        'whisper',
-        'It\'s About Sending A Message',
-        'Post a whisper.',
-        1
-    ],
-    [
-        'sea',
-        'Under the sea',
-        'Go make friend with the fishes.',
-        1
-    ],
-    [
-        'upsideDown',
-        'Turtle',
-        'Get upside down.',
-        1
-    ],
-    [
-        'frontFlip',
-        'Teeth first',
-        'Do a front flip and land on your 4 wheels.',
-        1
-    ],
-    [
-        'backFlip',
-        'Flip of faith',
-        'Do a back flip and land on your 4 wheels.',
-        1
-    ],
-    [
-        'suspensions',
-        'Lowrider',
-        'Use the vehicle suspensions.',
-        4
-    ],
-    [
-        'honk',
-        'Honk',
-        'Honk 10 times.',
-        10
-    ],
-    [
-        'explosiveCrates',
-        'Great Explosion Murder God Dynamight',
-        'Blow up every explosive crate.',
-        20,
-        true // Unique
-    ],
-    [
-        'goHigh',
-        'Limit the sky',
-        'Reach <strong>15 meters</strong> high.',
-        15
-    ],
-    [
-        'strike',
-        'F*** it, dude. Let\'s go bowling',
-        'Accomplished a strike.',
-        1
-    ],
-    [
-        'toiletDown',
-        'Do not disturb',
-        'Knock down the latrine.',
-        1
-    ],
-    [
-        'circuitFinish',
-        'Participation medal',
-        'Finish a race.',
-        1
-    ],
-    [
-        'circuitFinishFast',
-        'KA-CHOW!',
-        'Finish a race in less than <strong>30s</strong>.',
-        1
-    ],
-    [
-        'circuitLeaderboard',
-        'Early Bird gets the Worm',
-        'Make it to the leaderboard.',
-        1
-    ],
-    [
-        'fullDay',
-        'Don’t you have work to do?',
-        'Spend a full day cycle here in one go.',
-        1
-    ],
-    [
-        'distanceDriven',
-        'Baby step',
-        'Drive 1km.',
-        1
-    ],
-    [
-        'distanceDriven',
-        'Are we there yet?',
-        'Drive 10km.',
-        10
-    ],
-    [
-        'distanceDriven',
-        'Honey, I’m home!',
-        'Drive 100km.',
-        100
-    ],
-    [
-        'sacrifice',
-        'One for the god of Chaos',
-        'Sacrifice yourself into the altar.',
-        1
-    ],
-    [
-        'cataclysm',
-        'Witness me!',
-        'Witness a cataclysm',
-        1
-    ],
-    [
-        'weatherSnow',
-        'Do you want to build a snowman?',
-        'Witness snowy weather.',
-        1
-    ],
-    [
-        'weatherRain',
-        'I’m singing in the rain',
-        'Witness a rainy weather.',
-        1
-    ],
-    [
-        'lightning',
-        '1.21 Gigawatts!',
-        'Get hit by a lightning.',
-        1
-    ],
-    [
-        'waterfall',
-        'Gamer instinct',
-        'What did you expect? A treasure?',
-        1
-    ],
-    [
-        'fan',
-        'You’re my only fan',
-        'Spawn a fan.',
-        1
-    ],
-    [
-        'reset',
-        'Clean your room',
-        'Put back everything as it was.',
-        1
-    ],
-    [
-        'statueDown',
-        'Revolution!',
-        'Tear that statue down.',
-        1
-    ],
-    [
-        'konami',
-        'Up up down down…',
-        'You know the rest.',
-        1
-    ],
-    [
-        'debug',
-        'It\'s not a bug, it\'s a feature',
-        'Access the debug UI.',
-        1
-    ],
-    [
-        'hacker',
-        'Hacker',
-        'This one can’t be achieved.',
-        1
-    ],
+// [ group, title, description, total, unique ]
+// title / description: { 'pt-BR': '...', en: '...' }
+export default [
+    [ 'landingLeave', { 'pt-BR': 'Pé na estrada!', en: 'Hit the road!' }, { 'pt-BR': 'Saia da área inicial.', en: 'Leave the starting area.' }, 1 ],
+    [ 'areas', { 'pt-BR': 'Explorador da Ilha', en: 'Island Explorer' }, { 'pt-BR': 'Visite todas as <strong>13</strong> áreas da ilha.', en: 'Visit all <strong>13</strong> areas of the island.' }, 13, true ],
+    [ 'projects', { 'pt-BR': 'Portfólio Completo', en: 'Full Portfolio' }, { 'pt-BR': 'Veja todos os projetos na área <strong>Projetos</strong>.', en: 'See every project in the <strong>Projects</strong> area.' }, projectsData.length, true ],
+    [ 'lab', { 'pt-BR': 'Cientista de Dados', en: 'Data Scientist' }, { 'pt-BR': 'Veja todos os itens na área <strong>Lab & Dados</strong>.', en: 'See every item in the <strong>Lab & Data</strong> area.' }, labData.length, true ],
+    [ 'cookie', { 'pt-BR': 'Primeiro Cookie', en: 'First Cookie' }, { 'pt-BR': 'Aceite <strong>1</strong> cookie.', en: 'Accept <strong>1</strong> cookie.' }, 1 ],
+    [ 'cookie', { 'pt-BR': 'Massa Pronta', en: 'Dough Ready' }, { 'pt-BR': 'Aceite <strong>10</strong> cookies.', en: 'Accept <strong>10</strong> cookies.' }, 10 ],
+    [ 'cookie', { 'pt-BR': 'Fornada Cheia', en: 'Full Batch' }, { 'pt-BR': 'Aceite <strong>100</strong> cookies.', en: 'Accept <strong>100</strong> cookies.' }, 100 ],
+    [ 'cookie', { 'pt-BR': 'Mestre dos Cookies', en: 'Cookie Master' }, { 'pt-BR': 'Aceite <strong>1000</strong> cookies.', en: 'Accept <strong>1000</strong> cookies.' }, 1000 ],
+    [ 'sea', { 'pt-BR': 'Mergulho Costeiro', en: 'Coastal Dive' }, { 'pt-BR': 'Entre no mar.', en: 'Go into the sea.' }, 1 ],
+    [ 'upsideDown', { 'pt-BR': 'Tartaruga', en: 'Turtle' }, { 'pt-BR': 'Capote o carro de cabeça para baixo.', en: 'Flip the car upside down.' }, 1 ],
+    [ 'frontFlip', { 'pt-BR': 'Mortal de Frente', en: 'Front Flip' }, { 'pt-BR': 'Faça um front flip e caia nas 4 rodas.', en: 'Do a front flip and land on all 4 wheels.' }, 1 ],
+    [ 'backFlip', { 'pt-BR': 'Salto de Fé', en: 'Leap of Faith' }, { 'pt-BR': 'Faça um back flip e caia nas 4 rodas.', en: 'Do a back flip and land on all 4 wheels.' }, 1 ],
+    [ 'suspensions', { 'pt-BR': 'Lowrider', en: 'Lowrider' }, { 'pt-BR': 'Use a suspensão hidráulica do carro.', en: 'Use the car\'s hydraulic suspension.' }, 4 ],
+    [ 'honk', { 'pt-BR': 'Bi-bi!', en: 'Beep beep!' }, { 'pt-BR': 'Buzine 10 vezes pela ilha.', en: 'Honk 10 times around the island.' }, 10 ],
+    [ 'explosiveCrates', { 'pt-BR': 'Demolição Total', en: 'Total Demolition' }, { 'pt-BR': 'Exploda todos os caixotes explosivos.', en: 'Blow up every explosive crate.' }, 20, true ],
+    [ 'goHigh', { 'pt-BR': 'Rumo às Nuvens', en: 'Up to the Clouds' }, { 'pt-BR': 'Alcance <strong>15 metros</strong> de altura.', en: 'Reach a height of <strong>15 meters</strong>.' }, 15 ],
+    [ 'strike', { 'pt-BR': 'Strike Perfeito!', en: 'Perfect Strike!' }, { 'pt-BR': 'Faça um strike no boliche.', en: 'Score a strike at the bowling alley.' }, 1 ],
+    [ 'toiletDown', { 'pt-BR': 'Não Perturbe', en: 'Do Not Disturb' }, { 'pt-BR': 'Derrube a cabine escondida.', en: 'Knock down the hidden cabin.' }, 1 ],
+    [ 'circuitFinish', { 'pt-BR': 'Bandeira Quadriculada', en: 'Checkered Flag' }, { 'pt-BR': 'Complete uma volta no Circuito.', en: 'Complete a lap on the Circuit.' }, 1 ],
+    [ 'circuitFinishFast', { 'pt-BR': 'Piloto de Ouro', en: 'Golden Driver' }, { 'pt-BR': 'Complete o Circuito em menos de <strong>28s</strong>.', en: 'Complete the Circuit in under <strong>28s</strong>.' }, 1 ],
+    [ 'circuitLeaderboard', { 'pt-BR': 'Novo Recorde!', en: 'New Record!' }, { 'pt-BR': 'Registre seu tempo no Top 5 local.', en: 'Get your time into the local Top 5.' }, 1 ],
+    [ 'fullDay', { 'pt-BR': 'Do Amanhecer à Noite', en: 'Dawn to Dusk' }, { 'pt-BR': 'Passe um ciclo completo de dia na ilha.', en: 'Spend a full day cycle on the island.' }, 1 ],
+    [ 'distanceDriven', { 'pt-BR': 'Primeira Volta', en: 'First Lap' }, { 'pt-BR': 'Dirija <strong>1 km</strong>.', en: 'Drive <strong>1 km</strong>.' }, 1 ],
+    [ 'distanceDriven', { 'pt-BR': 'Roadtrip', en: 'Road Trip' }, { 'pt-BR': 'Dirija <strong>10 km</strong>.', en: 'Drive <strong>10 km</strong>.' }, 10 ],
+    [ 'distanceDriven', { 'pt-BR': 'Volta ao Mundo', en: 'Around the World' }, { 'pt-BR': 'Dirija <strong>100 km</strong>.', en: 'Drive <strong>100 km</strong>.' }, 100 ],
+    [ 'sacrifice', { 'pt-BR': 'Oferenda ao Vórtice', en: 'Offering to the Vortex' }, { 'pt-BR': 'Entre no feixe do Portal do Caos.', en: 'Step into the beam of the Chaos Portal.' }, 1 ],
+    [ 'cataclysm', { 'pt-BR': 'Testemunha do Caos', en: 'Witness of Chaos' }, { 'pt-BR': 'Presencie um cataclismo (5 entradas no Portal).', en: 'Witness a cataclysm (5 entries into the Portal).' }, 1 ],
+    [ 'weatherSnow', { 'pt-BR': 'Dia de Neve', en: 'Snow Day' }, { 'pt-BR': 'Presencie neve na ilha.', en: 'See snow on the island.' }, 1 ],
+    [ 'weatherRain', { 'pt-BR': 'Chuva na Estrada', en: 'Rain on the Road' }, { 'pt-BR': 'Presencie chuva na ilha.', en: 'See rain on the island.' }, 1 ],
+    [ 'lightning', { 'pt-BR': '1.21 Gigawatts!', en: '1.21 Gigawatts!' }, { 'pt-BR': 'Seja atingido por um raio.', en: 'Get struck by lightning.' }, 1 ],
+    [ 'waterfall', { 'pt-BR': 'Instinto Gamer', en: 'Gamer Instinct' }, { 'pt-BR': 'O que você esperava atrás da cachoeira? Um tesouro?', en: 'What did you expect behind the waterfall? A treasure?' }, 1 ],
+    [ 'fan', { 'pt-BR': 'Fã Número 1', en: 'Number 1 Fan' }, { 'pt-BR': 'Invoque um ventilador na área Social.', en: 'Summon a fan in the Social area.' }, 1 ],
+    [ 'reset', { 'pt-BR': 'Tudo no Lugar', en: 'Everything in Place' }, { 'pt-BR': 'Resete todos os objetos do mundo.', en: 'Reset every object in the world.' }, 1 ],
+    [ 'statueDown', { 'pt-BR': 'Revolução!', en: 'Revolution!' }, { 'pt-BR': 'Derrube o monumento na área Social.', en: 'Topple the monument in the Social area.' }, 1 ],
+    [ 'konami', { 'pt-BR': 'Cima, Cima, Baixo, Baixo…', en: 'Up, Up, Down, Down…' }, { 'pt-BR': 'Você conhece o resto.', en: 'You know the rest.' }, 1 ],
+    [ 'debug', { 'pt-BR': 'Modo Engenheiro', en: 'Engineer Mode' }, { 'pt-BR': 'Acesse o painel <strong>#debug</strong>.', en: 'Open the <strong>#debug</strong> panel.' }, 1 ],
+    [ 'hacker', { 'pt-BR': 'Hacker', en: 'Hacker' }, { 'pt-BR': 'Esta conquista não pode ser alcançada.', en: 'This achievement cannot be reached.' }, 1 ],
 ]

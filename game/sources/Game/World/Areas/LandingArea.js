@@ -42,7 +42,7 @@ export class LandingArea extends Area
         // Interactive point
         const interactivePoint = this.game.interactivePoints.create(
             this.references.items.get('kioskInteractivePoint')[0].position,
-            'Map',
+            () => this.game.i18n.t('prompt.map'),
             InteractivePoints.ALIGN_RIGHT,
             InteractivePoints.STATE_CONCEALED,
             () =>
@@ -76,7 +76,7 @@ export class LandingArea extends Area
         // Interactive point
         const interactivePoint = this.game.interactivePoints.create(
             this.references.items.get('controlsInteractivePoint')[0].position,
-            'Controls',
+            () => this.game.i18n.t('prompt.controls'),
             InteractivePoints.ALIGN_RIGHT,
             InteractivePoints.STATE_CONCEALED,
             () =>
@@ -217,7 +217,7 @@ export class LandingArea extends Area
         // Interactive point
         this.game.interactivePoints.create(
             this.references.items.get('bonfireInteractivePoint')[0].position,
-            'Res(e)t',
+            () => this.game.i18n.t('prompt.reset'),
             InteractivePoints.ALIGN_RIGHT,
             InteractivePoints.STATE_CONCEALED,
             () =>

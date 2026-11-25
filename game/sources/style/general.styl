@@ -386,6 +386,21 @@ a.button
 html:not(.is-server-offline) .offline-element
     display none !important
 
+html:not(.is-standalone) .standalone-element
+    display none !important
+
+html.is-standalone
+    .offline-element
+    .js-navigation-item[data-name="whispers"]
+    tr.is-server-row
+    .circuit-content .reset
+        display none !important
+
+.standalone-element
+    text-align center
+    font-size 0.85em
+    opacity 0.6
+
 html:not(.is-server-online) .online-element
     display none !important
 

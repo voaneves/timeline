@@ -1,9 +1,26 @@
 # Plano de Transformação 3D — Portfólio & Timeline Interativa (Victor Neves)
 
-- **Repositório:** `D:\GitHub\_kit-clones\timeline` (origin `voaneves/timeline`, GitHub Pages em `https://voaneves.github.io/timeline/`)
-- **Projeto 3D:** `D:\GitHub\_kit-clones\timeline\game` (base 3D instalada, dependências em `node_modules`, `.env` criado a partir de `.env.example`, build base validado)
-- **Site raiz (intacto durante toda a evolução):** `D:\GitHub\_kit-clones\timeline` (`index.html`, `src/`, `assets/`, `docs/`)
-- **Backup de referência (somente consulta eventual de textos/ideias; não usar como base):** `D:\GitHub\pode_apagar\timeline\game_20261122`
+- **Repositório:** raiz do clone `timeline` (origin `voaneves/timeline`, GitHub Pages em `https://voaneves.github.io/timeline/`)
+- **Projeto 3D:** `./game` (base 3D instalada, dependências em `node_modules`, `.env` criado a partir de `.env.example`, build base validado)
+- **Site raiz (intacto durante toda a evolução):** a raiz do repositório (`index.html`, `src/`, `assets/`, `docs/`)
+- **Backup de referência (somente consulta eventual de textos/ideias; não usar como base):** `../pode_apagar/timeline/game_20261122`
+
+## Status de execução
+
+Atualizado em 2026-11-25.
+
+| Fase | Tarefas | Estado |
+| :--- | :--- | :--- |
+| 0 a 3 | `T0.0`–`T0.3`, `T1.1`–`T1.5`, `T2.1`–`T2.3`, `T3.1`, `T3.2` | Feitas |
+| 4 | `T4.0` (`npm run verify:glb`) | Feita |
+| 4 e 5 | `T4.1`–`T4.2`, `T5.1`–`T5.2` | Pendentes (exigem Blender) |
+| 6 | `T6.1`–`T6.3` | Pendentes |
+
+Ressalvas:
+- Nada foi validado visualmente em GPU real; só `npm run build` e `npm run verify:glb`.
+- Os `.ktx` só são regenerados com `npm run compress` (exige `toktx` instalado).
+- `verify:glb` passa no `areas.glb` atual e avisa (exit 0; `--strict` dá exit 1) dos 3 personagens legados de Social (`baguira`, `boy`, `sudo`; 6 nós), pendência da `T4.2`.
+- Decisão 12 vs 13: a conquista `areas` conta 13 áreas (inclui `toilet`, sem pin); o contador do mapa mostra só as 12 com pin. `landing` (spawn) não dispara o aviso "Área descoberta".
 
 ---
 

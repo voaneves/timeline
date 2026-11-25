@@ -20,7 +20,17 @@ export class Server
         this.connected = false
         this.initData = null
         this.events = new Events()
-        document.documentElement.classList.add('is-server-offline')
+        // Standalone (no server configured): local-only mode, first-class citizen
+        this.isStandalone = !import.meta.env.VITE_SERVER_URL
+        if(this.isStandalone)
+        {
+            document.documentElement.classList.add('is-standalone')
+            document.documentElement.classList.add('is-server-online') // Shows .online-element (local leaderboard)
+        }
+        else
+        {
+            document.documentElement.classList.add('is-server-offline')
+        }
     }
 
     start()
@@ -62,7 +72,7 @@ export class Server
             {
                 const html = /* html */`
                     <div class="top">
-                        <div class="title">Server connected</div>
+                        <div class="title">${this.game.i18n.t('server.connected')}</div>
                     </div>
                 `
 
@@ -85,7 +95,7 @@ export class Server
                 // Notification
                 const html = /* html */`
                     <div class="top">
-                        <div class="title">Server disconnected</div>
+                        <div class="title">${this.game.i18n.t('server.disconnected')}</div>
                     </div>
                 `
 

@@ -291,7 +291,7 @@ export class AchievementsArea extends Area
     {
         this.interactivePoint = this.game.interactivePoints.create(
             this.references.items.get('interactivePoint')[0].position,
-            'Achievements',
+            () => this.game.i18n.t('prompt.achievements'),
             InteractivePoints.ALIGN_RIGHT,
             InteractivePoints.STATE_CONCEALED,
             () =>

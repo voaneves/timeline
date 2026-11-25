@@ -5,17 +5,12 @@ export default [
         url: 'https://voaneves.github.io/dtcg-contrast/',
         attributes:
         {
-            role: [ 'JavaScript', 'WCAG · APCA' ],
+            role: [ 'Creator', 'JavaScript' ],
             at: 'Open Source',
-            with: [ 'OKLCH', 'Design Tokens' ]
+            with: [ 'WCAG · APCA', 'OKLCH Tokens' ]
         },
         distinctions: [],
-        images:
-        [
-            'scout-1.ktx',
-            'scout-2.ktx',
-            'scout-3.ktx',
-        ]
+        images: [ 'dtcg-contrast-1', 'dtcg-contrast-2', 'dtcg-contrast-3' ]
     },
     {
         title: 'snake-arena',
@@ -28,12 +23,7 @@ export default [
             with: [ 'Reinforcement', 'Learning' ]
         },
         distinctions: [],
-        images:
-        [
-            'luni-1.ktx',
-            'luni-2.ktx',
-            'luni-3.ktx',
-        ]
+        images: [ 'snake-arena-1', 'snake-arena-2', 'snake-arena-3' ]
     },
     {
         title: 'Meu Poupig',
@@ -43,15 +33,10 @@ export default [
         {
             role: [ 'HTML · CSS', 'JavaScript' ],
             at: 'EdTech Game',
-            with: [ 'Financial', 'Education' ]
+            with: [ 'Educação', 'Financeira' ]
         },
         distinctions: [],
-        images:
-        [
-            'madbox-1.ktx',
-            'madbox-2.ktx',
-            'madbox-3.ktx',
-        ]
+        images: [ 'meu-poupig-1', 'meu-poupig-2', 'meu-poupig-3' ]
     },
     {
         title: 'js-games',
@@ -61,15 +46,10 @@ export default [
         {
             role: [ 'Vanilla JS', 'PWA' ],
             at: 'Open Source',
-            with: [ 'Classic Games', 'Zero Frameworks' ]
+            with: [ '4 Jogos Clássicos', 'Zero Frameworks' ]
         },
         distinctions: [],
-        images:
-        [
-            'prior-1.ktx',
-            'prior-2.ktx',
-            'prior-3.ktx',
-        ]
+        images: [ 'js-games-1', 'js-games-2', 'js-games-3' ]
     },
     {
         title: 'xbox-sales',
@@ -78,15 +58,11 @@ export default [
         attributes:
         {
             role: [ 'Excel', 'VBA' ],
-            at: 'BI Dashboard',
-            with: [ 'One-Click CSV' ]
+            at: 'Dashboard BI',
+            with: [ 'CSV em 1 Clique' ]
         },
         distinctions: [],
-        images:
-        [
-            'orano-1.ktx',
-            'orano-2.ktx',
-        ]
+        images: [ 'xbox-sales-1', 'xbox-sales-2' ]
     },
     {
         title: 'Financial Sample',
@@ -94,15 +70,11 @@ export default [
         url: 'https://voaneves.github.io/financial_sample_analysis/',
         attributes:
         {
-            role: [ 'Power BI', 'Analytics' ],
-            at: 'Data Analysis',
-            with: [ 'Financial Report' ]
+            role: [ 'Power BI', 'Data Analysis' ],
+            at: 'Analytics',
+            with: [ 'Dataset Microsoft' ]
         },
         distinctions: [],
-        images:
-        [
-            'citrix-redbull-1.ktx',
-            'citrix-redbull-2.ktx',
-        ]
+        images: [ 'financial-sample-1', 'financial-sample-2' ]
     }
 ]

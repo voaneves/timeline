@@ -124,9 +124,15 @@ export class Grass
         const aOffset = attribute('aOffset', 'vec2')
         const aRandom = attribute('aRandom', 'vec2')
 
-        const baseColor = color('#789020')
-        const tipColor = color('#d2d846')
-        const grassColor = mix(baseColor, tipColor, smoothstep(float(0.0), float(1.0), uv().y))
+        const baseColor = color('#468c2e')
+        const midColor = color('#76c442')
+        const tipColor = color('#b7eb5d')
+        const gradientY = uv().y
+        const grassColor = mix(
+            mix(baseColor, midColor, smoothstep(float(0.0), float(0.55), gradientY)),
+            tipColor,
+            smoothstep(float(0.5), float(1.0), gradientY)
+        )
 
         this.material = new MeshDefaultMaterial({
             colorNode: grassColor,

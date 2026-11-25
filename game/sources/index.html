@@ -1,26 +1,26 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Victor Neves — Timeline 3D</title>
+    <title>Victor Neves — Linha do Tempo &amp; Portfólio 3D</title>
 
-    <meta name="description" content="Victor Neves's interactive 3D timeline and portfolio">
+    <meta name="description" content="Victor Neves — Linha do Tempo &amp; Portfólio 3D">
 
-    <meta itemprop="name" content="Victor Neves">
-    <meta itemprop="description" content="Victor Neves's interactive 3D timeline and portfolio">
+    <meta itemprop="name" content="Victor Neves — Linha do Tempo &amp; Portfólio 3D">
+    <meta itemprop="description" content="Linha do tempo interativa e portfólio 3D de Victor Neves">
     <meta itemprop="image" content="https://voaneves.github.io/timeline/assets/img/og-img.webp">
 
     <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:title" content="Victor Neves">
-    <meta name="twitter:description" content="Victor Neves's interactive 3D timeline and portfolio">
+    <meta name="twitter:title" content="Victor Neves — Linha do Tempo &amp; Portfólio 3D">
+    <meta name="twitter:description" content="Linha do tempo interativa e portfólio 3D de Victor Neves">
     <meta name="twitter:image" content="https://voaneves.github.io/timeline/assets/img/og-img.webp">
 
     <meta property="og:site_name" content="Victor Neves">
     <meta property="og:type" content="website">
     <meta property="og:url" content="https://voaneves.github.io/timeline/">
-    <meta property="og:title" content="Victor Neves">
-    <meta property="og:description" content="Victor Neves's interactive 3D timeline and portfolio">
+    <meta property="og:title" content="Victor Neves — Linha do Tempo &amp; Portfólio 3D">
+    <meta property="og:description" content="Linha do tempo interativa e portfólio 3D de Victor Neves">
     <meta property="og:image" content="https://voaneves.github.io/timeline/assets/img/og-img.webp">
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -33,7 +33,7 @@
     <link rel="icon" type="image/svg+xml" href="/favicons/favicon.svg" loading="lazy" />
     <link rel="shortcut icon" href="/favicons/favicon.ico" />
     <link rel="apple-touch-icon" sizes="180x180" href="/favicons/apple-touch-icon.png" />
-    <meta name="apple-mobile-web-app-title" content="Victor Neves" />
+    <meta name="apple-mobile-web-app-title" content="Victor Neves — Linha do Tempo &amp; Portfólio 3D" />
     <link rel="manifest" href="/favicons/site.webmanifest" />
 
     <link rel="preload" href="/respawns/respawnsReferences-compressed.glb" as="fetch" crossorigin>
@@ -57,8 +57,8 @@
         <div class="js-touch-buttons touch-buttons">
             <div class="js-overlay overlay"></div>
             <div class="list">
-                <button data-name="interact" class="js-button interact">Interact</button>
-                <button data-name="unstuck" class="js-button unstuck">Unstuck</button>
+                <button data-name="interact" class="js-button interact" data-i18n="touch.interact">Interagir</button>
+                <button data-name="unstuck" class="js-button unstuck" data-i18n="touch.unstuck">Desatolar</button>
                 <button data-name="previous" class="js-button previous"></button>
                 <button data-name="next" class="js-button next"></button>
                 <button data-name="open" class="js-button open"></button>
@@ -214,84 +214,81 @@
                         <!-- Intro -->
                         <div class="js-content content home-content">
                             <div class="content-inner">
-                                <div class="title">Victor Neves</div>
-                                <p class="text">Welcome!</p>
-                                <p class="text">My name is <strong>Victor Neves</strong> — engineer, developer, and specialist in <strong>data &amp; digital transformation</strong>.</p>
-                                <p class="text">Drive around the island to explore my timeline, open-source projects, experiments, and mini-games.</p>
-                                <p class="text">And feel free to knock a few things over along the way!</p>
+                                <div class="title" data-i18n="home.title">Victor Neves</div>
+                                <p class="text" data-i18n="home.p1">Bem-vindo!</p>
+                                <p class="text" data-i18n-html="home.p2">Sou <strong>Victor Neves</strong> — engenheiro, desenvolvedor e especialista em <strong>dados e transformação digital</strong>.</p>
+                                <p class="text" data-i18n="home.p3">Dirija pela ilha para explorar minha linha do tempo, projetos open-source, experimentos e mini-games.</p>
+                                <p class="text" data-i18n="home.p4">E fique à vontade para derrubar algumas coisas pelo caminho!</p>
                             </div>
                         </div>
 
                         <!-- Options -->
                         <div class="js-content content options-content">
                             <div class="content-inner">
-                                <div class="title">Options</div>
+                                <div class="title" data-i18n="options.title">Opções</div>
                                 <table class="options">
                                     <tbody>
                                         <tr>
+                                            <td data-i18n="options.language">Idioma</td>
                                             <td>
-                                                Audio 
+                                                <button class="js-language-toggle language-toggle button is-small has-tooltip">
+                                                    <div class="tooltip" data-i18n="options.language.tip">Alterna entre português e inglês</div>
+                                                    <span>PT-BR</span>
+                                                </button>
                                             </td>
+                                        </tr>
+                                        <tr>
+                                            <td data-i18n="options.audio">Áudio</td>
                                             <td>
                                                 <button class="js-audio-toggle audio-toggle button is-small has-tooltip">
-                                                    <div class="tooltip">Toggles sound</div>
+                                                    <div class="tooltip" data-i18n="options.audio.tip">Liga/desliga o som</div>
                                                     <img class="icon icon-audio audio-on" src="ui/audio/audioOn.svg" loading="lazy">
                                                     <img class="icon icon-audio audio-off" src="ui/audio/audioOff.svg" loading="lazy">
                                                 </button>
                                             </td>
                                         </tr>
                                         <tr>
-                                            <td>
-                                                Quality 
-                                            </td>
+                                            <td data-i18n="options.quality">Qualidade</td>
                                             <td>
                                                 <button class="js-quality-toggle quality-toggle button is-small has-tooltip">
-                                                    <div class="tooltip">Toggles some effects</div>
-                                                    <span>Low</span>
+                                                    <div class="tooltip" data-i18n="options.quality.tip">Alterna alguns efeitos</div>
+                                                    <span>Baixa</span>
                                                 </button>
                                             </td>
                                         </tr>
                                         <tr>
-                                            <td>
-                                                I'm stuck!
-                                            </td>
+                                            <td data-i18n="options.stuck">Atolou?</td>
                                             <td>
                                                 <button class="js-respawn button is-small has-tooltip">
-                                                    <div class="tooltip">Teleports you to the closest respawn</div>
-                                                    Respawn
+                                                    <div class="tooltip" data-i18n="options.respawn.tip">Leva você ao ponto de retorno mais próximo</div>
+                                                    <span data-i18n="options.respawn">Reposicionar</span>
                                                 </button>
                                             </td>
                                         </tr>
                                         <tr>
-                                            <td>
-                                                Reset
-                                            </td>
+                                            <td data-i18n="options.reset">Resetar mundo</td>
                                             <td>
                                                 <button class="js-reset button is-small has-tooltip">
-                                                    <div class="tooltip">Resets every object</div>
-                                                    Reset
+                                                    <div class="tooltip" data-i18n="options.reset.tip">Reposiciona todos os objetos</div>
+                                                    <span data-i18n="options.reset.btn">Resetar</span>
                                                 </button>
                                             </td>
                                         </tr>
                                         <tr>
-                                            <td>
-                                                Renderer
-                                            </td>
+                                            <td data-i18n="options.renderer">Renderizador</td>
                                             <td>
                                                 <button class="js-renderer button is-small is-disabled is-success has-tooltip">
-                                                    <div class="js-tooltip tooltip">Best for performance</div>
+                                                    <div class="js-tooltip tooltip" data-i18n="options.renderer.tip">Melhor desempenho</div>
                                                     <span>WebGPU</span>
                                                 </button>
                                             </td>
                                         </tr>
-                                        <tr>
-                                            <td>
-                                                Server
-                                            </td>
+                                        <tr class="is-server-row">
+                                            <td data-i18n="options.server">Servidor</td>
                                             <td>
                                                 <button class="js-server button is-small is-disabled has-tooltip">
                                                     <div class="js-tooltip tooltip"></div>
-                                                    <span>Pending</span>
+                                                    <span data-i18n="options.server.pending">Pendente</span>
                                                 </button>
                                             </td>
                                         </tr>
@@ -310,21 +307,21 @@
                                             <span class="icon-container">
                                                 <span class="icon icon-mouse-keyboard"></span>
                                             </span>
-                                            <span class="label">Mouse Keyboard</span>
+                                            <span class="label" data-i18n="controls.tab.mouseKeyboard">Mouse e teclado</span>
                                         </button>
                                         <button class="js-tabs-navigation-item tab" data-tabs-name="touch">
                                             <div class="active-background"></div>
                                             <span class="icon-container">
                                                 <span class="icon icon-touch"></span>
                                             </span>
-                                            <span class="label">Mobile Tablet</span>
+                                            <span class="label" data-i18n="controls.tab.touch">Celular e tablet</span>
                                         </button>
                                         <button class="js-tabs-navigation-item tab" data-tabs-name="gamepad">
                                             <div class="active-background"></div>
                                             <span class="icon-container">
                                                 <span class="icon icon-gamepad"></span>
                                             </span>
-                                            <span class="label">Gamepad</span>
+                                            <span class="label" data-i18n="controls.tab.gamepad">Controle</span>
                                         </button>
                                     </div>
                                     <div class="js-tabs-content text text-small tabs-content">
@@ -335,52 +332,52 @@
                                                 <table>
                                                     <tbody>
                                                         <tr>
-                                                            <td><span class="key">WASD</span> or <span class="key">ARROWS</span></td>
-                                                            <td>Move around</td>
+                                                            <td><span class="key">WASD</span> <span data-i18n="common.or">ou</span> <span class="key">ARROWS</span></td>
+                                                            <td data-i18n="controls.mk.move">Move around</td>
                                                         </tr>
                                                         <tr>
                                                             <td><span class="key">SHIFT</span></td>
-                                                            <td>Boost</td>
+                                                            <td data-i18n="controls.mk.boost">Boost</td>
                                                         </tr>
                                                         <tr>
-                                                            <td><span class="key">CTRL LEFT</span> or <span class="key">B</span></td>
-                                                            <td>Brake</td>
+                                                            <td><span class="key">CTRL LEFT</span> <span data-i18n="common.or">ou</span> <span class="key">B</span></td>
+                                                            <td data-i18n="controls.mk.brake">Brake</td>
                                                         </tr>
                                                         <tr>
                                                             <td><span class="key">SPACE</span></td>
-                                                            <td>Jump</td>
+                                                            <td data-i18n="controls.mk.jump">Jump</td>
                                                         </tr>
                                                         <tr>
                                                             <td><span class="key">ENTER</span></td>
-                                                            <td>Interact</td>
+                                                            <td data-i18n="controls.mk.interact">Interact</td>
                                                         </tr>
                                                         <tr>
                                                             <td><span class="key">M</span></td>
-                                                            <td>Map</td>
+                                                            <td data-i18n="controls.mk.map">Map</td>
                                                         </tr>
                                                         <tr>
                                                             <td><span class="key">L</span></td>
-                                                            <td>Mute</td>
+                                                            <td data-i18n="controls.mk.mute">Mute</td>
                                                         </tr>
                                                         <tr>
                                                             <td><span class="key">T</span></td>
-                                                            <td>Post a whisper</td>
+                                                            <td data-i18n="controls.mk.whisper">Post a whisper</td>
                                                         </tr>
                                                         <tr>
                                                             <td><span class="key">R</span></td>
-                                                            <td>Respawn</td>
+                                                            <td data-i18n="controls.mk.respawn">Respawn</td>
                                                         </tr>
                                                         <tr>
                                                             <td><span class="key">NUM KEYS</span>/<span class="key">NUM PAD</span></td>
-                                                            <td>Activate hydraulics</td>
+                                                            <td data-i18n="controls.mk.hydraulics">Activate hydraulics</td>
                                                         </tr>
                                                         <tr>
                                                             <td><span class="key">LEFT CLICK (DRAG)</span></td>
-                                                            <td>Move camera</td>
+                                                            <td data-i18n="controls.mk.camera">Move camera</td>
                                                         </tr>
                                                         <tr>
                                                             <td><span class="key">H</span></td>
-                                                            <td>Honk</td>
+                                                            <td data-i18n="controls.mk.honk">Honk</td>
                                                         </tr>
                                                     </tbody>
                                                 </table>
@@ -393,16 +390,16 @@
                                                 <table>
                                                     <tbody>
                                                         <tr>
-                                                            <td><span class="key">One finger</span></td>
-                                                            <td>Move the car</td>
+                                                            <td><span class="key" data-i18n="controls.touch.oneFinger">Um dedo</span></td>
+                                                            <td data-i18n="controls.touch.oneFinger.desc">Mover o carro</td>
                                                         </tr>
                                                         <tr>
-                                                            <td><span class="key">Two fingers</span></td>
-                                                            <td>Move camera / zoom</td>
+                                                            <td><span class="key" data-i18n="controls.touch.twoFingers">Dois dedos</span></td>
+                                                            <td data-i18n="controls.touch.twoFingers.desc">Mover câmera / zoom</td>
                                                         </tr>
                                                         <tr>
-                                                            <td><span class="key">Tap (on the car)</span></td>
-                                                            <td>Jump</td>
+                                                            <td><span class="key" data-i18n="controls.touch.tap">Toque (no carro)</span></td>
+                                                            <td data-i18n="controls.touch.tap.desc">Pular</td>
                                                         </tr>
                                                     </tbody>
                                                 </table>
@@ -420,73 +417,73 @@
                                                                 <span class="is-gamepad-button is-xbox key">B</span>
                                                                 <span class="is-gamepad-button is-playstation is-icon circle"></span>
                                                             </td>
-                                                            <td>Boost</td>
+                                                            <td data-i18n="controls.gp.boost">Boost</td>
                                                         </tr>
                                                         <tr>
                                                             <td>
                                                                 <span class="is-gamepad-button is-xbox key">Y</span>
                                                                 <span class="is-gamepad-button is-playstation is-icon triangle"></span>
                                                             </td>
-                                                            <td>Jump</td>
+                                                            <td data-i18n="controls.gp.jump">Jump</td>
                                                         </tr>
                                                         <tr>
                                                             <td>
                                                                 <span class="is-gamepad-button is-xbox key">X</span>
                                                                 <span class="is-gamepad-button is-playstation is-icon square"></span>
                                                             </td>
-                                                            <td>Brake</td>
+                                                            <td data-i18n="controls.gp.brake">Brake</td>
                                                         </tr>
                                                         <tr>
                                                             <td>
                                                                 <span class="is-gamepad-button is-xbox key">A</span>
                                                                 <span class="is-gamepad-button is-playstation is-icon cross"></span>
                                                             </td>
-                                                            <td>Interact / Exit</td>
+                                                            <td data-i18n="controls.gp.interact">Interact / Exit</td>
                                                         </tr>
                                                         <tr>
                                                             <td>
                                                                 <span class="is-gamepad-button is-xbox key">LT</span>
                                                                 <span class="is-gamepad-button is-playstation key">L2</span>
                                                             </td>
-                                                            <td>Accelerate</td>
+                                                            <td data-i18n="controls.gp.accelerate">Accelerate</td>
                                                         </tr>
                                                         <tr>
                                                             <td>
                                                                 <span class="is-gamepad-button is-xbox key">RT</span>
                                                                 <span class="is-gamepad-button is-playstation key">R2</span>
                                                             </td>
-                                                            <td>Backward accelerate</td>
+                                                            <td data-i18n="controls.gp.reverse">Backward accelerate</td>
                                                         </tr>
                                                         <tr>
                                                             <td>
                                                                 <span class="is-gamepad-button is-xbox key">LB / RB</span>
                                                                 <span class="is-gamepad-button is-playstation key">L1 / R1</span>
                                                             </td>
-                                                            <td>Hydraulics</td>
+                                                            <td data-i18n="controls.gp.hydraulics">Hydraulics</td>
                                                         </tr>
                                                         <tr>
-                                                            <td><span class="key">Joystick Left</span></td>
-                                                            <td>Turn wheels</td>
+                                                            <td><span class="key" data-i18n="controls.gp.stickLeft">Analógico esquerdo</span></td>
+                                                            <td data-i18n="controls.gp.stickLeft.desc">Virar as rodas</td>
                                                         </tr>
                                                         <tr>
-                                                            <td><span class="key">Joystick Left (press)</span></td>
-                                                            <td>Honk</td>
+                                                            <td><span class="key" data-i18n="controls.gp.stickLeftPress">Analógico esquerdo (pressionar)</span></td>
+                                                            <td data-i18n="controls.gp.stickLeftPress.desc">Buzinar</td>
                                                         </tr>
                                                         <tr>
-                                                            <td><span class="key">Joystick Right</span></td>
-                                                            <td>Move camera</td>
+                                                            <td><span class="key" data-i18n="controls.gp.stickRight">Analógico direito</span></td>
+                                                            <td data-i18n="controls.gp.stickRight.desc">Mover câmera</td>
                                                         </tr>
                                                         <tr>
-                                                            <td><span class="key">Joystick Right (press)</span></td>
-                                                            <td>Zoom in/out</td>
+                                                            <td><span class="key" data-i18n="controls.gp.stickRightPress">Analógico direito (pressionar)</span></td>
+                                                            <td data-i18n="controls.gp.stickRightPress.desc">Aproximar / afastar</td>
                                                         </tr>
                                                         <tr>
-                                                            <td><span class="key">Select</span></td>
-                                                            <td>Reset</td>
+                                                            <td><span class="key" data-i18n="controls.gp.select">Select</span></td>
+                                                            <td data-i18n="controls.gp.select.desc">Resetar</td>
                                                         </tr>
                                                         <tr>
-                                                            <td><span class="key">Start</span></td>
-                                                            <td>Pause</td>
+                                                            <td><span class="key" data-i18n="controls.gp.start">Start</span></td>
+                                                            <td data-i18n="controls.gp.start.desc">Pausar</td>
                                                         </tr>
                                                     </tbody>
                                                 </table>
@@ -500,51 +497,51 @@
                         <!-- Achievements -->
                         <div class="js-content content achievements-content">
                             <div class="content-inner">
-                                <div class="title">Achievements</div>
+                                <div class="title" data-i18n="achievements.title">Conquistas</div>
                                 <div class="js-global-progress global-progress">
                                     <span class="ratio"><span class="js-current current"></span> / <span class="js-total total"></span></span>
                                     <span class="js-time time">2h 30min 15s</span>
                                 </div>
                                 <div class="rewards-container">
-                                    <div class="title">Rewards</div>
+                                    <div class="title" data-i18n="achievements.rewards">Recompensas</div>
                                     <div class="rewards">
                                         <button class="js-reward reward has-tooltip" data-name="red" data-default>
-                                            <div class="js-tooltip tooltip">Unlock at <strong></strong></div>
+                                            <div class="js-tooltip tooltip"><span data-i18n="achievements.unlockAt.label">Desbloqueie com</span> <strong></strong></div>
                                             <img class="picture" src="ui/achievements/rewards/red.webp" loading="lazy">
                                             <div class="lock">
                                                 <img class="lock-icon" src="ui/lock.svg" loading="lazy">
                                             </div>
                                         </button>
                                         <button class="js-reward reward has-tooltip is-locked" data-name="orange">
-                                            <div class="js-tooltip tooltip">Unlock at <strong></strong></div>
+                                            <div class="js-tooltip tooltip"><span data-i18n="achievements.unlockAt.label">Desbloqueie com</span> <strong></strong></div>
                                             <img class="picture" src="ui/achievements/rewards/orange.webp" loading="lazy">
                                             <div class="lock">
                                                 <img class="lock-icon" src="ui/lock.svg" loading="lazy">
                                             </div>
                                         </button>
                                         <button class="js-reward reward has-tooltip is-locked" data-name="white">
-                                            <div class="js-tooltip tooltip">Unlock at <strong></strong></div>
+                                            <div class="js-tooltip tooltip"><span data-i18n="achievements.unlockAt.label">Desbloqueie com</span> <strong></strong></div>
                                             <img class="picture" src="ui/achievements/rewards/white.webp" loading="lazy">
                                             <div class="lock">
                                                 <img class="lock-icon" src="ui/lock.svg" loading="lazy">
                                             </div>
                                         </button>
                                         <button class="js-reward reward has-tooltip is-locked" data-name="black">
-                                            <div class="js-tooltip tooltip">Unlock at <strong></strong></div>
+                                            <div class="js-tooltip tooltip"><span data-i18n="achievements.unlockAt.label">Desbloqueie com</span> <strong></strong></div>
                                             <img class="picture" src="ui/achievements/rewards/black.webp" loading="lazy">
                                             <div class="lock">
                                                 <img class="lock-icon" src="ui/lock.svg" loading="lazy">
                                             </div>
                                         </button>
                                         <button class="js-reward reward has-tooltip is-locked" data-name="flames">
-                                            <div class="js-tooltip tooltip">Unlock at <strong></strong></div>
+                                            <div class="js-tooltip tooltip"><span data-i18n="achievements.unlockAt.label">Desbloqueie com</span> <strong></strong></div>
                                             <img class="picture" src="ui/achievements/rewards/flames.webp" loading="lazy">
                                             <div class="lock">
                                                 <img class="lock-icon" src="ui/lock.svg" loading="lazy">
                                             </div>
                                         </button>
                                         <button class="js-reward reward has-tooltip is-locked" data-name="abyssal">
-                                            <div class="js-tooltip tooltip">Unlock at <strong></strong></div>
+                                            <div class="js-tooltip tooltip"><span data-i18n="achievements.unlockAt.label">Desbloqueie com</span> <strong></strong></div>
                                             <img class="picture" src="ui/achievements/rewards/abyssal.webp" loading="lazy">
                                             <div class="lock">
                                                 <img class="lock-icon" src="ui/lock.svg" loading="lazy">
@@ -556,8 +553,8 @@
 
                                 <div class="horizontal-group">
                                 
-                                    <button class="js-button-reset button button-reset">
-                                        Reset achievements
+                                    <button class="js-button-reset button button-reset" data-i18n="achievements.reset">
+                                        Resetar conquistas
                                     </button>
                                     
                                 </div>
@@ -567,22 +564,26 @@
                         <!-- Circuit -->
                         <div class="js-content content circuit-content">
                             <div class="content-inner">
-                                <div class="title">Circuit</div>
+                                <div class="title" data-i18n="circuit.title">Circuito</div>
+
+                                <p class="standalone-element text text-faded" data-i18n="circuit.standalone">Modo local · Top 5 salvo neste navegador</p>
                                 
                                 <p class="offline-element text text-danger">
-                                    <img src="ui/warning.svg" loading="lazy" alt="" class="icon"> Server currently offline. Scores can't be saved.
+                                    <img src="ui/warning.svg" loading="lazy" alt="" class="icon"> <span data-i18n="circuit.offline">Servidor offline. Os tempos não podem ser salvos.</span>
                                 </p>
 
                                 <div class="js-leaderboard-container leaderboard-container has-no-score">
-                                    <div class="no-score">No score yet today</div>
+                                    <div class="no-score" data-i18n="circuit.noScore">Nenhum tempo registrado ainda</div>
                                     <table class="js-leaderboard leaderboard online-element">
                                         <tbody>
                                         </tbody>
                                     
                                     </table>
 
+                                    <button class="js-button-clear-records button-clear-records standalone-element" type="button" data-i18n="circuit.clear">Limpar recordes</button>
+
                                     <p class="online-element reset">
-                                        Resets in <span class="js-reset-time reset-time"></span>
+                                        <span data-i18n="circuit.resets">Reinicia em</span> <span class="js-reset-time reset-time"></span>
                                     </p>
 
                                 </div>
@@ -593,21 +594,21 @@
                                         <svg class="icon icon-restart" width="20" height="24" viewBox="0 0 20 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                                             <path d="M17 5L10 10V6C5.58172 6 2 9.58172 2 14C2 18.4183 5.58172 22 10 22C14.4183 22 18 18.4183 18 14H20C20 19.5228 15.5228 24 10 24C4.47715 24 0 19.5228 0 14C0 8.47715 4.47715 4 10 4V0L17 5Z" fill="#ffffff"/>
                                         </svg>
-                                        Restart
+                                        <span data-i18n="circuit.restart">Reiniciar</span>
                                     </button>
                                 
                                     <button class="js-button-end button">
                                         <svg class="icon icon-flag" class="none" width="23" height="20" viewBox="0 0 23 20" fill="none" xmlns="http://www.w3.org/2000/svg">
                                             <path d="M0.551758 1.7258C6.55166 -2.27398 11.0001 3.40978 19 1.40953L23 13.4096C15.5952 15.2611 11.6175 10.2589 6.30859 12.6762L8.44824 19.0941L6.55176 19.7269L0.551758 1.7258ZM5.26562 2.00328C4.68209 2.01685 4.07959 2.11674 3.42871 2.37242L6.16309 10.5746C7.17704 10.2014 8.1765 10.0274 9.17188 10.0043C10.8337 9.96566 12.395 10.3531 13.7764 10.7299C15.9783 11.3304 17.9741 11.9562 20.3564 11.806L17.6533 3.69664C13.9491 4.17921 11.0237 3.21654 8.72363 2.58922C7.3553 2.21603 6.29108 1.97952 5.26562 2.00328Z" fill="#ffffff"/>
                                         </svg>
-                                        End
+                                        <span data-i18n="circuit.end">Encerrar</span>
                                     </button>
                                 
                                     <button class="js-button-controls button">
                                         <svg class="icon icon-controller" width="34" height="22" viewBox="0 0 34 22" fill="none" xmlns="http://www.w3.org/2000/svg">
                                             <path d="M24.9901 0C27.2187 0 29.1912 1.98468 30.0877 3.96582C30.9844 5.94795 33.3919 15.0915 33.9373 17.4551C34.4824 19.8185 30.7556 22.1815 26.5741 22.1816C24.3923 19.6363 22.2847 16.7432 19.8465 15H14.2235C11.7707 16.7432 9.6507 19.6363 7.4559 22.1816C3.24927 22.1816 -0.494655 19.8185 0.053558 17.4551C0.602246 15.0917 3.02451 5.94816 3.9266 3.96582C4.82847 1.98469 6.81257 0.000114396 9.05453 0H24.9901ZM8.85532 2.01074C8.38039 2.06286 7.8363 2.30078 7.27133 2.77344C6.62835 3.31144 6.08313 4.05636 5.74692 4.79492C5.3762 5.61 4.5895 8.20768 3.78403 11.1035C3.19639 13.2162 2.63705 15.345 2.28207 16.7588L2.0018 17.9072C1.9553 18.1081 1.96994 18.5603 2.69711 19.124C3.29365 19.5864 5.2646 20.0018 6.56332 20.1357C6.88401 19.7496 7.20912 19.3522 7.54086 18.9434C8.08227 18.2761 8.64694 17.5798 9.22153 16.9062C10.36 15.5716 11.6783 14.3885 13.1112 13.3701L13.6307 13H20.534L21.0555 13.373C22.4808 14.3921 23.7002 15.5757 24.8319 16.9102C25.4031 17.5837 25.9636 18.2811 26.5018 18.9482C26.83 19.3551 27.1523 19.7504 27.4696 20.1348C28.7512 20 30.7095 19.5872 31.2987 19.1279C32.0175 18.5673 32.0359 18.1133 31.9881 17.9053L31.7098 16.7559C31.3569 15.3419 30.8007 13.2132 30.2166 11.1006C29.4159 8.20421 28.6341 5.60492 28.2655 4.79004C27.9309 4.05089 27.3888 3.30754 26.7508 2.77051C26.1096 2.23085 25.4989 2 24.9901 2H9.05453L8.85532 2.01074ZM12.0096 7H14.0096V9H12.0096V11H10.0096V9H8.00961V7H10.0096V5H12.0096V7ZM24.0096 11H22.0096V9H24.0096V11ZM22.0096 9H20.0096V7H22.0096V9ZM26.0096 9H24.0096V7H26.0096V9ZM24.0096 7H22.0096V5H24.0096V7Z" fill="#ffffff"/>
                                         </svg>
-                                        Controls
+                                        <span data-i18n="circuit.controls">Controles</span>
                                     </button>
                                     
                                 </div>
@@ -617,18 +618,18 @@
                         <!-- Whispers -->
                         <div class="js-content content whispers-content">
                             <div class="content-inner">
-                                <div class="title">Leave a whisper</div>
-                                <p class="text">Whispers are messages left by visitors.</p>
+                                <div class="title" data-i18n="whispers.title">Deixe um sussurro</div>
+                                <p class="text" data-i18n="whispers.lead">Sussurros são mensagens deixadas por visitantes.</p>
                                 <p class="text text-small text-faded">
-                                    - Everyone can see them<br />
-                                    - New whispers remove old ones (max 30)<br />
-                                    - One whisper per user<br />
-                                    - Choose a flag<br />
-                                    - No slur!<br />
-                                    - Max 30 characters
+                                    - <span data-i18n="whispers.rule1">Todo mundo pode vê-los</span><br />
+                                    - <span data-i18n="whispers.rule2">Novos sussurros removem os antigos (máx. 30)</span><br />
+                                    - <span data-i18n="whispers.rule3">Um sussurro por usuário</span><br />
+                                    - <span data-i18n="whispers.rule4">Escolha uma bandeira</span><br />
+                                    - <span data-i18n="whispers.rule5">Sem ofensas!</span><br />
+                                    - <span data-i18n="whispers.rule6">Máx. 30 caracteres</span>
                                 </p>
                                 <p class="offline-element text text-danger">
-                                    <img src="ui/warning.svg" loading="lazy" alt="" class="icon"> Server currently offline
+                                    <img src="ui/warning.svg" loading="lazy" alt="" class="icon"> <span data-i18n="whispers.offline">Servidor offline</span>
                                 </p>
                                 <form class="js-input-group input-group is-message" action="#">
                                     <div class="js-input-flag input-flag">
@@ -646,9 +647,9 @@
                                             <div class="js-flag-remove remove">
                                                 <img src="ui/remove.svg" loading="lazy">
                                             </div>
-                                            <input type="text" class="js-flag-search search" placeholder="Search…">
-                                            <div class="js-no-result no-result">
-                                                No result
+                                            <input type="text" class="js-flag-search search" placeholder="Buscar…" data-i18n-placeholder="whispers.search">
+                                            <div class="js-no-result no-result" data-i18n="whispers.noResult">
+                                                Nenhum resultado
                                             </div>
                                             <div class="choices">
                                                 <div class="js-scroller scroller">
@@ -657,7 +658,7 @@
                                             </div>
                                         </div>
                                     </div>
-                                    <input class="js-input js-main-focus input-text" type="text" placeholder="Your message" maxlength="30" name="message"/>
+                                    <input class="js-input js-main-focus input-text" type="text" placeholder="Sua mensagem" data-i18n-placeholder="whispers.placeholder" maxlength="30" name="message"/>
                                     <button class="submit has-icon">
                                         <svg width="39" height="38" viewBox="0 0 39 38" fill="none" xmlns="http://www.w3.org/2000/svg">
                                             <path d="M10.984 26.0434C11.087 26.0016 11.1916 25.9584 11.2975 25.914C12.9298 25.2289 14.998 24.1857 16.3708 22.8128C16.8477 22.3359 17.1994 21.573 17.4799 20.7863C17.7749 19.9587 18.0444 18.9447 18.2905 17.831C18.7834 15.6008 19.2022 12.8805 19.541 10.26C19.5427 10.2476 19.5443 10.2352 19.5459 10.2228C19.8659 12.7209 20.2775 15.3149 20.7957 17.4944C21.063 18.6186 21.3637 19.6547 21.7037 20.5201C22.0343 21.3616 22.4398 22.1422 22.963 22.6655C24.5715 24.2739 26.4382 25.3527 27.8827 26.0268C27.9024 26.036 27.922 26.0452 27.9416 26.0542C27.8074 26.1139 27.6701 26.1761 27.5304 26.2406C26.0017 26.9468 24.0681 27.9906 22.8116 29.2618C21.4879 30.6008 20.4455 32.6674 19.7513 34.3012C19.698 34.4266 19.6465 34.5502 19.5967 34.6716C19.5466 34.5489 19.4948 34.424 19.4411 34.2972C18.7484 32.6615 17.7049 30.5918 16.3708 29.2577C15.0363 27.9233 12.966 26.8799 11.3298 26.1873C11.2129 26.1378 11.0975 26.0899 10.984 26.0434Z" stroke="#FFCECA" stroke-width="2"/>
@@ -671,28 +672,22 @@
                         <!-- Behind the scene -->
                         <div class="js-content content behindTheScene-content">
                             <div class="content-inner">
-                                <div class="title">Behind the scene</div>
-                                <p class="text">
-                                    Thank you for visiting Victor Neves's interactive 3D timeline and portfolio!
-                                    <br />Here is an overview of the core stack powering this experience.
-                                </p>
-                                
-                                <h2 class="title">Three.js &amp; WebGPU</h2>
-                                <p class="text">
-                                    Built with <a href="https://threejs.org" target="_blank" rel="noreferrer">Three.js</a> using WebGPU and TSL shading with automatic WebGL2 fallback.
-                                </p>
-                                
-                                <h2 class="title">Source repository</h2>
-                                <p class="text">
-                                    Follow the project and the accessible 2D timeline on <a href="https://github.com/voaneves/timeline" target="_blank" rel="noreferrer">GitHub</a>.
-                                </p>
+                                <div class="title" data-i18n="bts.title">Bastidores</div>
 
-                                <h2 class="title">Tech stack</h2>
+                                <h2 class="title" data-i18n="bts.about.title">Sobre esta experiência</h2>
+                                <p class="text" data-i18n-html="bts.about.text">Portfólio e linha do tempo interativa de Victor Neves.</p>
+
+                                <h2 class="title" data-i18n="bts.stack.title">Stack técnica</h2>
                                 <ul class="text">
-                                    <li>Physics ⇒ <a href="https://rapier.rs" target="_blank" rel="noreferrer">Rapier</a></li>
-                                    <li>Audio ⇒ <a href="https://howlerjs.com" target="_blank" rel="noreferrer">Howler.js</a></li>
-                                    <li>Fonts ⇒ <a href="https://fonts.google.com/specimen/Amatic+SC" target="_blank" rel="noreferrer">Amatic SC</a> &amp; <a href="https://fonts.google.com/specimen/Nunito?query=Nunito" target="_blank" rel="noreferrer">Nunito</a></li>
+                                    <li data-i18n-html="bts.stack.three">Three.js</li>
+                                    <li data-i18n-html="bts.stack.physics">Física ⇒ Rapier3D</li>
+                                    <li data-i18n-html="bts.stack.audio">Áudio ⇒ Howler.js</li>
+                                    <li data-i18n-html="bts.stack.anim">Animações ⇒ GSAP</li>
+                                    <li data-i18n-html="bts.stack.build">Build ⇒ Vite</li>
                                 </ul>
+
+                                <h2 class="title" data-i18n="bts.debug.title">Modo debug</h2>
+                                <p class="text" data-i18n-html="bts.debug.text">Adicione #debug ao final da URL.</p>
 
                                 <p class="text text-faded text-align-right">
                                     — Victor Neves
@@ -721,16 +716,18 @@
                         </button>
 
                         <div class="your-time">
-                            Your time
+                            <span data-i18n="circuit.yourTime">Seu tempo</span>
                             <br /><span class="js-time value">00:00:000</span>
+                            <div class="js-medal medal"><span class="medal-icon"></span> <span class="js-medal-label medal-label"></span></div>
+                            <div class="js-delta delta"></div>
                         </div>
 
                         <p class="offline-element text text-danger">
-                            <img src="ui/warning.svg" loading="lazy" alt="" class="icon"> Server currently offline. Scores can't be saved.
+                            <img src="ui/warning.svg" loading="lazy" alt="" class="icon"> <span data-i18n="circuit.offline">Servidor offline. Os tempos não podem ser salvos.</span>
                         </p>
 
                         <p class="not-top-10 text">
-                            Sorry, you didn't make it to the top 10.
+                            Que pena, você não entrou no top 10.
                         </p>
 
                         <div class="horizontal-group">
@@ -751,9 +748,9 @@
                                         <div class="js-flag-remove remove">
                                             <img src="ui/remove.svg" loading="lazy">
                                         </div>
-                                        <input type="text" class="js-flag-search search" placeholder="Search…">
-                                        <div class="js-no-result no-result">
-                                            No result
+                                        <input type="text" class="js-flag-search search" placeholder="Buscar…" data-i18n-placeholder="whispers.search">
+                                        <div class="js-no-result no-result" data-i18n="whispers.noResult">
+                                            Nenhum resultado
                                         </div>
                                         <div class="choices">
                                             <div class="js-scroller scroller">
@@ -763,20 +760,20 @@
                                     </div>
                                 </div>
                                 <input class="js-input js-main-focus input-text" type="text" placeholder="---" maxlength="3" />
-                                <button class="submit has-text">
-                                    Submit
+                                <button class="submit has-text" data-i18n="circuit.submit">
+                                    Enviar
                                 </button>
                             </form>
 
-                            <div class="or">
-                                or
+                            <div class="or" data-i18n="circuit.or">
+                                ou
                             </div>
 
                             <button class="js-button-restart button">
                                 <svg class="icon icon-restart" width="20" height="24" viewBox="0 0 20 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                                     <path d="M17 5L10 10V6C5.58172 6 2 9.58172 2 14C2 18.4183 5.58172 22 10 22C14.4183 22 18 18.4183 18 14H20C20 19.5228 15.5228 24 10 24C4.47715 24 0 19.5228 0 14C0 8.47715 4.47715 4 10 4V0L17 5Z" fill="#ffffff"/>
                                 </svg>
-                                Restart
+                                <span data-i18n="circuit.restart">Reiniciar</span>
                             </button>
 
                         </div>
@@ -786,7 +783,7 @@
             </div>
 
             <!-- Contact -->
-            <div class="js-modal modal discord contact" data-name="contact">
+            <div class="js-modal modal contact" data-name="contact">
                 <div class="container">
                     <div class="content">
                         <button class="js-close close">
@@ -794,37 +791,36 @@
                             <span class="icon is-xbox">A</span>
                         </button>
 
-                        <div class="title">Let's talk</div>
+                        <div class="title" data-i18n="contact.title">Vamos conversar</div>
 
                         <div class="items">
                             <div class="item">
                                 <div class="title-container">
                                     <div class="line left"></div>
-                                    <div class="title">Direct contact</div>
+                                    <div class="title" data-i18n="contact.direct.title">Contato direto</div>
                                     <div class="line right"></div>
                                 </div>
-                                <p>Want to bring an idea to life, improve a process, or talk about data and digital transformation?</p>
+                                <p data-i18n="contact.lead">Quer tirar uma ideia do papel, melhorar um processo ou falar de dados e transformação digital?</p>
                                 <div class="button-container">
-                                    <a href="https://voaneves.com/#contato" target="_blank" rel="noreferrer" class="button">
-                                        Message Victor
+                                    <a href="https://voaneves.com/#contato" target="_blank" rel="noreferrer" class="button" data-i18n="contact.direct.cta">
+                                        Falar com Victor
                                     </a>
                                 </div>
                             </div>
                             <div class="item">
                                 <div class="title-container">
                                     <div class="line left"></div>
-                                    <div class="title">LinkedIn &amp; GitHub</div>
+                                    <div class="title" data-i18n="contact.social.title">Redes e código</div>
                                     <div class="line right"></div>
                                 </div>
-                                <p>Connect on LinkedIn or explore open-source projects on GitHub.</p>
+                                <p data-i18n="contact.social.lead">Acompanhe projetos abertos, estudos de dados e trajetória profissional.</p>
                                 <div class="button-container">
-                                    <a href="https://linkedin.com/in/voaneves" target="_blank" rel="noreferrer" class="button">
-                                        Open LinkedIn
-                                    </a>
+                                    <a href="https://linkedin.com/in/voaneves" target="_blank" rel="noreferrer" class="button">LinkedIn</a>
+                                    <a href="https://github.com/voaneves" target="_blank" rel="noreferrer" class="button">GitHub</a>
                                 </div>
                             </div>
                         </div>
-                    
+
                     </div>
                 </div>
             </div>

@@ -14,6 +14,8 @@ export class SocialArea extends Area
 
         this.center = this.references.items.get('center')[0].position
 
+        this.removeLegacyFigures()
+
         // Debug
         if(this.game.debug.active)
         {
@@ -31,6 +33,26 @@ export class SocialArea extends Area
         this.setAchievement()
     }
 
+    removeLegacyFigures()
+    {
+        // Legacy figures baked in areas.glb (names are cleaned of "PhysicalDynamic" by Objects)
+        const legacyNames = [ 'baguira', 'sudo', 'boy', 'twitch', 'bluesky', 'discord' ]
+
+        for(const object of this.objects.items)
+        {
+            const name = object.visual?.object3D?.name ?? ''
+
+            if(!legacyNames.some(legacy => name === legacy || name.startsWith(`${legacy}.`)))
+                continue
+
+            if(object.visual?.object3D)
+                object.visual.object3D.visible = false
+
+            if(object.physical?.body)
+                object.physical.body.setEnabled(false)
+        }
+    }
+
     setLinks()
     {
         const radius = 6
@@ -46,14 +68,14 @@ export class SocialArea extends Area
 
             this.interactivePoint = this.game.interactivePoints.create(
                 position,
-                link.name,
+                link.nameKey ? () => this.game.i18n.t(link.nameKey) : link.name,
                 link.align === 'left' ? InteractivePoints.ALIGN_LEFT : InteractivePoints.ALIGN_RIGHT,
                 InteractivePoints.STATE_CONCEALED,
                 () =>
                 {
                     if(link.url)
                         window.open(link.url, '_blank')
-                    else(link.modal)
+                    else if(link.modal)
                         this.game.modals.open(link.modal)
                 },
                 () =>
@@ -173,7 +195,7 @@ export class SocialArea extends Area
     {
         const interactiveArea = this.game.interactivePoints.create(
             this.references.items.get('onlyFans')[0].position,
-            'OnlyFans',
+            () => this.game.i18n.t('prompt.fans'),
             InteractivePoints.ALIGN_RIGHT,
             InteractivePoints.STATE_CONCEALED,
             () =>

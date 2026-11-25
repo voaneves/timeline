@@ -223,7 +223,7 @@ export class WaterSurface
         /**
          * Shore
          */
-        const shoreEdge = uniform(0.17)
+        const shoreEdge = uniform(0.16)
         
         const shoreNode = Fn(([terrainData]) =>
         {

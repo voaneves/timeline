@@ -148,13 +148,21 @@ export class Intro
             let cachedTexture = this.text.textures.get(name)
             if(!cachedTexture)
             {
-                const loader = this.game.resourcesLoader.getLoader('textureKtx')
+                const compressed = !!import.meta.env.VITE_COMPRESSED
+                const loader = this.game.resourcesLoader.getLoader(compressed ? 'textureKtx' : 'texture')
                 
-                const resourcePath = `intro/${name}Label.ktx`
+                const resourcePath = `intro/${name}Label.${compressed ? 'ktx' : 'png'}`
                 loader.load(
                     resourcePath,
                     (loadedTexture) =>
                     {
+                        if(!compressed)
+                        {
+                            loadedTexture.flipY = false
+                            loadedTexture.minFilter = THREE.LinearFilter
+                            loadedTexture.generateMipmaps = false
+                        }
+
                         this.text.textures.set(name, loadedTexture)
 
                         // Update material and mesh

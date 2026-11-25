@@ -208,36 +208,42 @@ export class InteractivePoints
         /**
          * Label
          */
-        // Canvas
+        // Canvas (fixed width so the texture can be redrawn when the language changes)
+        const getText = typeof text === 'function' ? text : () => text
         const height = 64
+        const canvasWidth = 1024
         const textPaddingLeft = align === InteractivePoints.ALIGN_LEFT ? 60 : 12
         const textPaddingRight = align === InteractivePoints.ALIGN_LEFT ? 12 : 60
         const textOffsetVertical = 2
         const font = `700 ${height}px "Amatic SC"`
 
         const canvas = document.createElement('canvas')
-        canvas.style.position = 'fixed'
-        canvas.style.zIndex = 999
-        canvas.style.top = 0
-        canvas.style.left = 0
-        // document.body.append(canvas)
-
-        const context = canvas.getContext('2d')
-        context.font = font
-
-        const textSize = context.measureText(text)
-        const width = Math.ceil(textSize.width) + textPaddingLeft + textPaddingRight + 2
-        canvas.width = width
+        canvas.width = canvasWidth
         canvas.height = height
 
-        context.fillStyle = '#000000'
-        context.fillRect(0, 0, width, height)
+        const context = canvas.getContext('2d')
+        const contentRatio = uniform(1)
+        let width = 1
 
-        context.font = font
-        context.fillStyle = '#ffffff'
-        context.textAlign = 'start'
-        context.textBaseline = 'middle'
-        context.fillText(text, textPaddingLeft + 1, height * 0.5 + textOffsetVertical)
+        const drawLabel = () =>
+        {
+            const value = getText()
+            context.font = font
+            const textSize = context.measureText(value)
+            width = Math.min(canvasWidth, Math.ceil(textSize.width) + textPaddingLeft + textPaddingRight + 2)
+
+            context.fillStyle = '#000000'
+            context.fillRect(0, 0, canvasWidth, height)
+
+            context.font = font
+            context.fillStyle = '#ffffff'
+            context.textAlign = 'start'
+            context.textBaseline = 'middle'
+            context.fillText(value, textPaddingLeft + 1, height * 0.5 + textOffsetVertical)
+
+            contentRatio.value = width / canvasWidth
+        }
+        drawLabel()
 
         const labelTexture = new THREE.Texture(canvas)
         labelTexture.minFilter = THREE.NearestFilter
@@ -259,7 +265,7 @@ export class InteractivePoints
                 uv().y
             )
 
-            const text = texture(labelTexture, _uv).r
+            const text = texture(labelTexture, vec2(_uv.x.mul(contentRatio), _uv.y)).r
             
             // Discard
             _uv.x.greaterThan(1).discard()
@@ -279,13 +285,28 @@ export class InteractivePoints
             labelMaterial
         )
         label.renderOrder = 6
-        label.scale.x = 0.75 * width / height
         label.scale.y = 0.75
         label.position.z = -0.01
-
-        label.position.x = align === InteractivePoints.ALIGN_LEFT ? 0 : - label.scale.x
         label.visible = false
         group.add(label)
+
+        const updateLabelSize = () =>
+        {
+            label.scale.x = 0.75 * width / height
+            label.position.x = align === InteractivePoints.ALIGN_LEFT ? 0 : - label.scale.x
+        }
+        updateLabelSize()
+
+        // Redraw on language change
+        if(typeof text === 'function')
+        {
+            this.game.i18n.events.on('change', () =>
+            {
+                drawLabel()
+                updateLabelSize()
+                labelTexture.needsUpdate = true
+            })
+        }
 
         /**
          * Diamond

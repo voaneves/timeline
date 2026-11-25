@@ -7,12 +7,32 @@ export class Options
         this.game = Game.getInstance()
         this.element = this.game.menu.items.get('options').contentElement
 
+        this.setLanguage()
         this.setSound()
         this.setQuality()
         this.setRespawn()
         this.setReset()
         this.setRenderer()
         this.setServer()
+    }
+
+    setLanguage()
+    {
+        const element = this.element.querySelector('.js-language-toggle')
+        const text = element.querySelector('span')
+
+        const update = () =>
+        {
+            text.textContent = this.game.i18n.lang === 'pt-BR' ? 'PT-BR' : 'EN'
+        }
+        update()
+
+        element.addEventListener('click', () =>
+        {
+            this.game.i18n.toggle()
+        })
+
+        this.game.i18n.events.on('change', update)
     }
 
     setSound()
@@ -26,17 +46,19 @@ export class Options
     {
         const element = this.element.querySelector('.js-quality-toggle')
         const text = element.querySelector('span')
-        text.textContent = this.game.quality.level === 0 ? 'High' : 'Low'
+        const update = () =>
+        {
+            text.textContent = this.game.i18n.t(this.game.quality.level === 0 ? 'options.quality.high' : 'options.quality.low')
+        }
+        update()
 
         element.addEventListener('click', () =>
         {
             this.game.quality.changeLevel(this.game.quality.level === 0 ? 1 : 0)
         })
 
-        this.game.quality.events.on('change', () =>
-        {
-            text.textContent = this.game.quality.level === 0 ? 'High' : 'Low'
-        })
+        this.game.quality.events.on('change', update)
+        this.game.i18n.events.on('change', update)
     }
 
     setRespawn()
@@ -73,7 +95,13 @@ export class Options
             text.textContent = 'WebGL'
 
             const tooltip = element.querySelector('.js-tooltip')
-            tooltip.innerHTML = /* html */`Your browser is <strong>not compatible</strong> with WebGPU resulting in performance loss`
+            tooltip.removeAttribute('data-i18n')
+            const updateTooltip = () =>
+            {
+                tooltip.innerHTML = this.game.i18n.t('options.renderer.webgl.tip')
+            }
+            updateTooltip()
+            this.game.i18n.events.on('change', updateTooltip)
         }
     }
 
@@ -82,6 +110,7 @@ export class Options
         const element = this.element.querySelector('.js-server')
         const text = element.querySelector('span')
         const tooltip = element.querySelector('.js-tooltip')
+        text.removeAttribute('data-i18n')
         
         const update = (connected) =>
         {
@@ -90,21 +119,22 @@ export class Options
                 element.classList.add('is-success')
                 element.classList.remove('is-danger')
                 
-                text.textContent = 'Online'
+                text.textContent = this.game.i18n.t('options.server.online')
 
-                tooltip.innerHTML = /* html */`Enjoy the <strong>multiplayer</strong> features`
+                tooltip.innerHTML = this.game.i18n.t('options.server.online.tip')
             }
             else
             {
                 element.classList.remove('is-success')
                 element.classList.add('is-danger')
-                text.textContent = 'Offline'
+                text.textContent = this.game.i18n.t('options.server.offline')
 
-                tooltip.innerHTML = /* html */`Should be back soon`
+                tooltip.innerHTML = this.game.i18n.t('options.server.offline.tip')
             }
         }
 
         update(this.game.server.connected)
+        this.game.i18n.events.on('change', () => update(this.game.server.connected))
 
         this.game.server.events.on('connected', () =>
         {

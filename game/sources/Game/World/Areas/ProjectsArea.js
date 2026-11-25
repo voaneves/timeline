@@ -87,7 +87,7 @@ export class ProjectsArea extends Area
     {
         this.interactivePoint = this.game.interactivePoints.create(
             this.references.items.get('interactivePoint')[0].position,
-            'Projects',
+            () => this.game.i18n.t('prompt.projects'),
             InteractivePoints.ALIGN_RIGHT,
             InteractivePoints.STATE_CONCEALED,
             () =>
@@ -468,7 +468,9 @@ export class ProjectsArea extends Area
         // Get resource and load
         this.images.getResourceAndLoad = (key) =>
         {
-            const path = `projects/images/${key}`
+            const compressed = !!import.meta.env.VITE_COMPRESSED
+            const ext = compressed ? 'ktx' : 'png'
+            const path = `projects/images/${key.replace(/\.(ktx|png)$/, '')}.${ext}`
             
             // Try to retrieve resource
             let resource = this.images.resources.get(key)
@@ -479,12 +481,19 @@ export class ProjectsArea extends Area
                 resource = {}
                 resource.loaded = false
 
-                const loader = this.game.resourcesLoader.getLoader('textureKtx')
+                const loader = this.game.resourcesLoader.getLoader(compressed ? 'textureKtx' : 'texture')
 
                 loader.load(
                     path,
                     (loadedTexture) =>
                     {
+                        if(!compressed)
+                        {
+                            loadedTexture.flipY = false
+                            loadedTexture.colorSpace = THREE.SRGBColorSpace
+                            loadedTexture.minFilter = THREE.LinearFilter
+                            loadedTexture.generateMipmaps = false
+                        }
                         resource.texture = loadedTexture
                         resource.colorSpace = THREE.SRGBColorSpace
                         resource.flipY = false
@@ -1082,9 +1091,14 @@ export class ProjectsArea extends Area
             {
                 this.distinctions.status = 'visible'
 
+                // Guard: no distinctions (empty list) => nothing to show
+                const currentDistinctions = this.navigation.current.distinctions ?? []
+                const positions = this.distinctions.positions[currentDistinctions.length - 1]
+                if(!positions)
+                    return
+
                 let i = 0
-                const positions = this.distinctions.positions[this.navigation.current.distinctions.length - 1]
-                for(const name of this.navigation.current.distinctions)
+                for(const name of currentDistinctions)
                 {
                     const item = this.distinctions.items[name]
 

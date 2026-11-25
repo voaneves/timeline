@@ -19,7 +19,7 @@ export class TimeMachineArea extends Area
     {
         this.interactivePoint = this.game.interactivePoints.create(
             this.references.items.get('interactivePoint')[0].position,
-            'Time Machine',
+            () => this.game.i18n.t('prompt.timeMachine'),
             InteractivePoints.ALIGN_RIGHT,
             InteractivePoints.STATE_CONCEALED,
             () =>
