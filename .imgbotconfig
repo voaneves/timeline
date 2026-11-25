@@ -1,0 +1,8 @@
+{
+  "ignoredFiles": [
+    "game/static/**",
+    "game/resources/**",
+    "assets/brand/**",
+    "assets/buttons/**"
+  ]
+}
