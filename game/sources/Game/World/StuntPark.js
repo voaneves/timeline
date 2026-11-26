@@ -271,7 +271,7 @@ export class StuntPark
     addTurboPad(x, z, yaw, width = 3.2, length = 4.4)
     {
         const g = new THREE.Group()
-        g.position.set(x, 0.04, z)
+        g.position.set(x, 0.06, z)
         g.rotation.y = yaw
 
         const frame = new THREE.Mesh(new THREE.BoxGeometry(width + 0.3, 0.05, length + 0.3), this.mats.dark)
@@ -279,7 +279,7 @@ export class StuntPark
 
         const pad = new THREE.Mesh(new THREE.PlaneGeometry(width, length), this.mats.turboPad)
         pad.rotation.x = -Math.PI * 0.5
-        pad.position.y = 0.032
+        pad.position.y = 0.035
         g.add(pad)
 
         this.group.add(g)
@@ -338,12 +338,12 @@ export class StuntPark
         this.addStuntHoop(-59.0, 4.4, -34.0, 0, 2.45, '#e879f9', '🌀 TABLETOP HOOP! +550')
 
         // ====================================================================
-        // 3. SALTO POR DO SOL SUDOESTE (-32, 0, 19) — Rampa Costeira + Duplo Aro
+        // 3. SALTO POR DO SOL SUDOESTE (-33, 0, 17.5) — Rampa Seca + Duplo Aro
         // ====================================================================
-        this.addTurboPad(-32.0, 24.5, Math.PI)
-        this.addRamp(-32.0, 20.0, Math.PI, 3.8, 5.0, 1.75, this.mats.orangeGlow)
-        this.addStuntHoop(-32.0, 3.8, 15.2, 0, 2.45, '#fb923c', '🌅 SALTO COSTEIRO! +500')
-        this.addStuntHoop(-32.0, 4.3, 11.4, 0, 2.55, '#34cfc4', '✨ DUPLO ARO! +800')
+        this.addTurboPad(-33.0, 21.8, Math.PI)
+        this.addRamp(-33.0, 17.4, Math.PI, 3.8, 5.0, 1.75, this.mats.orangeGlow)
+        this.addStuntHoop(-33.0, 3.8, 12.8, 0, 2.45, '#fb923c', '🌅 SALTO COSTEIRO! +500')
+        this.addStuntHoop(-33.0, 4.3, 9.2, 0, 2.55, '#34cfc4', '✨ DUPLO ARO! +800')
     }
 
     update()

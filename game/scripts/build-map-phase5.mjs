@@ -361,6 +361,14 @@ const PAVED_CIRCLES = [
     [  16,  12,  7.5 ], // Musculacao
 ]
 
+// Pistas de Acrobacias (sem grama/arvores/postes invadindo rampas e turbo pads)
+const STUNT_ZONES = [
+    { xMin: 26.5, xMax: 51.5, zMin:   6.8, zMax:  13.2 }, // East Stunt Cross X
+    { xMin: 36.2, xMax: 41.8, zMin:  12.0, zMax:  25.5 }, // East Stunt South arm
+    { xMin: -62.2, xMax: -55.8, zMin: -47.2, zMax: -20.8 }, // West Tabletop
+    { xMin: -36.2, xMax: -29.8, zMin:  14.2, zMax:  24.8 }, // SW Beach Sunset Ramp
+]
+
 const SAFE_PLAZA_POINTS = [ ...Object.values(AREA_TARGETS), ...PARK_ARENAS ]
 
 const evalTerrain = (wx, wz) =>
@@ -441,6 +449,12 @@ const evalTerrain = (wx, wz) =>
     let paved = 0
     for(const [ px, pz, pr ] of PAVED_CIRCLES)
         paved = Math.max(paved, smoothstep(pr + 1.5, pr - 1.0, Math.hypot(wx - px, wz - pz)))
+    for(const st of STUNT_ZONES)
+    {
+        const dxOut = Math.max(st.xMin - wx, 0, wx - st.xMax)
+        const dzOut = Math.max(st.zMin - wz, 0, wz - st.zMax)
+        paved = Math.max(paved, smoothstep(1.6, 0.0, Math.hypot(dxOut, dzOut)))
+    }
     const dryCore = smoothstep(-0.8, -3.4, dCoast)
     const g = dryCore * (1 - roadMask) * (1 - paved)
 
@@ -907,6 +921,11 @@ const isDryClearSpot = (wx, wz, minRoadDist = 4.8) =>
     for(const r of Object.values(RESPAWN_TARGETS))
     {
         if(Math.hypot(wx - r.x, wz - r.z) < 5.2)
+            return false
+    }
+    for(const st of STUNT_ZONES)
+    {
+        if(wx >= st.xMin - 2.2 && wx <= st.xMax + 2.2 && wz >= st.zMin - 2.2 && wz <= st.zMax + 2.2)
             return false
     }
     return true
