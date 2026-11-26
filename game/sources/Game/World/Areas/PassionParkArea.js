@@ -4,6 +4,7 @@ import { Howler } from 'howler'
 import { InteractivePoints } from '../../InteractivePoints.js'
 import { MeshDefaultMaterial } from '../../Materials/MeshDefaultMaterial.js'
 import { Area } from './Area.js'
+import { ParkArcadeHud } from './ParkArcadeHud.js'
 
 /**
  * Parque das Paixoes — Distritos Autorais (Península Leste):
@@ -53,13 +54,212 @@ export class PassionParkArea extends Area
         }
 
         this.completed = new Set()
+        this.active = null
+        this.spectacles = []
+        this.skyOverrideActive = false
+        this.vehicleAuraTimer = 0
+        this.finaleTimer = 0
+        this.gymHitLockTimer = 0
+
+        this.hud = new ParkArcadeHud(this.game, {
+            onAbort: () => this.stopActiveGame(true),
+            onReplay: (id) => this.replayGame(id),
+            onTimingHit: () => this.handleGymTimingHit()
+        })
+
+        this.fxGroup = new THREE.Group()
+        this.game.scene.add(this.fxGroup)
+
         this.setMaterials()
+        this.setGuideArrow()
+        this.setVehicleAura()
         this.setAgroArena()
         this.setTechArena()
         this.setBusinessArena()
         this.setMusicArena()
         this.setGymArena()
+        this.setupArcadeKeys()
         this.setAchievement()
+    }
+
+    alphaGlowMat(hex, opacity = 0.55, mult = 1.65)
+    {
+        const m = new THREE.MeshBasicNodeMaterial({
+            transparent: true,
+            depthWrite: false,
+            side: THREE.DoubleSide
+        })
+        m.outputNode = Fn(() => vec4(MeshDefaultMaterial.revealDiscardNodeBuilder(this.game, color(hex).mul(mult)), opacity))()
+        return m
+    }
+
+    setGuideArrow()
+    {
+        const group = new THREE.Group()
+        const mat = this.glowMat('#fde047', 2.0)
+        const shaft = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.14, 0.65), mat)
+        shaft.position.z = -0.18
+        group.add(shaft)
+        const tip = new THREE.Mesh(new THREE.ConeGeometry(0.32, 0.58, 4), mat)
+        tip.rotation.x = Math.PI * 0.5
+        tip.position.z = 0.36
+        group.add(tip)
+        group.visible = false
+        this.fxGroup.add(group)
+        this.guideArrow = group
+    }
+
+    setVehicleAura()
+    {
+        const mat = this.alphaGlowMat('#38bdf8', 0.72, 2.2)
+        const ring = new THREE.Mesh(new THREE.RingGeometry(1.55, 1.98, 28), mat)
+        ring.rotation.x = -Math.PI * 0.5
+        ring.visible = false
+        this.fxGroup.add(ring)
+        this.vehicleAura = ring
+    }
+
+    setupArcadeKeys()
+    {
+        window.addEventListener('keydown', (e) =>
+        {
+            if(!this.active) return
+            if(e.code === 'Space' && this.active.id === 'gym' && this.active.phase === 'playing')
+            {
+                e.preventDefault()
+                e.stopImmediatePropagation()
+                this.handleGymTimingHit()
+            }
+        }, true)
+    }
+
+    replayGame(id)
+    {
+        if(id === 'agro') this.startAgroGame()
+        else if(id === 'tech') this.startTechGame()
+        else if(id === 'business') this.startBizGame()
+        else if(id === 'music') this.startMusicGame()
+        else if(id === 'gym') this.startGymGame()
+    }
+
+    stopActiveGame(restoreSky = true)
+    {
+        if(!this.active) return
+        const id = this.active.id
+        this.active = null
+        this.hud.hideHud()
+        if(this.guideArrow) this.guideArrow.visible = false
+
+        if(id === 'agro' && this.agro)
+        {
+            for(const p of this.agro.pods) p.mesh.visible = false
+        }
+        else if(id === 'tech' && this.tech)
+        {
+            this.tech.beam.visible = false
+            for(const sw of this.tech.sweepers) sw.mesh.visible = false
+            for(const g of this.tech.glitches) g.mesh.visible = false
+            if(restoreSky && this.skyOverrideActive)
+            {
+                this.game.dayCycles?.override?.end(0.5)
+                this.skyOverrideActive = false
+            }
+        }
+        else if(id === 'business' && this.biz)
+        {
+            this.biz.unicornOrb.visible = false
+            this.biz.diamondOrb.mesh.visible = false
+            this.biz.rampArrow.visible = false
+            for(const b of this.biz.bears) b.mesh.visible = false
+            for(const o of this.biz.ipos) o.mesh.visible = false
+            for(const c of this.biz.coins) c.mesh.visible = !c.collected
+        }
+        else if(id === 'music' && this.music)
+        {
+            for(const p of this.music.pads)
+            {
+                p.spotlight.visible = false
+                p.flashTimer = 0
+            }
+        }
+        else if(id === 'gym' && this.gym)
+        {
+            this.hud.setTimingGauge(false)
+            for(const l of this.gym.lamps) l.material = this.palette.warmBulb
+        }
+    }
+
+    startGameCommon(state)
+    {
+        this.stopActiveGame(true)
+        this.hud.hideResult()
+        this.active = {
+            ...state,
+            phase: 'countdown',
+            countdown: 2.4,
+            lastBeat: 4,
+            combo: 1,
+            comboTimer: 0
+        }
+        this.hud.showHud({
+            id: state.id,
+            icon: state.icon,
+            title: state.title,
+            scoreLabel: state.scoreLabel,
+            timeLabel: state.timeLabel,
+            comboLabel: state.comboLabel,
+            hint: state.hint
+        })
+    }
+
+    spawnVictorySpectacle(pos, hexColor = '#ffd166', medal = 'gold')
+    {
+        const pillarMat = this.alphaGlowMat(hexColor, 0.55, 2.2)
+        const pillar = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.8, 22, 16, 1, true), pillarMat)
+        pillar.position.set(pos.x, 11, pos.z)
+        this.fxGroup.add(pillar)
+
+        const ringMat = this.alphaGlowMat(hexColor, 0.85, 2.2)
+        const ring = new THREE.Mesh(new THREE.RingGeometry(0.9, 1.35, 28), ringMat)
+        ring.rotation.x = -Math.PI * 0.5
+        ring.position.set(pos.x, 0.16, pos.z)
+        this.fxGroup.add(ring)
+
+        this.spectacles.push({ pillar, ring, age: 0, maxAge: 4.5 })
+        this.vehicleAuraTimer = 12.0
+
+        if(this.game.world?.confetti)
+        {
+            const base = pos.clone().setY(2.2)
+            this.game.world.confetti.pop(base)
+            setTimeout(() => this.game.world?.confetti?.pop(base.clone().add(new THREE.Vector3(2.4, 0.8, -1.8))), 260)
+            setTimeout(() => this.game.world?.confetti?.pop(base.clone().add(new THREE.Vector3(-2.4, 1.1, 2.0))), 520)
+        }
+        this.hud.playFanfare(medal)
+    }
+
+    finishGame({ id, title, score, scoreText, medal, color, fxPos, summaryText })
+    {
+        this.stopActiveGame(true)
+        const rec = this.hud.saveRecord(id, score, medal)
+        if(medal !== 'none')
+        {
+            this.unlockChallenge(id, fxPos)
+            this.spawnVictorySpectacle(fxPos, color, medal)
+        }
+        else
+        {
+            this.hud.playErrorBuzz()
+        }
+        this.hud.showResult({
+            id,
+            title,
+            scoreText,
+            medal,
+            bestScore: rec.bestScore,
+            isNewBest: rec.isNewBest,
+            summaryText
+        })
     }
 
     mat(hex)
@@ -350,13 +550,13 @@ export class PassionParkArea extends Area
         zoneRing.position.copy(zonePos)
         this.parkGroup.add(zoneRing)
 
-        // 5 fardos de feno cilindricos empurraveis
+        // 5 fardos de feno cilindricos empurraveis (posicionados fora do anel do Silo)
         const baleSpecs = [
-            [ cx - 0.2, 0.50, cz + 1.8 ],
-            [ cx - 1.2, 0.50, cz + 4.1 ],
-            [ cx - 3.6, 0.50, cz + 4.3 ],
-            [ cx + 0.6, 0.50, cz + 3.6 ],
-            [ cx + 0.4, 0.50, cz - 0.6 ],
+            [ cx + 2.2, 0.50, cz + 2.0 ],
+            [ cx + 1.6, 0.50, cz + 4.8 ],
+            [ cx - 1.2, 0.50, cz + 6.0 ],
+            [ cx - 5.2, 0.50, cz + 5.6 ],
+            [ cx - 7.0, 0.50, cz + 2.2 ],
         ]
         const bales = []
         for(const [ bx, by, bz ] of baleSpecs)
@@ -375,7 +575,23 @@ export class PassionParkArea extends Area
             bales.push({ obj, start: new THREE.Vector3(bx, by, bz), delivered: false })
         }
 
-        this.agro = { rotor, zonePos, zoneRing, bales, crops, delivered: 0 }
+        // Capsulas douradas da Colheita Turbo (visiveis durante o minigame)
+        const podGeo = new THREE.OctahedronGeometry(0.55, 0)
+        const podMat = this.glowMat('#facc15', 1.95)
+        const podCoords = [
+            [ cx - 6.2, cz + 0.5 ], [ cx - 6.4, cz + 4.8 ], [ cx - 2.2, cz + 6.4 ], [ cx + 2.0, cz + 6.2 ],
+            [ cx + 6.6, cz + 2.4 ], [ cx + 0.2, cz + 1.2 ], [ cx - 4.2, cz + 6.8 ], [ cx + 4.4, cz - 0.4 ],
+        ]
+        const pods = podCoords.map(([ px, pz ], i) =>
+        {
+            const mesh = new THREE.Mesh(podGeo, podMat)
+            mesh.position.set(px, 0.88, pz)
+            mesh.visible = false
+            this.parkGroup.add(mesh)
+            return { mesh, pos: new THREE.Vector3(px, 0.88, pz), active: false, phase: i * 0.7 }
+        })
+
+        this.agro = { rotor, zonePos, zoneRing, bales, crops, pods, delivered: 0 }
 
         this.game.interactivePoints.create(
             new THREE.Vector3(cx - 3.4, 1.5, cz - 0.4),
@@ -384,22 +600,46 @@ export class PassionParkArea extends Area
             InteractivePoints.STATE_CONCEALED,
             () =>
             {
-                this.agro.delivered = 0
-                for(const b of this.agro.bales)
-                {
-                    b.delivered = false
-                    const bodyPhys = b.obj.physical.body
-                    bodyPhys.setTranslation(b.start, true)
-                    bodyPhys.setLinvel({ x: 0, y: 0, z: 0 }, true)
-                    bodyPhys.setAngvel({ x: 0, y: 0, z: 0 }, true)
-                }
-                this.sounds.step.play(0)
+                if(this.active?.id === 'agro') return
+                this.startAgroGame()
             },
             () => this.game.inputs.interactiveButtons.addItems([ 'interact' ]),
             () => this.game.inputs.interactiveButtons.removeItems([ 'interact' ]),
             () => this.game.inputs.interactiveButtons.removeItems([ 'interact' ]),
             'surface'
         )
+    }
+
+    startAgroGame()
+    {
+        this.agro.delivered = 0
+        for(const b of this.agro.bales)
+        {
+            b.delivered = false
+            b.respawnAt = 0
+            const bodyPhys = b.obj.physical.body
+            bodyPhys.setTranslation(b.start, true)
+            bodyPhys.setLinvel({ x: 0, y: 0, z: 0 }, true)
+            bodyPhys.setAngvel({ x: 0, y: 0, z: 0 }, true)
+        }
+        for(const p of this.agro.pods)
+        {
+            p.active = true
+            p.mesh.visible = true
+        }
+        this.startGameCommon({
+            id: 'agro',
+            icon: '🌾',
+            title: 'Colheita Turbo',
+            scoreLabel: 'PONTOS',
+            comboLabel: 'COMBO',
+            center: new THREE.Vector3(24, 0, -16),
+            timeLeft: 35,
+            score: 0,
+            podsRemaining: this.agro.pods.length,
+            baleCount: 0,
+            hint: 'Pegue cápsulas douradas e empurre fardos para o Silo (+350)! Ouro: 2800'
+        })
     }
 
     // ========================================================================
@@ -525,7 +765,44 @@ export class PassionParkArea extends Area
             nodes.push({ pos: new THREE.Vector3(nx, 0, nz), beacon, stripe, conduit, online: false })
         }
 
-        this.tech = { dishHead, holoOrb, nodes, onlineCount: 0, standbyMat, onlineMat }
+        const holoCenter = new THREE.Vector3(cx, 4.35, cz - 0.7)
+        const targetMat = this.glowMat('#38bdf8', 2.6)
+
+        // 2 Feixes laser vermelhos de Firewall varrendo a arena durante o Overclock
+        const laserMat = this.glowMat('#ef4444', 2.4)
+        const sweepers = [ 0, Math.PI ].map((offset) =>
+        {
+            const pivot = new THREE.Group()
+            pivot.position.set(cx, 0.62, cz - 0.7)
+            const bar = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.22, 6.2), laserMat)
+            bar.position.z = 3.2
+            pivot.add(bar)
+            pivot.visible = false
+            this.parkGroup.add(pivot)
+            return { mesh: pivot, offset }
+        })
+
+        // Feixe vivo conectando o Holo Core ao no-alvo atual
+        const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 1, 8), targetMat)
+        beam.visible = false
+        this.parkGroup.add(beam)
+
+        // 2 Orbs Glitch nos flancos para Ondas 2 e 3
+        const glitchMat = this.glowMat('#e879f9', 2.3)
+        const glitchCoords = [ [ cx - 2.6, cz + 2.9 ], [ cx + 2.6, cz + 2.9 ] ]
+        const glitches = glitchCoords.map(([ gx, gz ]) =>
+        {
+            const mesh = new THREE.Mesh(new THREE.OctahedronGeometry(0.5, 0), glitchMat)
+            mesh.position.set(gx, 0.9, gz)
+            mesh.visible = false
+            this.parkGroup.add(mesh)
+            return { pos: new THREE.Vector3(gx, 0.9, gz), mesh }
+        })
+
+        this.tech = {
+            dishHead, holoOrb, holoCenter, nodes, sweepers, beam, glitches,
+            onlineCount: 0, standbyMat, onlineMat, targetMat
+        }
 
         this.game.interactivePoints.create(
             new THREE.Vector3(cx, 1.5, cz + 1.3),
@@ -534,22 +811,73 @@ export class PassionParkArea extends Area
             InteractivePoints.STATE_CONCEALED,
             () =>
             {
-                this.tech.onlineCount = 0
-                this.tech.holoOrb.material = this.tech.standbyMat
-                for(const n of this.tech.nodes)
-                {
-                    n.online = false
-                    n.beacon.material = this.tech.standbyMat
-                    n.stripe.material = this.tech.standbyMat
-                    n.conduit.material = this.tech.standbyMat
-                }
-                this.sounds.step.play(0)
+                if(this.active?.id === 'tech') return
+                this.startTechGame()
             },
             () => this.game.inputs.interactiveButtons.addItems([ 'interact' ]),
             () => this.game.inputs.interactiveButtons.removeItems([ 'interact' ]),
             () => this.game.inputs.interactiveButtons.removeItems([ 'interact' ]),
             'surface'
         )
+    }
+
+    startTechGame()
+    {
+        this.tech.onlineCount = 0
+        this.tech.holoOrb.material = this.tech.standbyMat
+        for(const n of this.tech.nodes)
+        {
+            n.online = false
+            n.beacon.material = this.tech.standbyMat
+            n.stripe.material = this.tech.standbyMat
+            n.conduit.material = this.tech.standbyMat
+        }
+        for(const sw of this.tech.sweepers) sw.mesh.visible = true
+        this.game.dayCycles?.override?.start({ progress: 0.86, fogNearRatio: 0.72, fogFarRatio: 1.25 }, 0.8)
+        this.skyOverrideActive = true
+
+        this.startGameCommon({
+            id: 'tech',
+            icon: '⚡',
+            title: 'Overclock do Cluster',
+            scoreLabel: 'ONDA',
+            comboLabel: 'COMBO',
+            center: new THREE.Vector3(54, 0, -10),
+            timeLeft: 28,
+            score: 0,
+            wave: 1,
+            waveStep: 0,
+            waveTargets: [ 4, 5, 6 ],
+            sweeperAngle: 0,
+            zapCooldown: 0,
+            targetType: 'node',
+            targetIdx: 0,
+            hint: 'Conecte o nó marcado pelo laser ciano! Desvie dos feixes vermelhos!'
+        })
+        this.pickNextTechTarget()
+    }
+
+    pickNextTechTarget()
+    {
+        if(!this.active || this.active.id !== 'tech') return
+        const poolCount = this.active.wave >= 2 ? 6 : 4
+        let nextIdx = (this.active.targetIdx + 1 + Math.floor(Math.random() * (poolCount - 1))) % poolCount
+        this.active.targetIdx = nextIdx
+        this.active.targetType = nextIdx < 4 ? 'node' : 'glitch'
+
+        for(let i = 0; i < this.tech.nodes.length; i++)
+        {
+            const n = this.tech.nodes[i]
+            const isTarget = this.active.targetType === 'node' && i === nextIdx
+            const m = isTarget ? this.tech.targetMat : (n.online ? this.tech.onlineMat : this.tech.standbyMat)
+            n.beacon.material = m
+            n.stripe.material = m
+            n.conduit.material = m
+        }
+        for(let g = 0; g < this.tech.glitches.length; g++)
+        {
+            this.tech.glitches[g].mesh.visible = (this.active.targetType === 'glitch' && nextIdx - 4 === g)
+        }
     }
 
     // ========================================================================
@@ -676,7 +1004,66 @@ export class PassionParkArea extends Area
             coins.push({ mesh, pos: new THREE.Vector3(rx, 0.85, rz), collected: false, phase: i * 1.1 })
         }
 
-        this.biz = { bars, arrow, coins, collectedCount: 0 }
+        // Rampa de Salto Bull Market na borda SE + Orbe Unicornio Aereo ($250M!)
+        const rampGroup = new THREE.Group()
+        const rampSlope = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.22, 4.4), this.palette.goldGlow)
+        rampSlope.position.set(0, 0.62, 0)
+        rampSlope.rotation.x = -0.29
+        rampGroup.add(rampSlope)
+        const rampArrow = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.25, 3.6), this.glowMat('#38bdf8', 2.0))
+        rampArrow.position.set(0, 0.65, 0)
+        rampArrow.rotation.x = -0.29
+        rampArrow.visible = false
+        rampGroup.add(rampArrow)
+        rampGroup.rotation.y = Math.PI * 0.72
+        this.addStatic(rampGroup, cx + 6.4, 0, cz + 5.2, [
+            { shape: 'cuboid', parameters: [ 1.6, 0.14, 2.2 ], position: { x: 0, y: 0.62, z: 0 }, rotation: new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -0.29) }
+        ])
+
+        const unicornOrb = new THREE.Mesh(new THREE.IcosahedronGeometry(0.68, 0), this.glowMat('#e879f9', 2.4))
+        const unicornPos = new THREE.Vector3(cx + 5.1, 2.45, cz + 3.9)
+        unicornOrb.position.copy(unicornPos)
+        unicornOrb.visible = false
+        this.parkGroup.add(unicornOrb)
+
+        // 6 Orbs IPO dourados + 1 Diamante para coleta em velocidade
+        const ipoGeo = new THREE.OctahedronGeometry(0.45, 0)
+        const ipoMat = this.glowMat('#fde047', 1.9)
+        const ipos = []
+        for(let i = 0; i < 6; i++)
+        {
+            const a = (i / 6) * Math.PI * 2 + 0.2
+            const px = cx + Math.cos(a) * 5.2
+            const pz = cz + Math.sin(a) * 5.2
+            const mesh = new THREE.Mesh(ipoGeo, ipoMat)
+            mesh.position.set(px, 0.85, pz)
+            mesh.visible = false
+            this.parkGroup.add(mesh)
+            ipos.push({ mesh, pos: new THREE.Vector3(px, 0.85, pz), active: false, phase: i * 0.9 })
+        }
+
+        const diamondMesh = new THREE.Mesh(new THREE.OctahedronGeometry(0.62, 0), this.glowMat('#38bdf8', 2.3))
+        diamondMesh.position.set(cx - 4.8, 1.0, cz - 3.6)
+        diamondMesh.visible = false
+        this.parkGroup.add(diamondMesh)
+        const diamondOrb = { mesh: diamondMesh, pos: diamondMesh.position.clone(), active: false }
+
+        // 2 Zonas vermelhas Bear Market orbitando a praca
+        const bearMat = this.alphaGlowMat('#ef4444', 0.65, 2.1)
+        const bears = [ 0, Math.PI ].map((phase) =>
+        {
+            const mesh = new THREE.Mesh(new THREE.RingGeometry(1.5, 2.1, 24), bearMat)
+            mesh.rotation.x = -Math.PI * 0.5
+            mesh.position.set(cx, 0.14, cz)
+            mesh.visible = false
+            this.parkGroup.add(mesh)
+            return { mesh, phase, pos: new THREE.Vector3(cx, 0.14, cz) }
+        })
+
+        this.biz = {
+            bars, arrow, coins, collectedCount: 0,
+            rampArrow, unicornOrb, unicornPos, ipos, diamondOrb, bears
+        }
 
         this.game.interactivePoints.create(
             new THREE.Vector3(cx - 2.9, 1.6, cz + 2.7),
@@ -685,20 +1072,40 @@ export class PassionParkArea extends Area
             InteractivePoints.STATE_CONCEALED,
             () =>
             {
-                this.biz.collectedCount = 0
-                for(let i = 0; i < 5; i++)
-                {
-                    this.biz.coins[i].collected = false
-                    this.biz.coins[i].mesh.visible = true
-                    this.biz.bars[i].targetScaleY = 0.25
-                }
-                this.sounds.step.play(0)
+                if(this.active?.id === 'business') return
+                this.startBizGame()
             },
             () => this.game.inputs.interactiveButtons.addItems([ 'interact' ]),
             () => this.game.inputs.interactiveButtons.removeItems([ 'interact' ]),
             () => this.game.inputs.interactiveButtons.removeItems([ 'interact' ]),
             'surface'
         )
+    }
+
+    startBizGame()
+    {
+        for(const b of this.biz.bars) b.targetScaleY = 0.2
+        for(const c of this.biz.coins) c.mesh.visible = false
+        for(const o of this.biz.ipos) { o.active = true; o.mesh.visible = true }
+        this.biz.diamondOrb.active = true
+        this.biz.diamondOrb.mesh.visible = true
+        this.biz.unicornOrb.visible = true
+        this.biz.rampArrow.visible = true
+        for(const br of this.biz.bears) br.mesh.visible = true
+
+        this.startGameCommon({
+            id: 'business',
+            icon: '📈',
+            title: 'Bull Market Rush',
+            scoreLabel: 'VALUATION',
+            comboLabel: 'MULT',
+            center: new THREE.Vector3(56, 0, 22),
+            timeLeft: 35,
+            score: 0,
+            unicornReady: true,
+            bearCooldown: 0,
+            hint: 'Pegue IPOs, salte na Rampa SE até o Unicórnio (+$250M) e fuja dos anéis vermelhos!'
+        })
     }
 
     // ========================================================================
@@ -839,7 +1246,12 @@ export class PassionParkArea extends Area
                 sharpKey.position.set(spec.x + 1.0, 0.09, spec.z - 0.55)
                 this.parkGroup.add(sharpKey)
             }
-            pads.push({ index: i, mesh, pos: new THREE.Vector3(spec.x, 0.06, spec.z), freq: spec.freq, idleMat, hotMat, inside: false, flashTimer: 0 })
+            const spotlightMat = this.alphaGlowMat(spec.col, 0.36, 2.2)
+            const spotlight = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 0.95, 7.5, 14, 1, true), spotlightMat)
+            spotlight.position.set(spec.x, 3.85, spec.z)
+            spotlight.visible = false
+            this.parkGroup.add(spotlight)
+            pads.push({ index: i, mesh, spotlight, pos: new THREE.Vector3(spec.x, 0.06, spec.z), freq: spec.freq, idleMat, hotMat, inside: false, flashTimer: 0 })
         }
 
         // Notas musicais esculpidas flutuantes (cabeca + haste + colchete)
@@ -872,28 +1284,55 @@ export class PassionParkArea extends Area
             InteractivePoints.STATE_CONCEALED,
             () =>
             {
-                this.music.sequenceStep = 0
-                this.music.pads.forEach((p, idx) =>
-                {
-                    setTimeout(() =>
-                    {
-                        this.playSynthTone(p.freq, 0.45, idx % 2 === 0 ? 'triangle' : 'sine', 0.11)
-                        p.flashTimer = 0.4
-                    }, idx * 170)
-                })
-                this.game.notifications?.show(
-                    /* html */`<div class="discovery">${this.game.i18n.t('park.music.guide')}</div>`,
-                    'discovery',
-                    3.5,
-                    null,
-                    'park-music-guide'
-                )
+                if(this.active?.id === 'music') return
+                this.startMusicGame()
             },
             () => this.game.inputs.interactiveButtons.addItems([ 'interact' ]),
             () => this.game.inputs.interactiveButtons.removeItems([ 'interact' ]),
             () => this.game.inputs.interactiveButtons.removeItems([ 'interact' ]),
             'surface'
         )
+    }
+
+    startMusicGame()
+    {
+        this.startGameCommon({
+            id: 'music',
+            icon: '🎹',
+            title: 'Show das Luzes',
+            scoreLabel: 'ROUND',
+            comboLabel: 'VIDAS',
+            center: new THREE.Vector3(28, 0, 38),
+            timeLeft: 20,
+            score: 0,
+            round: 1,
+            lives: 3,
+            subPhase: 'watch',
+            sequence: [],
+            watchIdx: 0,
+            watchTimer: 0.45,
+            playIdx: 0,
+            beatTimer: 0,
+            beatStep: 0,
+            hint: 'Observe as luzes do palco e repita nos pads!'
+        })
+        this.setupMusicRound(1)
+    }
+
+    setupMusicRound(round)
+    {
+        if(!this.active || this.active.id !== 'music') return
+        const len = round === 1 ? 3 : (round === 2 ? 5 : 7)
+        const seq = []
+        for(let i = 0; i < len; i++)
+            seq.push(Math.floor(Math.random() * 4))
+        this.active.round = round
+        this.active.sequence = seq
+        this.active.subPhase = 'watch'
+        this.active.watchIdx = 0
+        this.active.watchTimer = 0.55
+        this.active.playIdx = 0
+        this.active.timeLeft = 16 + round * 3
     }
 
     // ========================================================================
@@ -912,6 +1351,7 @@ export class PassionParkArea extends Area
 
         // Pergolado Industrial aberto (4 colunas + trelicas superiores + 4 refletores quentes)
         const pergola = new THREE.Group()
+        const lamps = []
         for(const [ px, pz ] of [ [-3.8,-2.8], [3.8,-2.8], [-3.8,2.8], [3.8,2.8] ])
         {
             const col = new THREE.Mesh(new THREE.BoxGeometry(0.24, 3.8, 0.24), this.palette.steel)
@@ -920,6 +1360,7 @@ export class PassionParkArea extends Area
             const lamp = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.12, 0.28), this.palette.warmBulb)
             lamp.position.set(px * 0.85, 3.68, pz * 0.85)
             pergola.add(lamp)
+            lamps.push(lamp)
         }
         for(const pz of [ -2.8, 2.8 ])
         {
@@ -1030,6 +1471,7 @@ export class PassionParkArea extends Area
 
         // 4 Kettlebells dinamicos com som metalico
         const kbMats = [ this.palette.redPlate, this.palette.bluPlate, this.palette.ylwPlate, this.palette.teal ]
+        const kettlebells = []
         for(let i = 0; i < 4; i++)
         {
             const kb = new THREE.Group()
@@ -1038,12 +1480,15 @@ export class PassionParkArea extends Area
             const grip = new THREE.Mesh(new THREE.TorusGeometry(0.14, 0.035, 6, 14, Math.PI), this.palette.dark)
             grip.position.y = 0.2
             kb.add(grip)
-            this.addDynamic(kb, cx - 1.3 + i * 1.15, 0.34, cz + 1.55, [
+            const kx = cx - 1.3 + i * 1.15
+            const kz = cz + 1.55
+            const obj = this.addDynamic(kb, kx, 0.34, kz, [
                 { shape: 'ball', parameters: [ 0.25 ] }
             ], 0.35, 'hitMetal')
+            kettlebells.push({ obj, start: new THREE.Vector3(kx, 0.34, kz) })
         }
 
-        this.gym = { barGroup, plateStages, level: 0, liftAnim: 0, baseY: 1.32 }
+        this.gym = { barGroup, plateStages, lamps, kettlebells, level: 0, liftAnim: 0, baseY: 1.32, cx, cz }
 
         this.game.interactivePoints.create(
             new THREE.Vector3(cx + 1.3, 1.5, cz - 0.2),
@@ -1052,35 +1497,139 @@ export class PassionParkArea extends Area
             InteractivePoints.STATE_CONCEALED,
             () =>
             {
-                this.gym.level = (this.gym.level + 1) % 5
-                for(let i = 0; i < this.gym.plateStages.length; i++)
+                if(this.active?.id === 'gym')
                 {
-                    const vis = i <= this.gym.level
-                    this.gym.plateStages[i].forEach(m => { m.visible = vis })
+                    if(this.active.phase === 'playing')
+                        this.handleGymTimingHit()
+                    return
                 }
-                this.gym.liftAnim = 1.0
-                this.sounds.step.play(this.gym.level)
-                const kg = 60 + this.gym.level * 40
-                if(kg >= 220)
-                {
-                    this.unlockChallenge('gym', new THREE.Vector3(cx, 2.2, cz))
-                }
-                else
-                {
-                    this.game.notifications?.show(
-                        /* html */`<div class="discovery">${this.game.i18n.t('park.gym.rep', { kg })}</div>`,
-                        'discovery',
-                        2.8,
-                        null,
-                        'park-gym-rep'
-                    )
-                }
+                this.startGymGame()
             },
             () => this.game.inputs.interactiveButtons.addItems([ 'interact' ]),
             () => this.game.inputs.interactiveButtons.removeItems([ 'interact' ]),
             () => this.game.inputs.interactiveButtons.removeItems([ 'interact' ]),
             'surface'
         )
+    }
+
+    startGymGame()
+    {
+        for(const kb of this.gym.kettlebells)
+        {
+            const body = kb.obj.physical.body
+            body.setTranslation(kb.start, true)
+            body.setLinvel({ x: 0, y: 0, z: 0 }, true)
+            body.setAngvel({ x: 0, y: 0, z: 0 }, true)
+        }
+        this.gym.level = 1
+        for(let i = 0; i < this.gym.plateStages.length; i++)
+            this.gym.plateStages[i].forEach(m => { m.visible = i <= 1 })
+        for(const l of this.gym.lamps) l.material = this.palette.warmBulb
+
+        this.startGameCommon({
+            id: 'gym',
+            icon: '🏋️',
+            title: 'Desafio PR 220 kg',
+            scoreLabel: 'SÉRIE',
+            comboLabel: 'VIDAS',
+            center: new THREE.Vector3(16, 0, 12),
+            timeLeft: 30,
+            score: 0,
+            setIdx: 0,
+            lives: 3,
+            perfects: 0,
+            needlePos: 0.15,
+            needleDir: 1,
+            lampFlash: 0,
+            sets: [
+                { kg: 100, speed: 1.15, gStart: 0.33, gEnd: 0.67, pStart: 0.445, pEnd: 0.555, plates: 1 },
+                { kg: 160, speed: 1.55, gStart: 0.37, gEnd: 0.63, pStart: 0.46,  pEnd: 0.54,  plates: 2 },
+                { kg: 220, speed: 2.05, gStart: 0.41, gEnd: 0.59, pStart: 0.47,  pEnd: 0.53,  plates: 3 },
+            ],
+            hint: 'Acerte a zona verde ou dourada com [E], [Espaço] ou clicando na barra!'
+        })
+        this.gymHitLockTimer = 0.4
+    }
+
+    handleGymTimingHit()
+    {
+        if(!this.active || this.active.id !== 'gym' || this.active.phase !== 'playing' || this.gymHitLockTimer > 0)
+            return
+        this.gymHitLockTimer = 0.32
+        const a = this.active
+        const cfg = a.sets[a.setIdx]
+        const p = a.needlePos
+
+        if(p >= cfg.pStart && p <= cfg.pEnd)
+        {
+            a.score += 500
+            a.perfects++
+            this.gym.liftAnim = 1.0
+            this.hud.playComboHit(5)
+            this.hud.showToast(`⚡ PERFECT ${cfg.kg} kg! +500`, 'gold', 1300)
+
+            // Onda de choque lanca os kettlebells pelo ar!
+            for(const l of this.gym.lamps) l.material = this.palette.goldGlow
+            a.lampFlash = 0.8
+            for(let i = 0; i < this.gym.kettlebells.length; i++)
+            {
+                const kb = this.gym.kettlebells[i].obj.physical.body
+                kb.wakeUp()
+                kb.applyImpulse({ x: (i - 1.5) * 0.45, y: 3.1, z: 0.35 }, true)
+            }
+            a.setIdx++
+        }
+        else if(p >= cfg.gStart && p <= cfg.gEnd)
+        {
+            a.score += 300
+            this.gym.liftAnim = 0.9
+            this.hud.playComboHit(2)
+            this.hud.showToast(`💪 BOA! ${cfg.kg} kg! +300`, 'cyan', 1100)
+            a.setIdx++
+        }
+        else
+        {
+            a.lives--
+            this.hud.playErrorBuzz()
+            this.hud.showToast(`✖ FORA DO RITMO! (${a.lives} vidas)`, 'danger', 1200)
+            if(a.lives <= 0)
+            {
+                const medal = a.setIdx >= 2 ? 'bronze' : 'none'
+                this.finishGame({
+                    id: 'gym',
+                    title: 'Desafio PR 220 kg',
+                    score: a.score,
+                    scoreText: `${a.score} pts`,
+                    medal,
+                    color: '#f59e0b',
+                    fxPos: new THREE.Vector3(this.gym.cx, 1.5, this.gym.cz),
+                    summaryText: `Séries: ${a.setIdx}/3 · Perfeitos: ${a.perfects}`
+                })
+                return
+            }
+        }
+
+        if(a.setIdx >= a.sets.length)
+        {
+            const medal = a.perfects >= 2 ? 'gold' : 'silver'
+            this.game.explosions?.explode(new THREE.Vector3(this.gym.cx, 0.8, this.gym.cz), 8, 2.2, false, 99)
+            this.finishGame({
+                id: 'gym',
+                title: 'Desafio PR 220 kg',
+                score: a.score,
+                scoreText: `${a.score} pts · 220 kg PR!`,
+                medal,
+                color: '#ef4444',
+                fxPos: new THREE.Vector3(this.gym.cx, 1.8, this.gym.cz),
+                summaryText: `Novo PR de 220 kg! Perfeitos: ${a.perfects}/3`
+            })
+        }
+        else
+        {
+            const nextCfg = a.sets[a.setIdx]
+            for(let i = 0; i < this.gym.plateStages.length; i++)
+                this.gym.plateStages[i].forEach(m => { m.visible = i <= nextCfg.plates })
+        }
     }
 
     setAchievement()
@@ -1094,18 +1643,107 @@ export class PassionParkArea extends Area
     update()
     {
         if(this.game.worldManager?.isUnderwater)
+        {
+            if(this.active) this.stopActiveGame(true)
             return
+        }
 
         const t = this.game.ticker.elapsedScaled
-        const dt = this.game.ticker.deltaScaled
+        const dt = Math.min(0.05, this.game.ticker.delta || 0.016)
         const playerPos = this.game.player.position
 
-        // 1. Agro: girar catavento + balancar lavoura + checar fardos no Silo
+        if(this.gymHitLockTimer > 0)
+            this.gymHitLockTimer = Math.max(0, this.gymHitLockTimer - dt)
+
+        // Espetaculos visuais (pilar celeste + onda expansiva)
+        for(let i = this.spectacles.length - 1; i >= 0; i--)
+        {
+            const sp = this.spectacles[i]
+            sp.age += dt
+            const p = sp.age / sp.maxAge
+            if(p >= 1)
+            {
+                this.fxGroup.remove(sp.pillar)
+                this.fxGroup.remove(sp.ring)
+                sp.pillar.geometry.dispose()
+                sp.ring.geometry.dispose()
+                this.spectacles.splice(i, 1)
+                continue
+            }
+            const fade = Math.max(0, 1 - p)
+            sp.pillar.scale.set(1 + p * 0.6, 1, 1 + p * 0.6)
+            sp.ring.scale.setScalar(1 + p * 14)
+            sp.pillar.visible = fade > 0.08 && (p < 0.7 || Math.sin(p * 40) > 0)
+            sp.ring.visible = fade > 0.06
+        }
+
+        // Hyper-Aura 12s na Dodge RAM apos vencer qualquer desafio
+        if(this.vehicleAuraTimer > 0)
+        {
+            this.vehicleAuraTimer = Math.max(0, this.vehicleAuraTimer - dt)
+            this.vehicleAura.visible = true
+            this.vehicleAura.position.set(playerPos.x, 0.14, playerPos.z)
+            this.vehicleAura.rotation.z = t * 3.2
+            const pulse = 1 + Math.sin(t * 8) * 0.08
+            this.vehicleAura.scale.setScalar(pulse)
+
+            const pv = this.game.physicalVehicle
+            if(pv && this.game.player.accelerating > 0.15 && pv.xzSpeed < 22)
+            {
+                const body = pv.chassis?.physical?.body
+                if(body)
+                {
+                    const boostF = pv.forward.clone().multiplyScalar(pv.chassis.mass * dt * 4.5)
+                    body.applyImpulse({ x: boostF.x, y: 0, z: boostF.z }, true)
+                }
+            }
+        }
+        else if(this.vehicleAura)
+        {
+            this.vehicleAura.visible = false
+        }
+
+        // Gerenciar fase de contagem regressiva / saida por distancia
+        let arrowTarget = null
+        if(this.active)
+        {
+            if(playerPos.distanceTo(this.active.center) > 62)
+            {
+                this.stopActiveGame(true)
+            }
+            else if(this.active.phase === 'countdown')
+            {
+                this.active.countdown -= dt
+                const beat = Math.ceil(this.active.countdown)
+                if(beat !== this.active.lastBeat && beat >= 1)
+                {
+                    this.active.lastBeat = beat
+                    this.hud.showCountdown(String(beat), false)
+                    this.hud.playCountdownBeep(false)
+                }
+                if(this.active.countdown <= 0)
+                {
+                    this.active.phase = 'playing'
+                    this.hud.showCountdown(this.game.i18n.t('park.arcade.go'), true)
+                    this.hud.playCountdownBeep(true)
+                    setTimeout(() => this.hud.showCountdown(null), 650)
+                }
+            }
+            else if(this.active.comboTimer > 0)
+            {
+                this.active.comboTimer = Math.max(0, this.active.comboTimer - dt)
+                if(this.active.comboTimer === 0 && this.active.combo > 1)
+                    this.active.combo = 1
+            }
+        }
+
+        // ====================================================================
+        // 1. AGRO — FAZENDA HORIZONTE (24, -16)
+        // ====================================================================
         if(this.agro)
         {
-            this.agro.rotor.rotation.z = t * 2.2
-            const s = 1 + Math.sin(t * 3.0) * 0.04
-            this.agro.zoneRing.scale.setScalar(s)
+            this.agro.rotor.rotation.z = t * (this.active?.id === 'agro' ? 5.0 : 2.2)
+            this.agro.zoneRing.scale.setScalar(1 + Math.sin(t * 3.0) * 0.04)
 
             for(const c of this.agro.crops)
             {
@@ -1113,50 +1751,281 @@ export class PassionParkArea extends Area
                 c.group.rotation.x = Math.cos(t * 1.4 + c.phase) * 0.055
             }
 
-            for(const b of this.agro.bales)
+            const isAgroPlay = this.active?.id === 'agro' && this.active.phase === 'playing'
+            if(isAgroPlay)
             {
-                if(b.delivered) continue
-                const p = b.obj.physical.body.translation()
-                const d = Math.hypot(p.x - this.agro.zonePos.x, p.z - this.agro.zonePos.z)
-                if(d < 3.4)
+                const a = this.active
+                a.timeLeft = Math.max(0, a.timeLeft - dt)
+
+                // Coletar capsulas douradas com combo
+                let nearestDist = 999
+                for(const p of this.agro.pods)
                 {
-                    b.delivered = true
-                    this.agro.delivered++
-                    this.sounds.step.play(this.agro.delivered)
-                    if(this.agro.delivered === 3)
-                        this.unlockChallenge('agro', this.agro.zonePos.clone().setY(2.2))
+                    if(!p.active) continue
+                    p.mesh.rotation.y = t * 2.8 + p.phase
+                    p.mesh.position.y = 0.88 + Math.sin(t * 3.2 + p.phase) * 0.16
+                    const d = Math.hypot(playerPos.x - p.pos.x, playerPos.z - p.pos.z)
+                    if(d < 2.25)
+                    {
+                        p.active = false
+                        p.mesh.visible = false
+                        a.podsRemaining--
+                        const pts = 100 * a.combo
+                        a.score += pts
+                        a.combo = Math.min(5, a.combo + 1)
+                        a.comboTimer = 4.5
+                        this.hud.playComboHit(a.combo)
+                        this.game.world?.confetti?.pop(p.pos.clone().setY(1.4))
+                        this.hud.showToast(`+${pts} · COMBO x${a.combo}!`, 'gold', 900)
+                    }
+                    else if(d < nearestDist)
+                    {
+                        nearestDist = d
+                        arrowTarget = p.pos
+                    }
+                }
+
+                // Onda nova automatica quando restam <= 2 capsulas
+                if(a.podsRemaining <= 2)
+                {
+                    a.podsRemaining = this.agro.pods.length
+                    for(const p of this.agro.pods) { p.active = true; p.mesh.visible = true }
+                    this.hud.showToast('🌾 NOVA SAFRA!', 'cyan', 1000)
+                }
+
+                // Fardos no Silo com bonus + respawn em 1.5s
+                for(const b of this.agro.bales)
+                {
+                    if(b.delivered)
+                    {
+                        b.respawnAt -= dt
+                        if(b.respawnAt <= 0)
+                        {
+                            b.delivered = false
+                            const bp = b.obj.physical.body
+                            bp.setTranslation(b.start, true)
+                            bp.setLinvel({ x: 0, y: 0, z: 0 }, true)
+                            bp.setAngvel({ x: 0, y: 0, z: 0 }, true)
+                        }
+                        continue
+                    }
+                    const p = b.obj.physical.body.translation()
+                    if(Math.hypot(p.x - this.agro.zonePos.x, p.z - this.agro.zonePos.z) < 2.85)
+                    {
+                        b.delivered = true
+                        b.respawnAt = 1.5
+                        a.baleCount++
+                        const pts = 350 * a.combo
+                        a.score += pts
+                        a.combo = Math.min(5, a.combo + 1)
+                        a.comboTimer = 5.0
+                        this.hud.playComboHit(5)
+                        this.game.world?.confetti?.pop(new THREE.Vector3(24 - 3.4, 5.5, -16 - 2.6))
+                        this.hud.showToast(`🚜 FARDO NO SILO! +${pts}`, 'gold', 1250)
+                    }
+                }
+
+                this.hud.updateHud({
+                    timeText: `${Math.ceil(a.timeLeft)}s`,
+                    timeWarn: a.timeLeft < 10,
+                    timeCrit: a.timeLeft < 5,
+                    scoreText: `${a.score}`,
+                    comboText: `x${a.combo}`,
+                    comboHot: a.combo >= 3
+                })
+
+                if(a.timeLeft <= 0)
+                {
+                    const medal = a.score >= 2800 ? 'gold' : (a.score >= 1800 ? 'silver' : (a.score >= 900 ? 'bronze' : 'none'))
+                    this.finishGame({
+                        id: 'agro',
+                        title: 'Colheita Turbo',
+                        score: a.score,
+                        scoreText: `${a.score} pts`,
+                        medal,
+                        color: '#eab308',
+                        fxPos: this.agro.zonePos.clone().setY(2.2),
+                        summaryText: `Fardos no Silo: ${a.baleCount} · Ouro ≥ 2800`
+                    })
                 }
             }
-        }
-
-        // 2. Tech: antena + holo core + ligar nos do Cluster & fibras opticas
-        if(this.tech)
-        {
-            this.tech.dishHead.rotation.y = Math.sin(t * 0.55) * 0.85
-            this.tech.holoOrb.rotation.y = t * (this.tech.onlineCount === 4 ? 2.1 : 0.75)
-            this.tech.holoOrb.rotation.x = Math.sin(t * 0.9) * 0.35
-            this.tech.holoOrb.position.y = 4.35 + Math.sin(t * 2.0) * 0.16
-
-            for(const n of this.tech.nodes)
+            else if(!this.active)
             {
-                if(!n.online && Math.hypot(playerPos.x - n.pos.x, playerPos.z - n.pos.z) < 3.2)
+                // Livre: entregar fardos casualmente
+                for(const b of this.agro.bales)
                 {
-                    n.online = true
-                    n.beacon.material = this.tech.onlineMat
-                    n.stripe.material = this.tech.onlineMat
-                    n.conduit.material = this.tech.onlineMat
-                    this.tech.onlineCount++
-                    this.sounds.step.play(this.tech.onlineCount)
-                    if(this.tech.onlineCount === 4)
+                    if(b.delivered) continue
+                    const p = b.obj.physical.body.translation()
+                    if(Math.hypot(p.x - this.agro.zonePos.x, p.z - this.agro.zonePos.z) < 2.85)
                     {
-                        this.tech.holoOrb.material = this.tech.onlineMat
-                        this.unlockChallenge('tech', n.pos.clone().setY(2.8))
+                        b.delivered = true
+                        this.agro.delivered++
+                        this.sounds.step.play(this.agro.delivered)
+                        if(this.agro.delivered === 3)
+                            this.unlockChallenge('agro', this.agro.zonePos.clone().setY(2.2))
                     }
                 }
             }
         }
 
-        // 3. Negocios: animar moedas/barras + coletar marcos
+        // ====================================================================
+        // 2. TECH — HUB TECH (54, -10)
+        // ====================================================================
+        if(this.tech)
+        {
+            this.tech.dishHead.rotation.y = Math.sin(t * 0.55) * 0.85
+            this.tech.holoOrb.rotation.y = t * (this.active?.id === 'tech' ? 3.2 : (this.tech.onlineCount === 4 ? 2.1 : 0.75))
+            this.tech.holoOrb.rotation.x = Math.sin(t * 0.9) * 0.35
+            this.tech.holoOrb.position.y = 4.35 + Math.sin(t * 2.0) * 0.16
+
+            const isTechPlay = this.active?.id === 'tech' && this.active.phase === 'playing'
+            if(isTechPlay)
+            {
+                const a = this.active
+                a.timeLeft = Math.max(0, a.timeLeft - dt)
+                if(a.zapCooldown > 0) a.zapCooldown = Math.max(0, a.zapCooldown - dt)
+
+                const speed = a.wave === 1 ? 0.55 : (a.wave === 2 ? 0.85 : 1.15)
+                a.sweeperAngle += dt * speed
+
+                // Atualizar lasers vermelhos & checar colisao
+                for(const sw of this.tech.sweepers)
+                {
+                    const ang = a.sweeperAngle + sw.offset
+                    sw.mesh.rotation.y = ang
+                    if(a.zapCooldown === 0)
+                    {
+                        const dirX = Math.sin(ang)
+                        const dirZ = Math.cos(ang)
+                        const relX = playerPos.x - 54
+                        const relZ = playerPos.z - (-10 - 0.7)
+                        const proj = relX * dirX + relZ * dirZ
+                        const perp = Math.abs(relX * dirZ - relZ * dirX)
+                        if(proj > 0.9 && proj < 6.4 && perp < 1.15)
+                        {
+                            a.zapCooldown = 1.4
+                            a.combo = 1
+                            a.timeLeft = Math.max(0, a.timeLeft - 2.0)
+                            this.hud.playErrorBuzz()
+                            this.hud.showToast('⚡ FIREWALL! -2s', 'danger', 1100)
+                            const body = this.game.physicalVehicle?.chassis?.physical?.body
+                            if(body)
+                            {
+                                const push = new THREE.Vector3(relX, 0.25, relZ).normalize().multiplyScalar(this.game.physicalVehicle.chassis.mass * 3.8)
+                                body.applyImpulse({ x: push.x, y: push.y, z: push.z }, true)
+                            }
+                        }
+                    }
+                }
+
+                // Alvo ativo & laser ciano do Holo Core
+                const tgtPos = a.targetType === 'node'
+                    ? this.tech.nodes[a.targetIdx].pos.clone().setY(2.5)
+                    : this.tech.glitches[a.targetIdx - 4].pos.clone()
+                arrowTarget = tgtPos
+
+                const mid = this.tech.holoCenter.clone().add(tgtPos).multiplyScalar(0.5)
+                const beamLen = this.tech.holoCenter.distanceTo(tgtPos)
+                this.tech.beam.visible = true
+                this.tech.beam.position.copy(mid)
+                this.tech.beam.scale.set(1, beamLen, 1)
+                this.tech.beam.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), tgtPos.clone().sub(this.tech.holoCenter).normalize())
+
+                for(const g of this.tech.glitches)
+                    if(g.mesh.visible) g.mesh.rotation.y = t * 4.0
+
+                if(Math.hypot(playerPos.x - tgtPos.x, playerPos.z - tgtPos.z) < 2.8)
+                {
+                    if(a.targetType === 'node')
+                        this.tech.nodes[a.targetIdx].online = true
+                    const pts = 250 * a.combo
+                    a.score += pts
+                    a.combo = Math.min(4, a.combo + 1)
+                    a.comboTimer = 5.0
+                    a.waveStep++
+                    this.hud.playComboHit(a.combo)
+                    this.game.world?.confetti?.pop(tgtPos)
+
+                    const need = a.waveTargets[a.wave - 1]
+                    if(a.waveStep >= need)
+                    {
+                        if(a.wave >= 3)
+                        {
+                            a.score += Math.round(a.timeLeft * 40)
+                            this.tech.holoOrb.material = this.tech.onlineMat
+                            this.finishGame({
+                                id: 'tech',
+                                title: 'Overclock do Cluster',
+                                score: a.score,
+                                scoreText: `${a.score} pts`,
+                                medal: 'gold',
+                                color: '#22d3ee',
+                                fxPos: this.tech.holoCenter.clone(),
+                                summaryText: `3/3 Ondas em Overclock! Bônus tempo aplicado`
+                            })
+                            return
+                        }
+                        a.wave++
+                        a.waveStep = 0
+                        a.timeLeft += 8
+                        this.hud.showToast(`🔥 ONDA ${a.wave}! +8s`, 'cyan', 1300)
+                    }
+                    else
+                    {
+                        this.hud.showToast(`+${pts} · NÓ CONECTADO!`, 'gold', 900)
+                    }
+                    this.pickNextTechTarget()
+                }
+
+                this.hud.updateHud({
+                    timeText: `${Math.ceil(a.timeLeft)}s`,
+                    timeWarn: a.timeLeft < 10,
+                    timeCrit: a.timeLeft < 5,
+                    scoreText: `W${a.wave}/3 · ${a.score}`,
+                    comboText: `x${a.combo}`,
+                    comboHot: a.combo >= 3
+                })
+
+                if(a.timeLeft <= 0)
+                {
+                    const medal = a.wave >= 3 ? 'silver' : (a.wave >= 2 || a.score >= 1000 ? 'bronze' : 'none')
+                    this.finishGame({
+                        id: 'tech',
+                        title: 'Overclock do Cluster',
+                        score: a.score,
+                        scoreText: `${a.score} pts`,
+                        medal,
+                        color: '#22d3ee',
+                        fxPos: this.tech.holoCenter.clone(),
+                        summaryText: `Chegou à Onda ${a.wave}/3`
+                    })
+                }
+            }
+            else if(!this.active)
+            {
+                for(const n of this.tech.nodes)
+                {
+                    if(!n.online && Math.hypot(playerPos.x - n.pos.x, playerPos.z - n.pos.z) < 3.2)
+                    {
+                        n.online = true
+                        n.beacon.material = this.tech.onlineMat
+                        n.stripe.material = this.tech.onlineMat
+                        n.conduit.material = this.tech.onlineMat
+                        this.tech.onlineCount++
+                        this.sounds.step.play(this.tech.onlineCount)
+                        if(this.tech.onlineCount === 4)
+                        {
+                            this.tech.holoOrb.material = this.tech.onlineMat
+                            this.unlockChallenge('tech', n.pos.clone().setY(2.8))
+                        }
+                    }
+                }
+            }
+        }
+
+        // ====================================================================
+        // 3. NEGOCIOS — PRACA NEGOCIOS (56, 22)
+        // ====================================================================
         if(this.biz)
         {
             this.biz.arrow.position.y = 3.2 + Math.sin(t * 2.2) * 0.18
@@ -1166,33 +2035,238 @@ export class PassionParkArea extends Area
                 bar.mesh.scale.y = bar.scaleY
                 bar.mesh.position.y = 0.26 + (bar.fullH * bar.scaleY) * 0.5
             }
-            for(let i = 0; i < this.biz.coins.length; i++)
+
+            const isBizPlay = this.active?.id === 'business' && this.active.phase === 'playing'
+            if(isBizPlay)
             {
-                const c = this.biz.coins[i]
-                if(c.collected) continue
-                c.mesh.rotation.y = t * 2.4 + c.phase
-                c.mesh.position.y = 0.85 + Math.sin(t * 2.6 + c.phase) * 0.16
-                if(Math.hypot(playerPos.x - c.pos.x, playerPos.z - c.pos.z) < 2.4)
+                const a = this.active
+                a.timeLeft = Math.max(0, a.timeLeft - dt)
+                if(a.bearCooldown > 0) a.bearCooldown = Math.max(0, a.bearCooldown - dt)
+
+                // Orbitar 2 aneis vermelhos Bear Market
+                for(const br of this.biz.bears)
                 {
-                    c.collected = true
-                    c.mesh.visible = false
-                    this.biz.bars[i].targetScaleY = 1.0
-                    this.biz.collectedCount++
-                    this.sounds.coin.play()
-                    if(this.biz.collectedCount === 5)
-                        this.unlockChallenge('business', c.pos.clone().setY(2.4))
+                    const ang = t * 0.75 + br.phase
+                    br.pos.set(56 + Math.cos(ang) * 4.9, 0.14, 22 + Math.sin(ang) * 4.9)
+                    br.mesh.position.copy(br.pos)
+                    if(a.bearCooldown === 0 && Math.hypot(playerPos.x - br.pos.x, playerPos.z - br.pos.z) < 2.2)
+                    {
+                        a.bearCooldown = 1.8
+                        a.combo = 1
+                        a.score = Math.max(0, Math.round(a.score * 0.9))
+                        this.hud.playErrorBuzz()
+                        this.hud.showToast('🐻 BEAR MARKET! -10%', 'danger', 1100)
+                    }
+                }
+
+                // Orbe Unicornio Aereo no salto da rampa SE
+                if(a.unicornReady && this.biz.unicornOrb.visible)
+                {
+                    this.biz.unicornOrb.rotation.y = t * 2.8
+                    this.biz.unicornOrb.rotation.x = t * 1.4
+                    if(playerPos.distanceTo(this.biz.unicornPos) < 2.55)
+                    {
+                        a.unicornReady = false
+                        this.biz.unicornOrb.visible = false
+                        a.score += 250
+                        a.combo = Math.min(4, a.combo + 1)
+                        a.comboTimer = 5.0
+                        this.hud.playFanfare('silver')
+                        this.game.world?.confetti?.pop(this.biz.unicornPos.clone())
+                        this.hud.showToast('🦄 UNICÓRNIO AÉREO! +$250M!', 'cyan', 1600)
+                    }
+                    else
+                    {
+                        arrowTarget = this.biz.unicornPos
+                    }
+                }
+
+                // Orbs IPO + Diamante
+                let activeIpos = 0
+                for(const o of this.biz.ipos)
+                {
+                    if(!o.active) continue
+                    activeIpos++
+                    o.mesh.rotation.y = t * 2.6 + o.phase
+                    o.mesh.position.y = 0.85 + Math.sin(t * 3 + o.phase) * 0.16
+                    if(Math.hypot(playerPos.x - o.pos.x, playerPos.z - o.pos.z) < 2.2)
+                    {
+                        o.active = false
+                        o.mesh.visible = false
+                        const pts = 40 * a.combo
+                        a.score += pts
+                        a.combo = Math.min(4, a.combo + 1)
+                        a.comboTimer = 4.2
+                        this.hud.playComboHit(a.combo)
+                        this.hud.showToast(`+$${pts}M IPO!`, 'gold', 900)
+                    }
+                    else if(!arrowTarget)
+                    {
+                        arrowTarget = o.pos
+                    }
+                }
+
+                if(activeIpos <= 1)
+                {
+                    for(const o of this.biz.ipos) { o.active = true; o.mesh.visible = true }
+                    this.biz.diamondOrb.active = true
+                    this.biz.diamondOrb.mesh.visible = true
+                }
+
+                if(this.biz.diamondOrb.active)
+                {
+                    const dOrb = this.biz.diamondOrb
+                    dOrb.mesh.rotation.y = t * 3.5
+                    if(Math.hypot(playerPos.x - dOrb.pos.x, playerPos.z - dOrb.pos.z) < 2.3)
+                    {
+                        dOrb.active = false
+                        dOrb.mesh.visible = false
+                        const pts = 110 * a.combo
+                        a.score += pts
+                        a.combo = Math.min(4, a.combo + 1)
+                        a.comboTimer = 4.5
+                        this.hud.playComboHit(5)
+                        this.game.world?.confetti?.pop(dOrb.pos.clone())
+                        this.hud.showToast(`💎 +$${pts}M!`, 'cyan', 1100)
+                    }
+                }
+
+                // Barras do grafico crescem em tempo real rumo a $1.000M ($1B)
+                const progressRatio = Math.min(1, a.score / 1000)
+                for(let i = 0; i < this.biz.bars.length; i++)
+                {
+                    const thresh = (i + 1) / this.biz.bars.length
+                    this.biz.bars[i].targetScaleY = 0.2 + Math.min(1, progressRatio / thresh) * 0.8
+                }
+
+                this.hud.updateHud({
+                    timeText: `${Math.ceil(a.timeLeft)}s`,
+                    timeWarn: a.timeLeft < 10,
+                    timeCrit: a.timeLeft < 5,
+                    scoreText: `$${a.score}M`,
+                    comboText: `x${a.combo}`,
+                    comboHot: a.combo >= 3
+                })
+
+                if(a.timeLeft <= 0 || a.score >= 1200)
+                {
+                    const medal = a.score >= 1000 ? 'gold' : (a.score >= 650 ? 'silver' : (a.score >= 300 ? 'bronze' : 'none'))
+                    this.finishGame({
+                        id: 'business',
+                        title: 'Bull Market Rush',
+                        score: a.score,
+                        scoreText: `$${a.score}M`,
+                        medal,
+                        color: '#facc15',
+                        fxPos: new THREE.Vector3(56, 2.4, 22),
+                        summaryText: a.score >= 1000 ? 'Meta de $1B atingida!' : `Meta Ouro: $1000M`
+                    })
+                }
+            }
+            else if(!this.active)
+            {
+                for(let i = 0; i < this.biz.coins.length; i++)
+                {
+                    const c = this.biz.coins[i]
+                    if(c.collected) continue
+                    c.mesh.rotation.y = t * 2.4 + c.phase
+                    c.mesh.position.y = 0.85 + Math.sin(t * 2.6 + c.phase) * 0.16
+                    if(Math.hypot(playerPos.x - c.pos.x, playerPos.z - c.pos.z) < 2.4)
+                    {
+                        c.collected = true
+                        c.mesh.visible = false
+                        this.biz.bars[i].targetScaleY = 1.0
+                        this.biz.collectedCount++
+                        this.sounds.coin.play()
+                        if(this.biz.collectedCount === 5)
+                            this.unlockChallenge('business', c.pos.clone().setY(2.4))
+                    }
                 }
             }
         }
 
-        // 4. Musica: notas flutuantes + Pads do Piano Gigante
+        // ====================================================================
+        // 4. MUSICA — ORLA DA HARMONIA (28, 38)
+        // ====================================================================
         if(this.music)
         {
+            if(this.finaleTimer > 0)
+                this.finaleTimer = Math.max(0, this.finaleTimer - dt)
+
             for(const n of this.music.notes)
             {
-                n.mesh.position.y = n.baseY + Math.sin(t * 1.8 + n.phase) * 0.28
+                n.mesh.position.y = n.baseY + Math.sin(t * (this.finaleTimer > 0 ? 4.5 : 1.8) + n.phase) * 0.28
                 n.mesh.rotation.y = Math.sin(t * 0.9 + n.phase) * 0.35
             }
+
+            const isMusicPlay = this.active?.id === 'music' && this.active.phase === 'playing'
+            if(isMusicPlay)
+            {
+                const a = this.active
+                // Groove sutil em 112 BPM
+                a.beatTimer += dt
+                if(a.beatTimer >= 0.535)
+                {
+                    a.beatTimer -= 0.535
+                    this.hud.playBeatStep(a.beatStep++)
+                }
+
+                if(a.subPhase === 'watch')
+                {
+                    a.watchTimer -= dt
+                    if(a.watchTimer <= 0)
+                    {
+                        if(a.watchIdx < a.sequence.length)
+                        {
+                            const padIdx = a.sequence[a.watchIdx]
+                            const p = this.music.pads[padIdx]
+                            p.flashTimer = 0.48
+                            this.playSynthTone(p.freq, 0.48, padIdx % 2 === 0 ? 'triangle' : 'sine', 0.15)
+                            a.watchIdx++
+                            a.watchTimer = 0.60
+                        }
+                        else
+                        {
+                            a.subPhase = 'play'
+                            a.playIdx = 0
+                            this.hud.showToast('🎵 SUA VEZ! REPITA NOS PADS!', 'cyan', 1200)
+                        }
+                    }
+                }
+                else
+                {
+                    a.timeLeft = Math.max(0, a.timeLeft - dt)
+                }
+
+                this.hud.updateHud({
+                    timeText: a.subPhase === 'watch' ? '👀' : `${Math.ceil(a.timeLeft)}s`,
+                    timeWarn: a.subPhase === 'play' && a.timeLeft < 7,
+                    timeCrit: a.subPhase === 'play' && a.timeLeft < 3.5,
+                    scoreText: `R${a.round}/3 · ${a.score}`,
+                    comboText: `${'❤️'.repeat(Math.max(0, a.lives))}`,
+                    comboHot: a.lives === 3,
+                    hint: a.subPhase === 'watch'
+                        ? `Memorize a melodia (${a.watchIdx}/${a.sequence.length})...`
+                        : `Nota ${a.playIdx + 1}/${a.sequence.length} nos pads coloridos!`
+                })
+
+                if(a.subPhase === 'play' && a.timeLeft <= 0)
+                {
+                    const medal = a.round >= 3 ? 'silver' : (a.round >= 2 ? 'bronze' : 'none')
+                    this.finishGame({
+                        id: 'music',
+                        title: 'Show das Luzes',
+                        score: a.score,
+                        scoreText: `${a.score} pts`,
+                        medal,
+                        color: '#38bdf8',
+                        fxPos: new THREE.Vector3(28, 2.2, 38),
+                        summaryText: `Tempo esgotado no Round ${a.round}/3`
+                    })
+                }
+            }
+
+            // Deteccao dos pads (vale em modo arcade e em livre!)
             for(const p of this.music.pads)
             {
                 if(p.flashTimer > 0)
@@ -1202,21 +2276,88 @@ export class PassionParkArea extends Area
                 if(isIn && !p.inside)
                 {
                     p.inside = true
-                    p.flashTimer = 0.45
-                    this.playSynthTone(p.freq, 0.55, p.index % 2 === 0 ? 'triangle' : 'sine', 0.13)
+                    p.flashTimer = 0.48
+                    this.playSynthTone(p.freq, 0.55, p.index % 2 === 0 ? 'triangle' : 'sine', 0.14)
 
-                    if(p.index === this.music.sequenceStep)
+                    if(isMusicPlay && this.active.subPhase === 'play')
                     {
-                        this.music.sequenceStep++
-                        if(this.music.sequenceStep >= 4)
+                        const a = this.active
+                        const expected = a.sequence[a.playIdx]
+                        if(p.index === expected)
                         {
-                            this.music.sequenceStep = 0
-                            this.unlockChallenge('music', p.pos.clone().setY(2.2))
+                            a.score += 200
+                            a.playIdx++
+                            this.game.world?.confetti?.pop(p.pos.clone().setY(1.2))
+                            if(a.playIdx >= a.sequence.length)
+                            {
+                                a.score += 300 * a.round
+                                if(a.round >= 3)
+                                {
+                                    this.finaleTimer = 7.5
+                                    this.finishGame({
+                                        id: 'music',
+                                        title: 'Show das Luzes',
+                                        score: a.score,
+                                        scoreText: `${a.score} pts · SHOW COMPLETO!`,
+                                        medal: 'gold',
+                                        color: '#34cfc4',
+                                        fxPos: p.pos.clone().setY(2.2),
+                                        summaryText: `3/3 Rounds dominados ao vivo!`
+                                    })
+                                    break
+                                }
+                                else
+                                {
+                                    this.hud.playComboHit(a.round + 2)
+                                    this.hud.showToast(`🎶 ROUND ${a.round} COMPLETO!`, 'gold', 1300)
+                                    this.setupMusicRound(a.round + 1)
+                                }
+                            }
+                        }
+                        else
+                        {
+                            a.lives--
+                            this.hud.playErrorBuzz()
+                            if(a.lives <= 0)
+                            {
+                                const medal = a.round >= 3 ? 'silver' : (a.round >= 2 ? 'bronze' : 'none')
+                                this.finishGame({
+                                    id: 'music',
+                                    title: 'Show das Luzes',
+                                    score: a.score,
+                                    scoreText: `${a.score} pts`,
+                                    medal,
+                                    color: '#38bdf8',
+                                    fxPos: p.pos.clone().setY(2.0),
+                                    summaryText: `Encerrou no Round ${a.round}/3`
+                                })
+                                break
+                            }
+                            else
+                            {
+                                this.hud.showToast(`✖ ERROU! Rever sequência (${a.lives} vidas)`, 'danger', 1300)
+                                a.subPhase = 'watch'
+                                a.watchIdx = 0
+                                a.watchTimer = 0.65
+                                a.playIdx = 0
+                            }
                         }
                     }
-                    else
+                    else if(!this.active)
                     {
-                        this.music.sequenceStep = p.index === 0 ? 1 : 0
+                        if(p.index === this.music.sequenceStep)
+                        {
+                            this.music.sequenceStep++
+                            if(this.music.sequenceStep >= 4)
+                            {
+                                this.music.sequenceStep = 0
+                                this.unlockChallenge('music', p.pos.clone().setY(2.2))
+                            }
+                        }
+                        else
+                        {
+                            this.music.sequenceStep = p.index === 0 ? 1 : 0
+                        }
                     }
                 }
                 else if(!isIn)
@@ -1224,13 +2365,17 @@ export class PassionParkArea extends Area
                     p.inside = false
                 }
 
-                const hot = p.inside || p.flashTimer > 0
+                const finalePulse = this.finaleTimer > 0 && Math.sin(t * 9 + p.index * 1.4) > 0
+                const hot = p.inside || p.flashTimer > 0 || finalePulse
                 p.mesh.material = hot ? p.hotMat : p.idleMat
                 p.mesh.position.y = hot ? 0.02 : 0.06
+                p.spotlight.visible = p.flashTimer > 0 || finalePulse
             }
         }
 
-        // 5. Musculacao: animar levantamento da barra
+        // ====================================================================
+        // 5. MUSCULACAO — IRON ARENA (16, 12)
+        // ====================================================================
         if(this.gym)
         {
             if(this.gym.liftAnim > 0)
@@ -1242,6 +2387,73 @@ export class PassionParkArea extends Area
             else
             {
                 this.gym.barGroup.position.y = this.gym.baseY
+            }
+
+            if(this.active?.id === 'gym' && this.active.phase === 'playing')
+            {
+                const a = this.active
+                a.timeLeft = Math.max(0, a.timeLeft - dt)
+                if(a.lampFlash > 0)
+                {
+                    a.lampFlash = Math.max(0, a.lampFlash - dt)
+                    if(a.lampFlash === 0)
+                        for(const l of this.gym.lamps) l.material = this.palette.warmBulb
+                }
+
+                const cfg = a.sets[a.setIdx]
+                a.needlePos += a.needleDir * cfg.speed * dt
+                if(a.needlePos >= 1) { a.needlePos = 1; a.needleDir = -1 }
+                else if(a.needlePos <= 0) { a.needlePos = 0; a.needleDir = 1 }
+
+                this.hud.setTimingGauge(
+                    true,
+                    cfg.gStart,
+                    cfg.gEnd,
+                    cfg.pStart,
+                    cfg.pEnd,
+                    a.needlePos,
+                    `Série ${a.setIdx + 1}/3 · ${cfg.kg} kg — Aperte [E] ou [Espaço]!`
+                )
+                this.hud.updateHud({
+                    timeText: `${Math.ceil(a.timeLeft)}s`,
+                    timeWarn: a.timeLeft < 9,
+                    timeCrit: a.timeLeft < 4,
+                    scoreText: `${cfg.kg} kg`,
+                    comboText: `${'❤️'.repeat(Math.max(0, a.lives))}`,
+                    comboHot: a.perfects > 0
+                })
+
+                if(a.timeLeft <= 0)
+                {
+                    const medal = a.setIdx >= 2 ? 'bronze' : 'none'
+                    this.finishGame({
+                        id: 'gym',
+                        title: 'Desafio PR 220 kg',
+                        score: a.score,
+                        scoreText: `${a.score} pts`,
+                        medal,
+                        color: '#ef4444',
+                        fxPos: new THREE.Vector3(this.gym.cx, 1.5, this.gym.cz),
+                        summaryText: `Tempo esgotado na Série ${a.setIdx + 1}/3`
+                    })
+                }
+            }
+        }
+
+        // Atualizar seta-guia 3D sobre a Dodge RAM
+        if(this.guideArrow)
+        {
+            if(arrowTarget && this.active?.phase === 'playing')
+            {
+                this.guideArrow.visible = true
+                this.guideArrow.position.set(playerPos.x, playerPos.y + 2.65 + Math.sin(t * 4) * 0.1, playerPos.z)
+                const dx = arrowTarget.x - playerPos.x
+                const dz = arrowTarget.z - playerPos.z
+                this.guideArrow.rotation.y = Math.atan2(dx, dz)
+            }
+            else
+            {
+                this.guideArrow.visible = false
             }
         }
     }

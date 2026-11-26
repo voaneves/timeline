@@ -633,6 +633,11 @@ export class View
         }
         
         // Focus point
+        const targetFocusY = this.game.worldManager?.isUnderwater
+            ? clamp((this.game.player?.position?.y ?? 0) * 0.85, 0, 10.5)
+            : 0
+        this.focusPoint.position.y = lerp(this.focusPoint.position.y, targetFocusY, Math.min(1, this.game.ticker.delta * 6))
+
         if(this.focusPoint.isTracking)
         {
             this.focusPoint.position.x = this.focusPoint.trackedPosition.x

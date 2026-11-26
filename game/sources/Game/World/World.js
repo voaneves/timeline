@@ -28,6 +28,7 @@ import { Lanterns } from './Lanterns.js'
 import { Fences } from './Fences.js'
 import { Benches } from './Benches.js'
 import { Scenery } from './Scenery.js'
+import { StuntPark } from './StuntPark.js'
 import { HeavenlySky } from './HeavenlySky.js'
 import { OceanPassage } from './OceanPassage.js'
 import { UnderwaterWorld } from './Underwater/UnderwaterWorld.js'
@@ -81,6 +82,7 @@ export class World
             this.lanterns = new Lanterns()
             this.scenery = new Scenery()
             this.areas = new Areas()
+            this.stuntPark = new StuntPark()
             this.heavenlySky = new HeavenlySky(this.areas.altar?.position)
             this.oceanPassage = new OceanPassage()
             this.underwaterWorld = new UnderwaterWorld()

@@ -464,10 +464,11 @@ export class PhysicsVehicle
         if(this.isUnderwater)
         {
             const clampVal = (v, lo, hi) => Math.min(hi, Math.max(lo, v))
-            const dt = Math.min(0.05, this.game.ticker.deltaScaled || (1 / 60))
+            const dt = Math.min(0.05, this.game.ticker.delta || (1 / 60))
             const body = this.chassis.physical.body
             const lv = body.linvel()
             const av = body.angvel()
+            const uw = this.game.world?.underwaterWorld
 
             const accel = this.game.player.accelerating
             const steer = this.game.player.steering
@@ -479,20 +480,22 @@ export class PhysicsVehicle
             const nx = this.forward.x / horizLen
             const nz = this.forward.z / horizLen
 
-            const maxHoriz = accel >= 0 ? (boost ? 22 : 13) : 7.5
+            const turboBonus = uw?.turboTimer > 0 ? 7.5 : 0
+            const maxHoriz = (accel >= 0 ? (boost ? 22 : 13) : 7.5) + turboBonus
             const hasAccel = Math.abs(accel) > 0.05
             const targetVx = hasAccel ? nx * accel * maxHoriz : 0
             const targetVz = hasAccel ? nz * accel * maxHoriz : 0
 
-            const seabedY = this.game.world?.underwaterWorld?.sampleSeabedHeightAt?.(this.position.x, this.position.z) ?? 0
-            const minFloorY = seabedY + 1.25
-            const maxCeilY = 15.5
+            const seabedY = uw?.sampleSeabedHeightAt?.(this.position.x, this.position.z) ?? 0
+            const maxCeilY = 10.5
+            const minFloorY = Math.min(seabedY + 1.25, maxCeilY - 1.5)
 
-            let targetVy = 0
+            const updraft = uw?.sampleUpdraftAt?.(this.position.x, this.position.y, this.position.z) ?? 0
+            let targetVy = updraft
             if(ascend && !descend && this.position.y < maxCeilY)
-                targetVy = 5.5 * clampVal((maxCeilY - this.position.y) / 1.5, 0.15, 1)
+                targetVy += 5.5 * clampVal((maxCeilY - this.position.y) / 1.5, 0.15, 1)
             else if(descend && !ascend && this.position.y > minFloorY)
-                targetVy = -5.5 * clampVal((this.position.y - minFloorY) / 1.2, 0.15, 1)
+                targetVy -= 5.5 * clampVal((this.position.y - minFloorY) / 1.2, 0.15, 1)
 
             if(this.position.y < minFloorY && !descend)
                 targetVy = Math.max(targetVy, Math.min(3.5, (minFloorY - this.position.y) * 4.0))
@@ -510,8 +513,57 @@ export class PhysicsVehicle
                 nextVx = 0
                 nextVz = 0
             }
-            if(!ascend && !descend && Math.abs(nextVy) < 0.015 && this.position.y >= minFloorY - 0.02 && this.position.y <= maxCeilY + 0.02)
+            if(!ascend && !descend && updraft === 0 && Math.abs(nextVy) < 0.015 && this.position.y >= minFloorY - 0.02 && this.position.y <= maxCeilY + 0.02)
                 nextVy = 0
+
+            // Contencao radial na borda do canyon submarino (nunca sobe na parede r > 72m)
+            const pos = body.translation()
+            let px = pos.x
+            let py = clampVal(pos.y, minFloorY - 0.35, maxCeilY + 0.25)
+            let pz = pos.z
+            let posAdjusted = py !== pos.y
+
+            const r = Math.hypot(px, pz)
+            if(r > 71.5)
+            {
+                const rx = px / r
+                const rz = pz / r
+                const outDot = nextVx * rx + nextVz * rz
+                if(outDot > 0)
+                {
+                    nextVx -= rx * outDot
+                    nextVz -= rz * outDot
+                }
+                nextVx -= rx * 2.2
+                nextVz -= rz * 2.2
+                if(r > 72.0)
+                {
+                    px = rx * 72.0
+                    pz = rz * 72.0
+                    posAdjusted = true
+                    uw?.onHullBump?.(this.position)
+                }
+            }
+
+            // Deflexao solida contra barreiras subaquaticas (arcos, corais, naufragio, chaminés, cristais, habitat)
+            if(uw?.resolveObstacleCollisions)
+            {
+                const vel = { x: nextVx, y: nextVy, z: nextVz }
+                const resPos = { x: px, y: py, z: pz }
+                if(uw.resolveObstacleCollisions(resPos, vel, 1.55))
+                {
+                    px = resPos.x
+                    py = clampVal(resPos.y, minFloorY - 0.35, maxCeilY + 0.25)
+                    pz = resPos.z
+                    nextVx = vel.x
+                    nextVz = vel.z
+                    posAdjusted = true
+                    uw.onHullBump(this.position)
+                }
+            }
+
+            if(posAdjusted)
+                body.setTranslation({ x: px, y: py, z: pz }, true)
 
             body.setLinvel({ x: nextVx, y: nextVy, z: nextVz }, true)
 

@@ -1,5 +1,6 @@
 import * as THREE from 'three/webgpu'
-import { color, cos, float, Fn, min, mix, positionWorld, sin, smoothstep, texture, uniform, uv, vec2, vec3, vec4 } from 'three/tsl'
+import { color, float, Fn, min, mix, positionWorld, sin, smoothstep, texture, uniform, uv, vec2, vec4 } from 'three/tsl'
+import { Howler } from 'howler'
 import { Game } from '../../Game.js'
 import { InteractivePoints } from '../../InteractivePoints.js'
 import { MeshDefaultMaterial } from '../../Materials/MeshDefaultMaterial.js'
@@ -9,10 +10,11 @@ import { MarineLife } from './MarineLife.js'
 const UW_CIRCUIT_BEST_KEY = 'vn_uw_circuit_v1'
 
 /**
- * Mundo Subaquatico (Fase 7):
- * - Bacia 192x192m com solo arenoso, causticas TSL animadas e heightfield Rapier dedicado
- * - Raios de sol submersos, corais estilizados, arcos naturais, floresta de kelp e cardumes
- * - 4 Capsulas tecnicas interativas, Circuito de 8 Argolas 3D e Farol de Retorno
+ * Mundo Subaquatico (Expedicao Abissal):
+ * - Bacia 192x192m com solo arenoso, causticas TSL e parede contenida (r <= 72m)
+ * - 4 biomas/marcos solidos: Habitat Submarino, Naufragio do Galeao, Fendas Hidrotermais (correntes ascendentes) e Ruinas de Cristal
+ * - Deflexao hidrodinamica 3D solida contra todas as barreiras (arcos, corais, cascos, pilares, pedras)
+ * - 5 Amêijoas Gigantes com Perolas, Sonar Ativo [F], Arraias & Aguas-Vivas e Slalom Turbo com Seta Guia
  */
 export class UnderwaterWorld
 {
@@ -21,6 +23,13 @@ export class UnderwaterWorld
         this.game = Game.getInstance()
         this.active = false
         this.bodies = []
+        this.obstacles = []
+        this.updrafts = []
+        this.pearls = []
+        this.pearlsFound = 0
+        this.turboTimer = 0
+        this.bumpCooldown = 0
+        this.sonarPingTimer = 0
         this.timeUniform = uniform(0)
 
         this.group = new THREE.Group()
@@ -34,10 +43,7 @@ export class UnderwaterWorld
                 loop: false,
                 volume: 0.45,
                 antiSpam: 0.08,
-                onPlay: (item, step) =>
-                {
-                    item.rate = 1 + step * 0.06
-                }
+                onPlay: (item, step) => { item.rate = 1 + step * 0.06 }
             }),
             finish: this.game.audio.register({
                 path: 'sounds/circuit/finish/Big Win Fanfare 2.mp3',
@@ -56,9 +62,14 @@ export class UnderwaterWorld
         this.setSeabed()
         this.setGodRays()
         this.setCoralsAndArches()
+        this.setShipwreck()
+        this.setThermalVents()
+        this.setCrystalRuins()
         this.setReturnBeacon()
         this.setCapsules()
+        this.setPearlClams()
         this.setRingCourse()
+        this.setSonarAndArrow()
 
         this.kelpForest = new KelpForest(this.group)
         this.marineLife = new MarineLife(this.group)
@@ -73,14 +84,18 @@ export class UnderwaterWorld
         {
             this.hud.lastStatus = ''
             this.hud.lastMeta = ''
-            if(this.active)
-                this.updateHud()
+            if(this.active) this.updateHud()
+        })
+
+        window.addEventListener('keydown', (e) =>
+        {
+            if(this.active && e.code === 'KeyF')
+                this.triggerSonar()
         })
 
         this.game.ticker.events.on('tick', () =>
         {
-            if(this.active)
-                this.update()
+            if(this.active) this.update()
         }, 10)
     }
 
@@ -93,7 +108,6 @@ export class UnderwaterWorld
         const dunes = Math.sin(wx * 0.075) * Math.cos(wz * 0.08) * 1.1
             + Math.sin(wx * 0.035 + wz * 0.045) * 0.7
 
-        // Borda suave formando parede do recife a partir de r > 76m
         const tWall = Math.min(1, Math.max(0, (r - 74) / 18))
         const wall = tWall * tWall * 12.0
 
@@ -103,6 +117,153 @@ export class UnderwaterWorld
     sampleSeabedHeightAt(wx, wz)
     {
         return UnderwaterWorld.sampleSeabedHeight(wx, wz)
+    }
+
+    // Helpers fisicos & colisao hidrodinamica solida
+    addSolidCylinder(x, z, radius, yMin = -2, yMax = 12)
+    {
+        const halfH = Math.max(0.5, (yMax - yMin) * 0.5)
+        const midY = (yMin + yMax) * 0.5
+        const phys = this.game.physics.getPhysical({
+            type: 'fixed',
+            enabled: false,
+            position: new THREE.Vector3(x, midY, z),
+            colliders: [ { shape: 'cylinder', parameters: [ halfH, radius ], category: 'object' } ]
+        })
+        this.bodies.push(phys.body)
+        this.obstacles.push({ type: 'cyl', x, z, r: radius, yMin, yMax })
+    }
+
+    addSolidSphere(x, y, z, radius)
+    {
+        const phys = this.game.physics.getPhysical({
+            type: 'fixed',
+            enabled: false,
+            position: new THREE.Vector3(x, y, z),
+            colliders: [ { shape: 'ball', parameters: [ radius ], category: 'object' } ]
+        })
+        this.bodies.push(phys.body)
+        this.obstacles.push({ type: 'sphere', x, y, z, r: radius })
+    }
+
+    resolveObstacleCollisions(pos, vel, subRadius = 1.55)
+    {
+        let hit = false
+        for(let iter = 0; iter < 2; iter++)
+        {
+            for(const ob of this.obstacles)
+            {
+                if(ob.type === 'cyl')
+                {
+                    if(pos.y + 1.1 < ob.yMin || pos.y - 1.1 > ob.yMax)
+                        continue
+                    const dx = pos.x - ob.x
+                    const dz = pos.z - ob.z
+                    const dist = Math.hypot(dx, dz)
+                    const minDist = ob.r + subRadius
+                    if(dist < minDist)
+                    {
+                        const nx = dist > 1e-4 ? dx / dist : 1
+                        const nz = dist > 1e-4 ? dz / dist : 0
+                        pos.x = ob.x + nx * minDist
+                        pos.z = ob.z + nz * minDist
+                        const vn = vel.x * nx + vel.z * nz
+                        if(vn < 0)
+                        {
+                            vel.x -= nx * vn * 1.25
+                            vel.z -= nz * vn * 1.25
+                        }
+                        hit = true
+                    }
+                }
+                else
+                {
+                    const dx = pos.x - ob.x
+                    const dy = pos.y - ob.y
+                    const dz = pos.z - ob.z
+                    const dist = Math.hypot(dx, dy, dz)
+                    const minDist = ob.r + subRadius
+                    if(dist < minDist)
+                    {
+                        const inv = dist > 1e-4 ? 1 / dist : 1
+                        const nx = dist > 1e-4 ? dx * inv : 0
+                        const ny = dist > 1e-4 ? dy * inv : 1
+                        const nz = dist > 1e-4 ? dz * inv : 0
+                        pos.x = ob.x + nx * minDist
+                        pos.y = ob.y + ny * minDist
+                        pos.z = ob.z + nz * minDist
+                        const vn = vel.x * nx + vel.y * ny + vel.z * nz
+                        if(vn < 0)
+                        {
+                            vel.x -= nx * vn * 1.25
+                            vel.z -= nz * vn * 1.25
+                        }
+                        hit = true
+                    }
+                }
+            }
+        }
+        return hit
+    }
+
+    onHullBump(pos)
+    {
+        if(this.bumpCooldown > 0) return
+        this.bumpCooldown = 0.35
+        this.playUwTone(115, 0.16, 'triangle', 0.11, 52)
+        if(this.game.world?.confetti && pos)
+            this.game.world.confetti.pop(pos.clone().setY(pos.y + 0.5))
+    }
+
+    sampleUpdraftAt(wx, wy, wz)
+    {
+        let lift = 0
+        for(const v of this.updrafts)
+        {
+            const d = Math.hypot(wx - v.x, wz - v.z)
+            if(d < v.radius && wy > v.baseY + 2.2 && wy < v.baseY + 10.5)
+                lift = Math.max(lift, 4.4 * (1 - d / v.radius))
+        }
+        return lift
+    }
+
+    playUwTone(freq, duration = 0.25, wave = 'sine', peak = 0.11, endFreq = null)
+    {
+        if(this.game.audio?.mute?.active) return
+        try
+        {
+            const ctx = Howler.ctx || new (window.AudioContext || window.webkitAudioContext)()
+            if(!ctx) return
+            if(ctx.state === 'suspended') ctx.resume()
+            const dest = Howler.masterGain || ctx.destination
+            const t0 = ctx.currentTime
+            const osc = ctx.createOscillator()
+            const gain = ctx.createGain()
+            osc.type = wave
+            osc.frequency.setValueAtTime(freq, t0)
+            if(endFreq)
+                osc.frequency.exponentialRampToValueAtTime(endFreq, t0 + duration)
+            gain.gain.setValueAtTime(0.0001, t0)
+            gain.gain.linearRampToValueAtTime(peak, t0 + 0.015)
+            gain.gain.exponentialRampToValueAtTime(0.0006, t0 + duration)
+            osc.connect(gain)
+            gain.connect(dest)
+            osc.start(t0)
+            osc.stop(t0 + duration + 0.03)
+        }
+        catch(e) {}
+    }
+
+    mat(hex)
+    {
+        return new MeshDefaultMaterial({ colorNode: color(hex), hasWater: false, hasLightBounce: false })
+    }
+
+    glowMat(hex, mult = 1.8)
+    {
+        const m = new THREE.MeshBasicNodeMaterial()
+        m.outputNode = Fn(() => vec4(MeshDefaultMaterial.revealDiscardNodeBuilder(this.game, color(hex).mul(mult)), 1))()
+        return m
     }
 
     setSeabed()
@@ -129,7 +290,6 @@ export class UnderwaterWorld
         }
         geo.computeVertexNormals()
 
-        // Solo arenoso com causticas animadas em TSL
         const sandLight = color('#98d8d6')
         const sandDeep = color('#206b82')
         const causticColor = color('#aef6ff')
@@ -209,26 +369,18 @@ export class UnderwaterWorld
 
     setCoralsAndArches()
     {
-        const coralColors = [ '#ff6f91', '#ff9f43', '#34cfc4', '#ffd166', '#9b72ff' ]
-        const coralMats = coralColors.map(hex => new MeshDefaultMaterial({
-            colorNode: color(hex),
-            hasWater: false,
-            hasLightBounce: false
-        }))
-        const rockMat = new MeshDefaultMaterial({
-            colorNode: color('#476b82'),
-            hasWater: false,
-            hasLightBounce: false
-        })
+        const coralMats = [ '#ff6f91', '#ff9f43', '#34cfc4', '#ffd166', '#9b72ff' ].map(h => this.mat(h))
+        const rockMat = this.mat('#476b82')
 
-        // Clusters de corais ao redor do recife (fora dos pontos interativos)
+        // Clusters variados: Cerebro, Prato em camadas e Galhos — todos com colisao solida
         const clusters = [
-            [ -16, 6 ], [ 16, 4 ], [ -24, 24 ], [ 22, 22 ], [ -44, -22 ], [ 44, -22 ],
+            [ -16, 6 ], [ 16, 4 ], [ -24, 24 ], [ 22, 22 ], [ -48, -22 ], [ 48, -22 ],
             [ -12, -24 ], [ 14, -26 ], [ -46, 20 ], [ 46, 16 ], [ 0, -64 ], [ -54, -44 ], [ 54, -44 ]
         ]
 
         const stalkGeo = new THREE.CylinderGeometry(0.28, 0.42, 1.8, 7)
         const capGeo = new THREE.DodecahedronGeometry(0.7, 0)
+        const discGeo = new THREE.CylinderGeometry(1.35, 0.65, 0.28, 10)
 
         for(let i = 0; i < clusters.length; i++)
         {
@@ -236,42 +388,61 @@ export class UnderwaterWorld
             const yBase = UnderwaterWorld.sampleSeabedHeight(cx, cz)
             const mat = coralMats[i % coralMats.length]
 
-            const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(1.7, 0), rockMat)
-            rock.scale.set(1.2, 0.75, 1.1)
-            rock.position.set(cx, yBase + 0.4, cz)
+            const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(1.85, 0), rockMat)
+            rock.scale.set(1.2, 0.82, 1.1)
+            rock.position.set(cx, yBase + 0.5, cz)
             rock.castShadow = true
             rock.receiveShadow = true
             this.group.add(rock)
 
-            const phys = this.game.physics.getPhysical({
-                type: 'fixed',
-                enabled: false,
-                position: new THREE.Vector3(cx, yBase + 0.4, cz),
-                colliders: [ { shape: 'ball', parameters: [ 1.6 ], category: 'object' } ]
-            })
-            this.bodies.push(phys.body)
+            // Colisor solido de cilindro cobrindo toda a altura do recife de coral
+            this.addSolidCylinder(cx, cz, 2.0, yBase - 1, yBase + 3.4)
 
-            for(let k = 0; k < 3; k++)
+            if(i % 3 === 0)
             {
-                const ang = (k / 3) * Math.PI * 2 + i
-                const sx = cx + Math.cos(ang) * 1.1
-                const sz = cz + Math.sin(ang) * 1.1
-                const sy = UnderwaterWorld.sampleSeabedHeight(sx, sz)
-                const stalk = new THREE.Mesh(stalkGeo, mat)
-                stalk.position.set(sx, sy + 0.9, sz)
-                stalk.rotation.z = Math.cos(ang) * 0.25
-                this.group.add(stalk)
+                // Coral-cerebro + galhos
+                const brain = new THREE.Mesh(new THREE.IcosahedronGeometry(1.05, 1), mat)
+                brain.scale.set(1.1, 0.78, 1.0)
+                brain.position.set(cx, yBase + 1.55, cz)
+                this.group.add(brain)
+            }
+            else if(i % 3 === 1)
+            {
+                // Coral-prato em 3 degraus
+                for(let l = 0; l < 3; l++)
+                {
+                    const d = new THREE.Mesh(discGeo, mat)
+                    d.scale.setScalar(1 - l * 0.24)
+                    d.position.set(cx + (l - 1) * 0.35, yBase + 1.15 + l * 0.55, cz + (l % 2) * 0.25)
+                    this.group.add(d)
+                }
+            }
+            else
+            {
+                // Corais tubulares
+                for(let k = 0; k < 3; k++)
+                {
+                    const ang = (k / 3) * Math.PI * 2 + i
+                    const sx = cx + Math.cos(ang) * 1.1
+                    const sz = cz + Math.sin(ang) * 1.1
+                    const sy = UnderwaterWorld.sampleSeabedHeight(sx, sz)
+                    const stalk = new THREE.Mesh(stalkGeo, mat)
+                    stalk.position.set(sx, sy + 0.9, sz)
+                    stalk.rotation.z = Math.cos(ang) * 0.25
+                    this.group.add(stalk)
 
-                const cap = new THREE.Mesh(capGeo, mat)
-                cap.position.set(sx, sy + 1.9, sz)
-                this.group.add(cap)
+                    const cap = new THREE.Mesh(capGeo, mat)
+                    cap.position.set(sx, sy + 1.9, sz)
+                    this.group.add(cap)
+                }
             }
         }
 
-        // 2 Arcos de pedra naturais para atravessar de submarino
+        // 3 Arcos de pedra naturais com pilares + lintel superiores solidos!
         const archSpecs = [
-            { x: 0, z: -28, rotY: 0 },
+            { x:   0, z: -28, rotY: 0 },
             { x: -38, z: -32, rotY: 0.7 },
+            { x:  36, z:  18, rotY: -0.55 },
         ]
         for(const spec of archSpecs)
         {
@@ -282,26 +453,231 @@ export class UnderwaterWorld
             arch.castShadow = true
             arch.receiveShadow = true
             this.group.add(arch)
+
+            const ca = Math.cos(spec.rotY)
+            const sa = Math.sin(spec.rotY)
+            for(const side of [ -1, 1 ])
+            {
+                const px = spec.x + side * 6.0 * ca
+                const pz = spec.z - side * 6.0 * sa
+                this.addSolidCylinder(px, pz, 1.35, y - 1, y + 4.4)
+            }
+            // Arco superior em esferas solidas
+            for(let k = -2; k <= 2; k++)
+            {
+                const a = Math.PI * 0.5 + k * 0.34
+                const ax = spec.x + Math.cos(a) * 6.2 * ca
+                const az = spec.z - Math.cos(a) * 6.2 * sa
+                const ay = y + Math.sin(a) * 6.2
+                this.addSolidSphere(ax, ay, az, 1.2)
+            }
+        }
+    }
+
+    setShipwreck()
+    {
+        const cx = -36
+        const cz = -4
+        const yBase = UnderwaterWorld.sampleSeabedHeight(cx, cz)
+        const wood = this.mat('#6b4423')
+        const darkWood = this.mat('#3d2514')
+        const iron = this.mat('#475569')
+        const glowChest = this.glowMat('#34cfc4', 1.8)
+
+        const wreck = new THREE.Group()
+        wreck.position.set(cx, yBase + 0.5, cz)
+        wreck.rotation.y = 0.42
+        wreck.rotation.z = 0.22 // Adornado inclinado na areia
+
+        // Quilha & casco
+        const hull = new THREE.Mesh(new THREE.BoxGeometry(3.6, 1.5, 9.6), darkWood)
+        hull.position.y = 0.65
+        wreck.add(hull)
+        const bow = new THREE.Mesh(new THREE.ConeGeometry(2.1, 3.8, 5), darkWood)
+        bow.rotation.x = Math.PI * 0.5
+        bow.position.set(0, 1.0, 6.2)
+        wreck.add(bow)
+        const stern = new THREE.Mesh(new THREE.BoxGeometry(3.4, 2.3, 2.6), wood)
+        stern.position.set(0, 1.45, -3.9)
+        wreck.add(stern)
+
+        // 5 cavernas (costelas) arqueadas
+        for(let r = -2; r <= 2; r++)
+        {
+            const rib = new THREE.Mesh(new THREE.TorusGeometry(2.0, 0.16, 6, 12, Math.PI), wood)
+            rib.rotation.x = Math.PI
+            rib.position.set(0, 2.4, r * 1.75)
+            wreck.add(rib)
+        }
+
+        // Mastro partido + cesto da gavea
+        const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.28, 6.8, 8), wood)
+        mast.position.set(0, 4.1, 0.4)
+        mast.rotation.z = -0.14
+        wreck.add(mast)
+        const yard = new THREE.Mesh(new THREE.BoxGeometry(4.2, 0.16, 0.16), darkWood)
+        yard.position.set(0, 5.4, 0.4)
+        yard.rotation.z = 0.2
+        wreck.add(yard)
+
+        // Ancora de ferro + 2 baus cintilantes
+        const anchor = new THREE.Mesh(new THREE.TorusGeometry(0.45, 0.1, 6, 12), iron)
+        anchor.position.set(2.1, 0.4, 4.5)
+        wreck.add(anchor)
+        for(const bz of [ -1.4, 1.8 ])
+        {
+            const chest = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.65, 0.65), glowChest)
+            chest.position.set(2.4, 0.1, bz)
+            wreck.add(chest)
+        }
+
+        this.group.add(wreck)
+
+        // Colisores solidos ao longo de toda a extensao do galeao
+        const ca = Math.cos(0.42)
+        const sa = Math.sin(0.42)
+        for(const localZ of [ -3.6, 0, 3.8 ])
+        {
+            const wx = cx + localZ * sa
+            const wz = cz + localZ * ca
+            this.addSolidCylinder(wx, wz, 2.35, yBase - 1, yBase + 4.8)
+        }
+    }
+
+    setThermalVents()
+    {
+        const basalt = this.mat('#1e293b')
+        const lavaGlow = this.glowMat('#ff6b2b', 2.2)
+
+        const spots = [
+            [ 34, -4 ], [ 28, 12 ], [ 38, -22 ], [ 18, -28 ], [ -18, 18 ]
+        ]
+        this.vents = []
+
+        for(const [ vx, vz ] of spots)
+        {
+            const yBase = UnderwaterWorld.sampleSeabedHeight(vx, vz)
+            const g = new THREE.Group()
+            g.position.set(vx, yBase, vz)
+
+            const cone = new THREE.Mesh(new THREE.CylinderGeometry(0.85, 2.1, 2.9, 9), basalt)
+            cone.position.y = 1.45
+            g.add(cone)
+
+            const crater = new THREE.Mesh(new THREE.CylinderGeometry(0.68, 0.52, 0.25, 9), lavaGlow)
+            crater.position.y = 2.86
+            g.add(crater)
+
+            const plumeMat = new THREE.MeshBasicNodeMaterial({
+                transparent: true,
+                depthWrite: false,
+                blending: THREE.AdditiveBlending,
+                side: THREE.DoubleSide
+            })
+            plumeMat.outputNode = Fn(() =>
+            {
+                const fade = smoothstep(float(0), float(0.18), uv().y).mul(smoothstep(float(1), float(0.25), uv().y))
+                return vec4(MeshDefaultMaterial.revealDiscardNodeBuilder(this.game, color('#68e1fd').mul(1.6)), fade.mul(0.24))
+            })()
+            const plume = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 0.75, 7.6, 12, 1, true), plumeMat)
+            plume.position.y = 6.6
+            g.add(plume)
+
+            this.group.add(g)
+            this.addSolidCylinder(vx, vz, 1.85, yBase - 1, yBase + 3.0)
+            this.updrafts.push({ x: vx, z: vz, baseY: yBase, radius: 3.8 })
+            this.vents.push({ plume, crater })
+        }
+    }
+
+    setCrystalRuins()
+    {
+        const marble = this.mat('#cbd5e1')
+        const cryColors = [ '#38bdf8', '#a855f7', '#34cfc4' ].map(h => this.glowMat(h, 1.85))
+        this.crystals = []
+
+        // Aglomerados de cristais bioluminescentes no Canion Norte
+        const clusters = [
+            [ -16, -42 ], [ 14, -42 ], [ -42, -50 ], [ 40, -48 ], [ -4, -60 ]
+        ]
+        for(let i = 0; i < clusters.length; i++)
+        {
+            const [ cx, cz ] = clusters[i]
+            const yBase = UnderwaterWorld.sampleSeabedHeight(cx, cz)
+            const mat = cryColors[i % cryColors.length]
+
+            for(let s = 0; s < 3; s++)
+            {
+                const a = (s / 3) * Math.PI * 2 + i * 0.5
+                const h = 3.2 + (s % 2) * 1.6
+                const shard = new THREE.Mesh(new THREE.ConeGeometry(0.65, h, 5), mat)
+                shard.position.set(cx + Math.cos(a) * 0.85, yBase + h * 0.45, cz + Math.sin(a) * 0.85)
+                shard.rotation.z = (s - 1) * 0.22
+                shard.rotation.x = (s % 2 === 0 ? 0.16 : -0.16)
+                this.group.add(shard)
+                this.crystals.push(shard)
+            }
+            this.addSolidCylinder(cx, cz, 1.55, yBase - 1, yBase + 5.2)
+        }
+
+        // Colunas classicas submersas perto das ruinas
+        const colCoords = [
+            [ -22, -52, 4.4 ], [ -12, -56, 2.2 ], [ 12, -56, 4.4 ], [ 22, -52, 2.6 ]
+        ]
+        for(const [ px, pz, h ] of colCoords)
+        {
+            const yBase = UnderwaterWorld.sampleSeabedHeight(px, pz)
+            const col = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.65, h, 10), marble)
+            col.position.set(px, yBase + h * 0.5, pz)
+            this.group.add(col)
+            this.addSolidCylinder(px, pz, 0.9, yBase - 1, yBase + h + 0.3)
         }
     }
 
     setReturnBeacon()
     {
+        // Base Submarina com Domo de Vidro Ciano & Anel de Atracacao (0, 24)
         this.beaconPos = new THREE.Vector3(0, 0, 24)
         const baseY = UnderwaterWorld.sampleSeabedHeight(this.beaconPos.x, this.beaconPos.z)
 
-        const baseMat = new MeshDefaultMaterial({ colorNode: color('#e9f4ff'), hasWater: false, hasLightBounce: false })
-        const goldMat = new MeshDefaultMaterial({ colorNode: color('#ffd166'), hasWater: false, hasLightBounce: false })
+        const steel = this.mat('#334155')
+        const ivory = this.mat('#e9f4ff')
+        const gold = this.mat('#ffd166')
+        const glassMat = new THREE.MeshBasicNodeMaterial({
+            transparent: true,
+            depthWrite: false,
+            side: THREE.DoubleSide
+        })
+        glassMat.outputNode = Fn(() => vec4(MeshDefaultMaterial.revealDiscardNodeBuilder(this.game, color('#67e8f9').mul(1.35)), 0.36))()
 
-        const plinth = new THREE.Mesh(new THREE.CylinderGeometry(3.2, 3.8, 0.2, 16), baseMat)
-        plinth.position.set(this.beaconPos.x, baseY + 0.1, this.beaconPos.z)
+        // Plataforma de atracacao em z = 21..24 e Domo Habitat atras em z = 27.2
+        const plinth = new THREE.Mesh(new THREE.CylinderGeometry(3.4, 4.0, 0.24, 16), ivory)
+        plinth.position.set(0, baseY + 0.12, 23.8)
         this.group.add(plinth)
 
-        const ring = new THREE.Mesh(new THREE.TorusGeometry(2.6, 0.12, 8, 32), goldMat)
-        ring.rotation.x = Math.PI * 0.5
-        ring.position.set(this.beaconPos.x, baseY + 0.22, this.beaconPos.z)
-        this.group.add(ring)
+        const dockRing = new THREE.Mesh(new THREE.TorusGeometry(2.4, 0.14, 8, 32), gold)
+        dockRing.rotation.x = Math.PI * 0.5
+        dockRing.position.set(0, baseY + 0.25, 22.8)
+        this.group.add(dockRing)
 
+        // Domo Habitat em (0, baseY, 27.6)
+        const domeX = 0
+        const domeZ = 27.8
+        const domeBase = new THREE.Mesh(new THREE.CylinderGeometry(3.0, 3.3, 0.6, 12), steel)
+        domeBase.position.set(domeX, baseY + 0.3, domeZ)
+        this.group.add(domeBase)
+
+        const glassDome = new THREE.Mesh(new THREE.SphereGeometry(2.7, 18, 12, 0, Math.PI * 2, 0, Math.PI * 0.55), glassMat)
+        glassDome.position.set(domeX, baseY + 0.55, domeZ)
+        this.group.add(glassDome)
+
+        const coreGlow = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 1.1, 1.5, 10), this.glowMat('#ffe066', 1.6))
+        coreGlow.position.set(domeX, baseY + 1.3, domeZ)
+        this.group.add(coreGlow)
+
+        this.addSolidCylinder(domeX, domeZ, 2.85, baseY - 1, baseY + 3.6)
+
+        // Feixe guia vertical para voltar a superficie
         const colMat = new THREE.MeshBasicNodeMaterial({
             transparent: true,
             depthWrite: false,
@@ -314,26 +690,22 @@ export class UnderwaterWorld
             const pulse = sin(uv().y.mul(16.0).sub(this.timeUniform.mul(4.0))).mul(0.5).add(0.5)
             return vec4(MeshDefaultMaterial.revealDiscardNodeBuilder(this.game, color('#9beeff').mul(1.15)), vFade.mul(0.18).add(pulse.mul(0.07)))
         })()
-        const column = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 2.2, 24, 24, 1, true), colMat)
-        column.position.set(this.beaconPos.x, baseY + 12, this.beaconPos.z)
+        const column = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 2.2, 22, 24, 1, true), colMat)
+        column.position.set(0, baseY + 11, 22.8)
         this.group.add(column)
 
-        const haloMat = new THREE.MeshBasicNodeMaterial()
-        haloMat.outputNode = Fn(() => vec4(MeshDefaultMaterial.revealDiscardNodeBuilder(this.game, color('#ffe066').mul(2.1)), 1))()
+        const haloMat = this.glowMat('#ffe066', 2.1)
         this.returnHalo = new THREE.Mesh(new THREE.TorusGeometry(2.1, 0.11, 8, 32), haloMat)
         this.returnHalo.rotation.x = Math.PI * 0.5
-        this.returnHalo.position.set(this.beaconPos.x, baseY + 6.5, this.beaconPos.z)
+        this.returnHalo.position.set(0, baseY + 6.5, 22.8)
         this.group.add(this.returnHalo)
 
         this.game.interactivePoints.create(
-            new THREE.Vector3(this.beaconPos.x, baseY + 1.8, this.beaconPos.z),
+            new THREE.Vector3(0, baseY + 1.8, 22.8),
             () => this.game.i18n.t('prompt.underwater.surface'),
             InteractivePoints.ALIGN_RIGHT,
             InteractivePoints.STATE_CONCEALED,
-            () =>
-            {
-                this.game.worldManager?.exitUnderwater()
-            },
+            () => { this.game.worldManager?.exitUnderwater() },
             () => this.game.inputs.interactiveButtons.addItems([ 'interact' ]),
             () => this.game.inputs.interactiveButtons.removeItems([ 'interact' ]),
             () => this.game.inputs.interactiveButtons.removeItems([ 'interact' ]),
@@ -356,22 +728,21 @@ export class UnderwaterWorld
         for(const spec of specs)
         {
             const y = UnderwaterWorld.sampleSeabedHeight(spec.x, spec.z)
-            const pedestal = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 2.0, 0.5, 12), shellMat)
-            pedestal.position.set(spec.x, y + 0.25, spec.z)
+            const pedestal = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 2.0, 0.7, 12), shellMat)
+            pedestal.position.set(spec.x, y + 0.35, spec.z)
             this.group.add(pedestal)
 
-            const coreMat = new THREE.MeshBasicNodeMaterial()
-            coreMat.outputNode = Fn(() =>
-            {
-                return vec4(MeshDefaultMaterial.revealDiscardNodeBuilder(this.game, color(spec.color).mul(1.8)), 1)
-            })()
+            // Pedestal solido (submarino nao atravessa o cilindro central)
+            this.addSolidCylinder(spec.x, spec.z, 1.45, y - 1, y + 1.55)
+
+            const coreMat = this.glowMat(spec.color, 1.8)
             const orb = new THREE.Mesh(new THREE.OctahedronGeometry(0.9, 1), coreMat)
-            orb.position.set(spec.x, y + 2.0, spec.z)
+            orb.position.set(spec.x, y + 2.2, spec.z)
             this.group.add(orb)
-            this.capsules.push({ orb, baseY: y + 2.0, phase: spec.x * 0.2 })
+            this.capsules.push({ orb, baseY: y + 2.2, phase: spec.x * 0.2, pos: new THREE.Vector3(spec.x, y + 2.2, spec.z) })
 
             this.game.interactivePoints.create(
-                new THREE.Vector3(spec.x, y + 2.2, spec.z),
+                new THREE.Vector3(spec.x, y + 2.4, spec.z),
                 () => this.game.i18n.t(`${spec.key}.title`),
                 InteractivePoints.ALIGN_RIGHT,
                 InteractivePoints.STATE_CONCEALED,
@@ -397,27 +768,70 @@ export class UnderwaterWorld
         }
     }
 
+    setPearlClams()
+    {
+        const shellMat = this.mat('#cbd5e1')
+        const lipMat = this.mat('#a78bfa')
+        const pearlMat = this.glowMat('#fff3b0', 2.2)
+
+        const clamCoords = [
+            [ -34,   4 ], // Perto do Naufragio
+            [ -42, -38 ], // Arco Oeste
+            [   0, -52 ], // Ruinas Norte
+            [  36, -10 ], // Fendas Hidrotermais
+            [  28,  20 ], // Recife SE
+        ]
+
+        this.pearls = []
+        for(let i = 0; i < clamCoords.length; i++)
+        {
+            const [ x, z ] = clamCoords[i]
+            const y = UnderwaterWorld.sampleSeabedHeight(x, z)
+            const g = new THREE.Group()
+            g.position.set(x, y + 0.15, z)
+
+            const bottomShell = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 0.85, 0.35, 8), shellMat)
+            g.add(bottomShell)
+
+            const upperPivot = new THREE.Group()
+            upperPivot.position.set(0, 0.18, -0.75)
+            const topShell = new THREE.Mesh(new THREE.CylinderGeometry(0.85, 1.1, 0.32, 8), lipMat)
+            topShell.position.set(0, 0.16, 0.75)
+            upperPivot.add(topShell)
+            g.add(upperPivot)
+
+            const pearl = new THREE.Mesh(new THREE.SphereGeometry(0.42, 12, 10), pearlMat)
+            pearl.position.set(0, 0.48, 0)
+            g.add(pearl)
+
+            this.group.add(g)
+            this.pearls.push({
+                group: g,
+                upperPivot,
+                pearl,
+                pos: new THREE.Vector3(x, y + 0.8, z),
+                collected: false,
+                openRatio: 0
+            })
+        }
+    }
+
     setRingCourse()
     {
         const ringCoords = [
             [ -14, 3.2,   2 ],
-            [ -28, 5.2, -20 ],
-            [ -16, 6.8, -42 ],
-            [   0, 5.5, -56 ],
-            [  18, 6.8, -42 ],
-            [  30, 5.0, -20 ],
+            [ -28, 5.0, -20 ],
+            [ -16, 6.4, -42 ],
+            [   0, 5.4, -56 ],
+            [  18, 6.4, -42 ],
+            [  30, 4.8, -20 ],
             [  22, 3.6,   4 ],
             [   8, 3.2,  10 ],
         ]
 
-        const activeMat = new THREE.MeshBasicNodeMaterial()
-        activeMat.outputNode = Fn(() => vec4(MeshDefaultMaterial.revealDiscardNodeBuilder(this.game, color('#ffe066').mul(2.4)), 1))()
-
-        const idleMat = new THREE.MeshBasicNodeMaterial()
-        idleMat.outputNode = Fn(() => vec4(MeshDefaultMaterial.revealDiscardNodeBuilder(this.game, color('#34cfc4').mul(1.4)), 1))()
-
-        const doneMat = new THREE.MeshBasicNodeMaterial()
-        doneMat.outputNode = Fn(() => vec4(MeshDefaultMaterial.revealDiscardNodeBuilder(this.game, color('#76e883').mul(1.8)), 1))()
+        const activeMat = this.glowMat('#ffe066', 2.4)
+        const idleMat = this.glowMat('#34cfc4', 1.4)
+        const doneMat = this.glowMat('#76e883', 1.8)
 
         const ringGeo = new THREE.TorusGeometry(3.2, 0.24, 10, 32)
         this.course = {
@@ -446,6 +860,48 @@ export class UnderwaterWorld
         }
     }
 
+    setSonarAndArrow()
+    {
+        // Onda de Sonar 3D expansiva (tecla F)
+        const sonarMat = new THREE.MeshBasicNodeMaterial({
+            transparent: true,
+            depthWrite: false,
+            side: THREE.DoubleSide
+        })
+        sonarMat.outputNode = Fn(() => vec4(MeshDefaultMaterial.revealDiscardNodeBuilder(this.game, color('#68e1fd').mul(2.1)), 0.72))()
+        this.sonarMesh = new THREE.Mesh(new THREE.RingGeometry(0.85, 1.25, 42), sonarMat)
+        this.sonarMesh.rotation.x = -Math.PI * 0.5
+        this.sonarMesh.visible = false
+        this.group.add(this.sonarMesh)
+
+        // Seta 3D flutuante apontando para a proxima argola do Slalom
+        const arrowGroup = new THREE.Group()
+        const mat = this.glowMat('#fde047', 2.1)
+        const shaft = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.14, 0.65), mat)
+        shaft.position.z = -0.18
+        arrowGroup.add(shaft)
+        const tip = new THREE.Mesh(new THREE.ConeGeometry(0.32, 0.56, 4), mat)
+        tip.rotation.x = Math.PI * 0.5
+        tip.position.z = 0.36
+        arrowGroup.add(tip)
+        arrowGroup.visible = false
+        this.group.add(arrowGroup)
+        this.guideArrow = arrowGroup
+    }
+
+    triggerSonar()
+    {
+        if(!this.active) return
+        const p = this.game.player?.position
+        if(!p) return
+        this.sonarPingTimer = 1.8
+        this.sonarMesh.visible = true
+        this.sonarMesh.position.set(p.x, Math.max(0.4, p.y - 0.3), p.z)
+        this.sonarMesh.scale.setScalar(1)
+        this.playUwTone(1320, 0.55, 'sine', 0.14, 1180)
+        setTimeout(() => { if(this.active) this.playUwTone(1320, 0.45, 'sine', 0.055, 1180) }, 220)
+    }
+
     setActive(active)
     {
         this.active = !!active
@@ -455,7 +911,9 @@ export class UnderwaterWorld
 
         if(this.active)
         {
-            // Resetar progresso parcial da corrida ao mergulhar
+            this.turboTimer = 0
+            this.sonarPingTimer = 0
+            if(this.sonarMesh) this.sonarMesh.visible = false
             this.course.running = false
             this.course.nextIndex = 0
             for(let i = 0; i < this.course.rings.length; i++)
@@ -469,25 +927,15 @@ export class UnderwaterWorld
 
     updateHud()
     {
-        if(!this.hud?.statusEl || !this.hud?.metaEl)
-            return
+        if(!this.hud?.statusEl || !this.hud?.metaEl) return
 
-        let statusText = ''
-        let metaText = ''
-
-        if(this.course.running)
-        {
-            const elapsed = Math.max(0, this.game.ticker.elapsed - this.course.startTime).toFixed(1)
-            statusText = this.game.i18n.t('hud.underwater.ring', {
+        const statusText = this.course.running
+            ? this.game.i18n.t('hud.underwater.ring', {
                 current: this.course.nextIndex + 1,
                 total: this.course.rings.length,
-                time: elapsed
+                time: Math.max(0, this.game.ticker.elapsed - this.course.startTime).toFixed(1)
             })
-        }
-        else
-        {
-            statusText = this.game.i18n.t('hud.underwater.title')
-        }
+            : this.game.i18n.t('hud.underwater.title')
 
         const capGroup = this.game.achievements.groups.get('underwaterCapsules')
         const capCount = capGroup && capGroup.progress instanceof Set ? capGroup.progress.size : 0
@@ -496,26 +944,31 @@ export class UnderwaterWorld
         const bestPart = Number.isFinite(bestMs)
             ? this.game.i18n.t('hud.underwater.best', { time: `${(bestMs / 1000).toFixed(2)}s` })
             : this.game.i18n.t('hud.underwater.noBest')
-        const depthVal = Math.max(0.5, Math.round((22 - (this.game.player?.position?.y ?? 3)) * 2) / 2).toFixed(1)
+        const depthVal = Math.max(0.5, Math.round((13 - (this.game.player?.position?.y ?? 3)) * 2) / 2).toFixed(1)
         const depthPart = this.game.i18n.t('hud.underwater.depth', { depth: depthVal })
-        metaText = `${this.game.i18n.t('hud.underwater.capsules', { count: capCount, total: 4 })} · ${depthPart} · ${bestPart}`
-
-        if(statusText !== this.hud.lastStatus)
-        {
-            this.hud.statusEl.textContent = statusText
-            this.hud.lastStatus = statusText
-        }
-        if(metaText !== this.hud.lastMeta)
-        {
-            this.hud.metaEl.textContent = metaText
-            this.hud.lastMeta = metaText
+        metaTextFix: {
+            const metaText = `${this.game.i18n.t('hud.underwater.capsules', { count: capCount, total: 4, pearls: this.pearlsFound })} · ${depthPart} · ${bestPart}`
+            if(statusText !== this.hud.lastStatus)
+            {
+                this.hud.statusEl.textContent = statusText
+                this.hud.lastStatus = statusText
+            }
+            if(metaText !== this.hud.lastMeta)
+            {
+                this.hud.metaEl.textContent = metaText
+                this.hud.lastMeta = metaText
+            }
         }
     }
 
     update()
     {
         const t = this.game.ticker.elapsedScaled
+        const dt = Math.min(0.05, this.game.ticker.delta || 0.016)
         this.timeUniform.value = t
+
+        if(this.bumpCooldown > 0) this.bumpCooldown = Math.max(0, this.bumpCooldown - dt)
+        if(this.turboTimer > 0) this.turboTimer = Math.max(0, this.turboTimer - dt)
 
         this.kelpForest.update()
         this.marineLife.update()
@@ -532,16 +985,64 @@ export class UnderwaterWorld
             c.orb.rotation.y = t * 0.8 + c.phase
         }
 
-        // Pulso visual no proximo anel ativo do slalom
-        for(let i = 0; i < this.course.rings.length; i++)
+        // Sonar ativo expansivo + destaque nos alvos
+        if(this.sonarPingTimer > 0)
         {
-            const s = i === this.course.nextIndex ? 1 + Math.sin(t * 4.2) * 0.065 : 1
-            this.course.rings[i].mesh.scale.setScalar(s)
+            this.sonarPingTimer = Math.max(0, this.sonarPingTimer - dt)
+            const p = 1 - this.sonarPingTimer / 1.8
+            this.sonarMesh.scale.setScalar(1 + p * 54)
+            this.sonarMesh.visible = this.sonarPingTimer > 0.04
         }
 
-        // Checar progresso nas argolas 3D
+        // 5 Amêijoas Gigantes com Pérolas
         const playerPos = this.game.player.position
+        for(const cl of this.pearls)
+        {
+            if(!cl.collected && playerPos.distanceTo(cl.pos) < 4.6)
+            {
+                cl.collected = true
+                this.pearlsFound++
+                this.sounds.capsule.play()
+                if(this.game.world?.confetti)
+                    this.game.world.confetti.pop(cl.pos.clone().setY(cl.pos.y + 1.2))
+                this.game.notifications?.show(
+                    /* html */`<div class="discovery">${this.game.i18n.t('underwater.pearl.found', { count: this.pearlsFound })}</div>`,
+                    'discovery',
+                    3.6,
+                    null,
+                    `uw-pearl-${this.pearlsFound}`
+                )
+            }
+            const targetOpen = cl.collected ? 0.95 : (playerPos.distanceTo(cl.pos) < 8.5 ? 0.45 : 0.12)
+            cl.openRatio += (targetOpen - cl.openRatio) * Math.min(1, dt * 6)
+            cl.upperPivot.rotation.x = -cl.openRatio
+            cl.pearl.visible = !cl.collected
+            if(!cl.collected)
+                cl.pearl.scale.setScalar(this.sonarPingTimer > 0 ? 1.35 + Math.sin(t * 8) * 0.18 : 1.0)
+        }
+
+        // Pulso visual no proximo anel + Seta Guia 3D do Slalom
         const target = this.course.rings[this.course.nextIndex]
+        for(let i = 0; i < this.course.rings.length; i++)
+        {
+            const pulse = i === this.course.nextIndex
+                ? (this.sonarPingTimer > 0 ? 1.18 : 1 + Math.sin(t * 4.2) * 0.065)
+                : 1
+            this.course.rings[i].mesh.scale.setScalar(pulse)
+        }
+
+        if(this.guideArrow && target && (this.course.running || playerPos.distanceTo(target.position) < 26))
+        {
+            this.guideArrow.visible = true
+            this.guideArrow.position.set(playerPos.x, playerPos.y + 2.3 + Math.sin(t * 4) * 0.08, playerPos.z)
+            this.guideArrow.lookAt(target.position)
+        }
+        else if(this.guideArrow)
+        {
+            this.guideArrow.visible = false
+        }
+
+        // Checar progresso nas argolas 3D (+ turbo surge 2.2s)
         if(target && playerPos.distanceTo(target.position) < 3.8)
         {
             if(target.index === 0)
@@ -550,6 +1051,7 @@ export class UnderwaterWorld
                 this.course.startTime = this.game.ticker.elapsed
             }
 
+            this.turboTimer = 2.2
             target.mesh.material = this.course.doneMat
             target.mesh.scale.setScalar(1)
             this.sounds.checkpoint.play(target.index)

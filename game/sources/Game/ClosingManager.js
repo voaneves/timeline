@@ -42,6 +42,10 @@ export class ClosingManager
                 else if(this.game.world.areas?.circuit?.state === CircuitArea.STATE_RUNNING || this.game.world.areas?.circuit?.state === CircuitArea.STATE_STARTING)
                     this.game.menu.open('circuit')
 
+                // Parque das Paixoes minigame ativo => Encerrar sem abrir menu
+                else if(this.game.world.areas?.circuit?.active)
+                    this.game.world.areas.circuit.stopActiveGame(true)
+
                 // Projects => Close
                 else if(this.game.world.areas?.projects && (this.game.world.areas?.projects.state === ProjectsArea.STATE_OPEN || this.game.world.areas?.projects.state === ProjectsArea.STATE_OPENING))
                     this.game.world.areas.projects.close()
