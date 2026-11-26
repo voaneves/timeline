@@ -485,16 +485,15 @@ html:not(.is-server-online) .online-element
     display none
     position absolute
     top 16px
-    left 50%
-    transform translateX(-50%)
+    left 16px
     z-index 8
-    padding 8px 18px
+    padding 8px 16px
     background linear-gradient(135deg, rgba(6, 36, 62, 0.84), rgba(13, 86, 108, 0.78))
     border 1px solid rgba(139, 238, 255, 0.45)
     box-shadow 0 6px 24px rgba(2, 16, 32, 0.45)
     backdrop-filter blur(6px)
     color #e9faff
-    text-align center
+    text-align left
     pointer-events none
     -webkit-user-select none
     -moz-user-select none
@@ -509,7 +508,7 @@ html:not(.is-server-online) .online-element
     html.input-filter-intro &,
     html.input-filter-cinematic &
         opacity 0
-        transform translateX(-50%) translateY(-16px)
+        transform translateY(-16px)
 
     .uw-status
         font-size 13px

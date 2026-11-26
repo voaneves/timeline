@@ -141,6 +141,9 @@ export class WindLines
 
     display()
     {
+        if(this.game.worldManager?.isUnderwater)
+            return
+
         const windLine = this.pool.find(windLine => windLine.available)
 
         if(!windLine)

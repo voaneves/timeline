@@ -422,11 +422,11 @@ export class VisualVehicle
         beamMat.outputNode = Fn(() =>
         {
             const fade = uv().y.smoothstep(0.0, 0.85).oneMinus()
-            return vec4(color('#8beeff').mul(1.2), fade.mul(0.22))
+            return vec4(color('#8beeff').mul(1.2), fade.mul(0.18))
         })()
-        const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.20, 1.75, 6.8, 16, 1, true), beamMat)
+        const beam = new THREE.Mesh(new THREE.CylinderGeometry(1.75, 0.20, 6.8, 16, 1, true), beamMat)
         beam.rotation.z = -Math.PI * 0.5
-        beam.position.set(5.15, 0.08, 0)
+        beam.position.set(5.05, 0.08, 0)
         this.submarineKit.group.add(beam)
 
         // Rastro de bolhas atras das turbinas laterais e helice central
@@ -979,22 +979,25 @@ export class VisualVehicle
 
         if(this.submarineKit?.active)
         {
-            const speedMag = Math.abs(physicalVehicle.forwardSpeed)
-            const spin = (speedMag + 3) * this.game.ticker.deltaScaled * 3.5
+            const dtSafe = Math.max(0.001, this.game.ticker.deltaScaled)
+            const speedMag = Math.hypot(physicalVehicle.velocity.x, physicalVehicle.velocity.y, physicalVehicle.velocity.z) / dtSafe
+            const motion = Math.min(1, speedMag / 4.5)
+            const spin = (1.2 + speedMag * 1.4) * this.game.ticker.deltaScaled * 2.4
             for(const prop of this.submarineKit.propellers)
                 prop.rotation.x += spin
 
             const t = this.game.ticker.elapsedScaled
-            const wakeLen = 1.6 + Math.min(2.6, speedMag * 0.12)
+            const wakeLen = 0.65 + motion * (1.2 + Math.min(2.2, speedMag * 0.1))
+            const wakeScale = 0.35 + motion * 0.65
             for(const b of this.submarineKit.bubbles)
             {
-                const p = (t * (0.9 + speedMag * 0.04) + b.phase) % 1
+                const p = (t * (0.45 + motion * 0.75) + b.phase) % 1
                 b.mesh.position.set(
                     b.baseX - p * wakeLen,
                     b.baseY + p * (0.45 + b.driftY),
                     b.baseZ + Math.sin(t * 6 + b.phase * 10) * 0.06 + p * b.driftZ
                 )
-                const s = Math.sin(p * Math.PI) * (0.65 + (b.phase % 0.4))
+                const s = Math.sin(p * Math.PI) * (0.65 + (b.phase % 0.4)) * wakeScale
                 b.mesh.scale.setScalar(Math.max(0.01, s))
             }
 

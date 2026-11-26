@@ -100,6 +100,11 @@ export class UnderwaterWorld
         return dunes * plazaClear + wall
     }
 
+    sampleSeabedHeightAt(wx, wz)
+    {
+        return UnderwaterWorld.sampleSeabedHeight(wx, wz)
+    }
+
     setSeabed()
     {
         const size = 192
@@ -307,7 +312,7 @@ export class UnderwaterWorld
         {
             const vFade = smoothstep(float(0.0), float(0.15), uv().y)
             const pulse = sin(uv().y.mul(16.0).sub(this.timeUniform.mul(4.0))).mul(0.5).add(0.5)
-            return vec4(MeshDefaultMaterial.revealDiscardNodeBuilder(this.game, color('#9beeff').mul(2.0)), vFade.mul(0.32).add(pulse.mul(0.12)))
+            return vec4(MeshDefaultMaterial.revealDiscardNodeBuilder(this.game, color('#9beeff').mul(1.15)), vFade.mul(0.18).add(pulse.mul(0.07)))
         })()
         const column = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 2.2, 24, 24, 1, true), colMat)
         column.position.set(this.beaconPos.x, baseY + 12, this.beaconPos.z)
@@ -491,7 +496,7 @@ export class UnderwaterWorld
         const bestPart = Number.isFinite(bestMs)
             ? this.game.i18n.t('hud.underwater.best', { time: `${(bestMs / 1000).toFixed(2)}s` })
             : this.game.i18n.t('hud.underwater.noBest')
-        const depthVal = Math.max(0, Math.round((22 - (this.game.player?.position?.y ?? 2)) * 2) / 2).toFixed(1)
+        const depthVal = Math.max(0.5, Math.round((22 - (this.game.player?.position?.y ?? 3)) * 2) / 2).toFixed(1)
         const depthPart = this.game.i18n.t('hud.underwater.depth', { depth: depthVal })
         metaText = `${this.game.i18n.t('hud.underwater.capsules', { count: capCount, total: 4 })} · ${depthPart} · ${bestPart}`
 

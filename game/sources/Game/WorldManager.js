@@ -132,14 +132,19 @@ export class WorldManager
                 fogFarRatio: 0.92
             }, 0)
 
-            // 5. Modo submarino + filtro de audio + ponto interativo
+            // 5. Modo submarino + filtro de audio + ponto interativo + limpar rajadas de vento da superficie
+            if(this.game.world?.windLines?.pool)
+            {
+                for(const wl of this.game.world.windLines.pool)
+                    wl.mesh.visible = false
+            }
             this.game.physicalVehicle.setUnderwaterMode(true)
             this.game.world.visualVehicle.setSubmarineMode(true)
             this.game.audio.setUnderwaterFilter(true)
             this.game.interactivePoints.syncRealmVisibility('underwater')
 
-            // 6. Posicionar no Recife Subaquatico
-            this.game.physicalVehicle.moveTo(new THREE.Vector3(0, 3.0, 14), Math.PI * 0.5)
+            // 6. Posicionar no Recife Subaquatico (limpo diante do farol)
+            this.game.physicalVehicle.moveTo(new THREE.Vector3(0, 3.8, 13), Math.PI * 0.5)
             this.game.view.focusPoint.isTracking = true
             this.game.player.state = Player.STATE_DEFAULT
 
@@ -192,7 +197,7 @@ export class WorldManager
             this.game.audio.setUnderwaterFilter(false)
             this.game.interactivePoints.syncRealmVisibility('surface')
 
-            // 4. Reposicionar na area escolhida ou praia Sudoeste segura
+            // 4. Reposicionar na area escolhida ou faixa seca da praia Sudoeste
             if(targetRespawnName)
             {
                 const respawn = this.game.respawns.getByName(targetRespawnName)
@@ -201,9 +206,11 @@ export class WorldManager
             }
             else
             {
-                this.game.physicalVehicle.moveTo(new THREE.Vector3(-66, 2.5, 48), 0.7)
+                this.game.physicalVehicle.moveTo(new THREE.Vector3(-48, 2.5, 22), -0.6)
             }
 
+            this.game.inputs.filters.clear()
+            this.game.inputs.filters.add('wandering')
             this.game.view.focusPoint.isTracking = true
             this.game.player.state = Player.STATE_DEFAULT
 

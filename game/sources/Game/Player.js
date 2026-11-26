@@ -115,6 +115,11 @@ export class Player
                 volume: 0,
                 onPlaying: (item) =>
                 {
+                    if(this.game.physicalVehicle.isUnderwater)
+                    {
+                        item.volume = 0
+                        return
+                    }
                     const defaultElevation = 1.08
                     const inAirEffect = remapClamp(Math.abs(this.game.physicalVehicle.position.y - defaultElevation), 0, 2, 1, 0)
                     const speedEffect = Math.min(1, this.game.physicalVehicle.xzSpeed * 0.1)
@@ -131,6 +136,11 @@ export class Player
                 volume: 0,
                 onPlaying: (item) =>
                 {
+                    if(this.game.physicalVehicle.isUnderwater)
+                    {
+                        item.volume = 0
+                        return
+                    }
                     const directionRatio = (1 - Math.abs(this.game.physicalVehicle.forwardRatio)) * 0.6
                     
                     let brakeEffect = Math.max(directionRatio, this.game.player.braking) * this.game.physicalVehicle.xzSpeed * 0.15 * this.game.physicalVehicle.wheels.inContactCount / 4
@@ -260,7 +270,7 @@ export class Player
         // Suspensions
         const suspensionsUpdate = () =>
         {
-            if(this.state !== Player.STATE_DEFAULT)
+            if(this.state !== Player.STATE_DEFAULT || this.game.worldManager?.isUnderwater)
                 return
 
             const activeSuspensions = [
@@ -572,7 +582,8 @@ export class Player
          */
         if(this.game.inputs.actions.get('brake').active)
         {
-            this.accelerating = 0
+            if(!this.game.worldManager?.isUnderwater)
+                this.accelerating = 0
             this.braking = 1
         }
 
@@ -668,9 +679,12 @@ export class Player
             this.game.achievements.setProgress('sea', 1)
 
         // Go high achievements
-        const elevation = Math.floor(this.position.y)
-        if(this.game.achievements.groups.get('goHigh') && elevation > this.game.achievements.groups.get('goHigh').progress)
-            this.game.achievements.setProgress('goHigh', elevation)
+        if(!this.game.worldManager?.isUnderwater)
+        {
+            const elevation = Math.floor(this.position.y)
+            if(this.game.achievements.groups.get('goHigh') && elevation > this.game.achievements.groups.get('goHigh').progress)
+                this.game.achievements.setProgress('goHigh', elevation)
+        }
 
         // // Speed achievement
         // const speedKmPerHour = Math.floor(this.game.physicalVehicle.xzSpeed / 1000 * 3600)

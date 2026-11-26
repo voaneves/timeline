@@ -282,17 +282,39 @@
             background url('../ui/map/player.webp')
             background-size cover
 
+            html.is-underwater &
+                width 56px
+                height 56px
+                top -28px
+                left -28px
+                background-image url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect x='10' y='21' width='34' height='22' rx='11' fill='%23f6be2c' stroke='%23163a5f' stroke-width='3'/><path d='M42 23 A9 9 0 0 1 42 41 Z' fill='%238beeff' stroke='%23f5c542' stroke-width='2.5'/><rect x='22' y='26' width='12' height='12' rx='4' fill='%2320b2aa' stroke='%23163a5f' stroke-width='2'/><polygon points='10,27 4,22 4,42 10,37' fill='%23f5c542' stroke='%23163a5f' stroke-width='2'/><rect x='14' y='13' width='8' height='6' rx='2' fill='%232a4365'/><rect x='14' y='45' width='8' height='6' rx='2' fill='%232a4365'/></svg>")
+                background-size contain
+                background-repeat no-repeat
+                background-position center
+
             @media only screen and (max-width 800px)
                 width 60px
                 height 60px
                 top -30px
                 left -30px
 
+                html.is-underwater &
+                    width 44px
+                    height 44px
+                    top -22px
+                    left -22px
+
             @media only screen and (max-width 440px)
                 width 40px
                 height 40px
                 top -20px
                 left -20px
+
+                html.is-underwater &
+                    width 32px
+                    height 32px
+                    top -16px
+                    left -16px
     
     .location
         --size 40px

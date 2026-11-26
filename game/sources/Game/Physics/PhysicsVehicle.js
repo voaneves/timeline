@@ -447,16 +447,111 @@ export class PhysicsVehicle
     moveTo(position, rotation = 0)
     {
         const quaternion = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), rotation)
-        this.chassis.physical.body.setTranslation(position)
-        this.chassis.physical.body.setRotation(quaternion)
-        this.chassis.physical.body.setLinvel({ x: 0, y: 0, z: 0 })
-        this.chassis.physical.body.setAngvel({ x: 0, y: 0, z: 0 })
+        this.chassis.physical.body.setTranslation(position, true)
+        this.chassis.physical.body.setRotation(quaternion, true)
+        this.chassis.physical.body.setLinvel({ x: 0, y: 0, z: 0 }, true)
+        this.chassis.physical.body.setAngvel({ x: 0, y: 0, z: 0 }, true)
 
         this.position.copy(position)
+        this.quaternion.copy(quaternion)
+        this.sideward.set(0, 0, 1).applyQuaternion(quaternion)
+        this.upward.set(0, 1, 0).applyQuaternion(quaternion)
+        this.forward.set(1, 0, 0).applyQuaternion(quaternion)
     }
 
     updatePrePhysics()
     {
+        if(this.isUnderwater)
+        {
+            const clampVal = (v, lo, hi) => Math.min(hi, Math.max(lo, v))
+            const dt = Math.min(0.05, this.game.ticker.deltaScaled || (1 / 60))
+            const body = this.chassis.physical.body
+            const lv = body.linvel()
+            const av = body.angvel()
+
+            const accel = this.game.player.accelerating
+            const steer = this.game.player.steering
+            const boost = this.game.player.boosting
+            const ascend = this.game.inputs.actions.get('suspensions').active
+            const descend = this.game.inputs.actions.get('brake').active
+
+            const horizLen = Math.hypot(this.forward.x, this.forward.z) || 1
+            const nx = this.forward.x / horizLen
+            const nz = this.forward.z / horizLen
+
+            const maxHoriz = accel >= 0 ? (boost ? 22 : 13) : 7.5
+            const hasAccel = Math.abs(accel) > 0.05
+            const targetVx = hasAccel ? nx * accel * maxHoriz : 0
+            const targetVz = hasAccel ? nz * accel * maxHoriz : 0
+
+            const seabedY = this.game.world?.underwaterWorld?.sampleSeabedHeightAt?.(this.position.x, this.position.z) ?? 0
+            const minFloorY = seabedY + 1.25
+            const maxCeilY = 15.5
+
+            let targetVy = 0
+            if(ascend && !descend && this.position.y < maxCeilY)
+                targetVy = 5.5 * clampVal((maxCeilY - this.position.y) / 1.5, 0.15, 1)
+            else if(descend && !ascend && this.position.y > minFloorY)
+                targetVy = -5.5 * clampVal((this.position.y - minFloorY) / 1.2, 0.15, 1)
+
+            if(this.position.y < minFloorY && !descend)
+                targetVy = Math.max(targetVy, Math.min(3.5, (minFloorY - this.position.y) * 4.0))
+            if(this.position.y > maxCeilY)
+                targetVy = Math.min(targetVy, -2.5)
+
+            const blendH = 1 - Math.exp(-dt * 4.5)
+            const blendV = 1 - Math.exp(-dt * 5.0)
+            let nextVx = lerp(lv.x, targetVx, blendH)
+            let nextVz = lerp(lv.z, targetVz, blendH)
+            let nextVy = lerp(lv.y, targetVy, blendV)
+
+            if(!hasAccel && Math.hypot(nextVx, nextVz) < 0.015)
+            {
+                nextVx = 0
+                nextVz = 0
+            }
+            if(!ascend && !descend && Math.abs(nextVy) < 0.015 && this.position.y >= minFloorY - 0.02 && this.position.y <= maxCeilY + 0.02)
+                nextVy = 0
+
+            body.setLinvel({ x: nextVx, y: nextVy, z: nextVz }, true)
+
+            const targetYawVel = steer * 1.85
+            const yaw = Math.atan2(-nz, nx)
+            const pitch = clampVal(nextVy * 0.03, -0.18, 0.18)
+            const roll = clampVal(-steer * 0.12, -0.15, 0.15)
+            const qTarget = new THREE.Quaternion().setFromEuler(new THREE.Euler(roll, yaw, pitch, 'YXZ'))
+            const qErr = qTarget.multiply(this.quaternion.clone().invert())
+            if(qErr.w < 0)
+            {
+                qErr.x = -qErr.x
+                qErr.y = -qErr.y
+                qErr.z = -qErr.z
+                qErr.w = -qErr.w
+            }
+
+            const sinHalf = Math.hypot(qErr.x, qErr.y, qErr.z)
+            let corrX = 0
+            let corrZ = 0
+            if(sinHalf > 1e-4)
+            {
+                const angle = 2 * Math.atan2(sinHalf, qErr.w)
+                corrX = (qErr.x / sinHalf) * angle * 8.0
+                corrZ = (qErr.z / sinHalf) * angle * 8.0
+            }
+
+            let nextYawVel = lerp(av.y, targetYawVel, 1 - Math.exp(-dt * 9.0))
+            if(Math.abs(steer) < 0.01 && Math.abs(nextYawVel) < 0.01)
+                nextYawVel = 0
+
+            body.setAngvel({
+                x: clampVal(corrX, -4, 4),
+                y: nextYawVel,
+                z: clampVal(corrZ, -4, 4)
+            }, true)
+
+            return
+        }
+
         // Engine force
         const topSpeed = lerp(this.topSpeed, this.topSpeedBoost, this.game.player.boosting)
         const overflowSpeed = Math.max(0, this.speed - topSpeed)
@@ -511,57 +606,20 @@ export class PhysicsVehicle
         // Update controller
         const delta = this.game.quality.level === 1 ? 1/60 : Math.min(1/60, this.game.ticker.deltaAverage)
         this.controller.updateVehicle(delta)
-
-        // Modo submarino: empuxo vertical, propulsao mid-water, leme e estabilizacao
-        if(this.isUnderwater)
-        {
-            const dt = Math.min(0.05, this.game.ticker.deltaScaled)
-            const body = this.chassis.physical.body
-
-            if(this.game.inputs.actions.get('suspensions').active && this.position.y < 14)
-            {
-                const lift = 1.45 * this.chassis.mass * dt * 60
-                body.applyImpulse({ x: 0, y: lift, z: 0 })
-            }
-
-            // Propulsao hidro quando fora do chao arenoso
-            if(this.wheels.inContactCount < 2)
-            {
-                const accel = this.game.player.accelerating
-                if(Math.abs(accel) > 0.05 && this.speed < topSpeed)
-                {
-                    const horizLen = Math.hypot(this.forward.x, this.forward.z) || 1
-                    const thrust = accel * (1 + this.game.player.boosting * 0.65) * 0.85 * this.chassis.mass * dt * 60
-                    body.applyImpulse({
-                        x: (this.forward.x / horizLen) * thrust,
-                        y: 0,
-                        z: (this.forward.z / horizLen) * thrust,
-                    })
-                }
-            }
-
-            // Estabilizacao suave (auto-leveling) + leme em Y no nado 3D
-            const steerYaw = this.wheels.inContactCount < 2
-                ? this.game.player.steering * 0.95 * this.chassis.mass * dt * 60
-                : 0
-            const levelScale = 0.55 * this.chassis.mass * dt * 60
-            // cross(this.upward, UP(0,1,0)) = (upward.z, 0, -upward.x)
-            body.applyTorqueImpulse({
-                x: this.upward.z * levelScale,
-                y: steerYaw,
-                z: -this.upward.x * levelScale,
-            })
-        }
     }
 
     setUnderwaterMode(active)
     {
         this.isUnderwater = !!active
         const body = this.chassis.physical.body
-        body.setGravityScale(this.isUnderwater ? 0.38 : 1.0, true)
-        body.setLinearDamping(this.isUnderwater ? 0.65 : 0.1)
-        body.setAngularDamping(this.isUnderwater ? 1.25 : 0.1)
-        this.topSpeedBoost = this.isUnderwater ? 32 : 40
+        this.chassis.physical.linearDamping = this.isUnderwater ? 2.4 : 0.1
+        this.chassis.physical.angularDamping = this.isUnderwater ? 5.0 : 0.1
+        body.setGravityScale(this.isUnderwater ? 0.0 : 1.0, true)
+        body.setLinearDamping(this.chassis.physical.linearDamping)
+        body.setAngularDamping(this.chassis.physical.angularDamping)
+        body.setLinvel({ x: 0, y: 0, z: 0 }, true)
+        body.setAngvel({ x: 0, y: 0, z: 0 }, true)
+        this.topSpeedBoost = this.isUnderwater ? 24 : 40
     }
 
     updatePostPhysics()
@@ -585,6 +643,14 @@ export class PhysicsVehicle
         this.xRotation = new THREE.Euler().setFromQuaternion(this.quaternion, 'XYZ').x
         this.yRotation = new THREE.Euler().setFromQuaternion(this.quaternion, 'YXZ').y
         this.zRotation = new THREE.Euler().setFromQuaternion(this.quaternion, 'ZYX').z
+
+        if(this.isUnderwater)
+        {
+            this.wheels.inContactCount = 0
+            this.wheels.justTouchedCount = 0
+            this.stop.test()
+            return
+        }
 
         if(Math.abs(this.game.player.accelerating) > 0.5)
             this.stuck.accumulate(this.velocity.length(), this.game.ticker.deltaScaled)

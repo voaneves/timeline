@@ -36,16 +36,20 @@ export class Title
             const line = []
             
             // Create base line (with potential overlapping)
+            const isUnderwater = !!this.game.worldManager?.isUnderwater
+            const vehicleEmoji = isUnderwater ? '🫧' : '🚜'
+            const sceneryEmoji = isUnderwater ? '🐠' : '🌳'
+
             for(let i = 0; i < this.length; i++)
             {
                 if(i === this.carPosition)
                 {
-                    line.push({ character: '🚗', size: 4, position: i })
+                    line.push({ character: vehicleEmoji, size: 4, position: i })
                 }
 
                 if((i - offsetRounded) % this.objectInterval === 0)
                 {
-                    line.push({ character: '🌳', size: 4, position: i })
+                    line.push({ character: sceneryEmoji, size: 4, position: i })
                 }
             }
 
