@@ -73,11 +73,8 @@ export class Map
         this.locations.items = [
             { key: 'map.achievements', respawnName: 'achievements', offset: { x: 0, y: -0.01 } },
             { key: 'map.altar', respawnName: 'altar', offset: { x: 0, y: -0.02 } },
-            { key: 'map.behindTheScene', respawnName: 'behindTheScene', offset: { x: 0, y: 0 } },
-            { key: 'map.bowling', respawnName: 'bowling', offset: { x: -0.04, y: 0.01 } },
             { key: 'map.career', respawnName: 'career', offset: { x: 0, y: -0.03 } },
             { key: 'map.circuit', respawnName: 'circuit', offset: { x: 0, y: 0 } },
-            { key: 'map.cookie', respawnName: 'cookie', offset: { x: -0.01, y: 0 } },
             { key: 'map.lab', respawnName: 'lab', offset: { x: -0.01, y: 0 } },
             { key: 'map.landing', respawnName: 'landing', offset: { x: 0.02, y: 0 } },
             { key: 'map.projects', respawnName: 'projects', offset: { x: 0, y: -0.01 } },
@@ -135,7 +132,7 @@ export class Map
                 key: 'map.underwater',
                 realm: 'surface',
                 className: 'is-underwater-pin',
-                position: new THREE.Vector3(-78, 0, 68),
+                position: new THREE.Vector3(-74.5, 0, 58.5),
                 onClick: () => this.game.worldManager?.enterUnderwater()
             },
             {

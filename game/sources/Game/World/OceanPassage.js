@@ -5,7 +5,7 @@ import { InteractivePoints } from '../InteractivePoints.js'
 import { MeshDefaultMaterial } from '../Materials/MeshDefaultMaterial.js'
 
 /**
- * Passagem oceanica localizada na Baia Sudoeste (-78, 0, 68).
+ * Passagem oceanica localizada na Baia Sudoeste (-74.5, 0, 58.5) na ponta do Píer de madeira.
  * Portal luminoso de mergulho com boias, disco de agua turquesa e bolhas ascendentes.
  */
 export class OceanPassage
@@ -13,7 +13,7 @@ export class OceanPassage
     constructor()
     {
         this.game = Game.getInstance()
-        this.position = new THREE.Vector3(-78, 0.05, 68)
+        this.position = new THREE.Vector3(-74.5, 0.05, 58.5)
         this.timeUniform = uniform(0)
 
         this.group = new THREE.Group()

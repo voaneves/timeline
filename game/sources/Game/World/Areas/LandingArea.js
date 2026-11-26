@@ -39,11 +39,11 @@ export class LandingArea extends Area
 
     setKiosk()
     {
-        // Atualiza textura do mapa no quiosque 3D com o novo mapa da ilha
+        // Atualiza textura do mapa no quiosque 3D com o novo mapa diorama (troca material compilado)
         const mapMaterial = this.game.materials.getFromName('stylizedMap')
         if(mapMaterial)
         {
-            new THREE.ImageBitmapLoader().setOptions({ imageOrientation: 'none' }).load('ui/map/map-day.webp', (image) =>
+            new THREE.ImageBitmapLoader().setOptions({ imageOrientation: 'from-image' }).load('ui/map/map-day.webp', (image) =>
             {
                 const mapTexture = new THREE.Texture(image)
                 mapTexture.flipY = false
@@ -51,8 +51,18 @@ export class LandingArea extends Area
                 mapTexture.minFilter = THREE.LinearFilter
                 mapTexture.magFilter = THREE.LinearFilter
                 mapTexture.needsUpdate = true
-                mapMaterial.map = mapTexture
-                mapMaterial.needsUpdate = true
+
+                const updatedMat = new MeshDefaultMaterial({ colorNode: texture(mapTexture) })
+                this.game.materials.save('stylizedMap', updatedMat)
+
+                for(const obj of this.objects.items)
+                {
+                    obj.visual?.object3D?.traverse((child) =>
+                    {
+                        if(child.isMesh && child.material === mapMaterial)
+                            child.material = updatedMat
+                    })
+                }
             })
         }
 

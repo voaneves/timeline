@@ -3,7 +3,7 @@ import { Game } from '../Game.js'
 import { Track } from '../Tracks.js'
 import { Trails } from '../Trails.js'
 import { remapClamp } from '../utilities/maths.js'
-import { cameraPosition, color, Fn, min, mix, normalWorld, positionViewDirection, positionWorld, screenCoordinate, texture, uniform, uv, vec2, vec3, vec4 } from 'three/tsl'
+import { cameraPosition, color, float, Fn, min, mix, normalWorld, positionViewDirection, positionWorld, screenCoordinate, texture, uniform, uv, vec2, vec3, vec4 } from 'three/tsl'
 import { clamp } from 'three/src/math/MathUtils.js'
 import gsap from 'gsap'
 import { MeshDefaultMaterial } from '../Materials/MeshDefaultMaterial.js'
@@ -27,7 +27,7 @@ export class VisualVehicle
         this.setScreenPosition()
         this.setPaints()
         this.setSubmarineKit()
-        this.setCharacterFace()
+        this.setCabinGlass()
         this.setCargoTrophies()
 
         this.tickCallback = () =>
@@ -511,21 +511,52 @@ export class VisualVehicle
         }
     }
 
-    setCharacterFace()
+    setCabinGlass()
     {
-        const eyeMat = new THREE.MeshBasicNodeMaterial()
-        eyeMat.outputNode = Fn(() => vec4(MeshDefaultMaterial.revealDiscardNodeBuilder(this.game, color('#7ef2ff').mul(1.9)), 1))()
+        const glassMat = new THREE.MeshBasicNodeMaterial({
+            transparent: true,
+            depthWrite: false,
+            side: THREE.DoubleSide
+        })
+        glassMat.outputNode = Fn(() =>
+        {
+            const viewDir = positionWorld.sub(cameraPosition).normalize()
+            const fresnel = viewDir.dot(normalWorld).abs().oneMinus().clamp(0, 1)
+            const tint = mix(color('#15263a'), color('#7ce8ff'), fresnel.mul(0.55)).mul(1.15)
+            const finalRgb = MeshDefaultMaterial.revealDiscardNodeBuilder(this.game, tint)
+            return vec4(finalRgb, float(0.36).add(fresnel.mul(0.28)))
+        })()
 
-        const leftEye = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.11, 0.14), eyeMat)
-        leftEye.position.set(1.425, 0.09, -0.24)
-        const rightEye = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.11, 0.14), eyeMat)
-        rightEye.position.set(1.425, 0.09, 0.24)
+        const glassGroup = new THREE.Group()
 
-        const smile = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.035, 0.24), eyeMat)
-        smile.position.set(1.425, -0.01, 0)
+        // Para-brisa dianteiro inclinado alinhado aos pilares A
+        const windshield = new THREE.Mesh(new THREE.BoxGeometry(0.018, 0.44, 1.04), glassMat)
+        windshield.position.set(0.36, 0.485, 0)
+        windshield.rotation.z = 0.48
+        glassGroup.add(windshield)
 
-        this.parts.chassis.add(leftEye, rightEye, smile)
-        this.characterFace = { leftEye, rightEye, smile }
+        // Vidro traseiro da cabine
+        const rearGlass = new THREE.Mesh(new THREE.BoxGeometry(0.018, 0.40, 1.02), glassMat)
+        rearGlass.position.set(-0.37, 0.48, 0)
+        rearGlass.rotation.z = -0.16
+        glassGroup.add(rearGlass)
+
+        // Vidros laterais (portas dianteira + traseira)
+        for(const sz of [ -0.56, 0.56 ])
+        {
+            const sideGlass = new THREE.Mesh(new THREE.BoxGeometry(0.68, 0.39, 0.018), glassMat)
+            sideGlass.position.set(-0.02, 0.48, sz)
+            sideGlass.rotation.x = sz > 0 ? 0.06 : -0.06
+            glassGroup.add(sideGlass)
+        }
+
+        // Teto solar panoramico
+        const sunroof = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.016, 0.78), glassMat)
+        sunroof.position.set(-0.04, 0.725, 0)
+        glassGroup.add(sunroof)
+
+        this.parts.chassis.add(glassGroup)
+        this.cabinGlass = glassGroup
     }
 
     setCargoTrophies()
@@ -553,7 +584,7 @@ export class VisualVehicle
             const leaf = new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.16, 6), greenMat)
             leaf.position.y = 0.18
             m.add(leaf)
-            m.position.set(-0.62, 0.28, -0.32)
+            m.position.set(-0.72, 0.22, -0.30)
             m.visible = false
             group.add(m)
             items.set('agro', m)
@@ -567,7 +598,7 @@ export class VisualVehicle
             const led = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.05, 0.14), cyanMat)
             led.position.y = 0.08
             m.add(led)
-            m.position.set(-1.04, 0.33, -0.32)
+            m.position.set(-1.16, 0.25, -0.30)
             m.visible = false
             group.add(m)
             items.set('tech', m)
@@ -583,7 +614,7 @@ export class VisualVehicle
                 bar.position.set(0, h * 0.5 - 0.1, -0.10 + b * 0.10)
                 m.add(bar)
             }
-            m.position.set(-0.62, 0.27, 0.32)
+            m.position.set(-0.72, 0.22, 0.30)
             m.visible = false
             group.add(m)
             items.set('business', m)
@@ -599,7 +630,7 @@ export class VisualVehicle
             neck.position.y = 0.22
             m.add(neck)
             m.rotation.set(-0.45, Math.PI * 0.5, 0)
-            m.position.set(-0.56, 0.36, 0.0)
+            m.position.set(-0.62, 0.28, 0.0)
             m.visible = false
             group.add(m)
             items.set('music', m)
@@ -618,7 +649,7 @@ export class VisualVehicle
                 p.position.z = pz
                 m.add(p)
             }
-            m.position.set(-1.04, 0.26, 0.30)
+            m.position.set(-1.16, 0.19, 0.30)
             m.visible = false
             group.add(m)
             items.set('gym', m)
@@ -799,14 +830,14 @@ export class VisualVehicle
         this.boostTrails.instance = new Trails()
 
         this.boostTrails.leftReference = new THREE.Object3D()
-        this.boostTrails.leftReference.position.set(-1.28, 0.1, -0.55)
+        this.boostTrails.leftReference.position.set(-1.54, -0.24, -0.46)
         this.parts.chassis.add(this.boostTrails.leftReference)
 
         this.boostTrails.left = this.boostTrails.instance.create()
         this.boostTrails.leftReference.getWorldPosition(this.boostTrails.left.position)
     
         this.boostTrails.rightReference = new THREE.Object3D()
-        this.boostTrails.rightReference.position.set(-1.28, 0.1, 0.55)
+        this.boostTrails.rightReference.position.set(-1.54, -0.24, 0.46)
         this.parts.chassis.add(this.boostTrails.rightReference)
 
         this.boostTrails.right = this.boostTrails.instance.create()
@@ -1008,15 +1039,6 @@ export class VisualVehicle
                 this.submarineKit.eyes.rightEye.scale.y = blink
                 this.submarineKit.eyes.smile.scale.z = this.game.player.boosting ? 1.25 : 1.0
             }
-        }
-
-        if(this.characterFace)
-        {
-            const t = this.game.ticker.elapsedScaled
-            const blink = (t % 4.2) > 4.08 ? 0.12 : (this.game.player.boosting ? 1.25 : 1.0)
-            this.characterFace.leftEye.scale.y = blink
-            this.characterFace.rightEye.scale.y = blink
-            this.characterFace.smile.scale.z = this.game.player.boosting ? 1.25 : 1.0
         }
     }
 }

@@ -23,8 +23,8 @@ const respawnsJson = readHeader('static/respawns/respawnsReferences.glb')
 const areaNames = new Set(areasJson.nodes.map(node => node.name))
 const respawnNames = new Set(respawnsJson.nodes.map(node => node.name))
 
-// 1. Grupos de area
-const areas = [ 'landing', 'career', 'projects', 'lab', 'social', 'timeMachine', 'behindTheScene', 'achievements', 'circuit', 'bowling', 'cookie', 'altar', 'toilet' ]
+// 1. Grupos de area (Arquipelago Autoral Victor Neves)
+const areas = [ 'landing', 'career', 'projects', 'lab', 'social', 'timeMachine', 'achievements', 'circuit', 'altar' ]
 for(const area of areas)
     if(!areaNames.has(area))
         errors.push(`grupo de area ausente: ${area}`)
@@ -47,7 +47,7 @@ if(terrainVertCount !== 16641)
     errors.push(`terrain.glb deve ter 16641 vertices (129x129), encontrado: ${terrainVertCount}`)
 
 // 4. respawns usados pelo Map.js
-const respawns = [ 'achievements', 'altar', 'behindTheScene', 'bowling', 'career', 'circuit', 'cookie', 'lab', 'landing', 'projects', 'social', 'timeMachine' ]
+const respawns = [ 'achievements', 'altar', 'career', 'circuit', 'lab', 'landing', 'projects', 'social', 'timeMachine' ]
 for(const respawn of respawns)
     if(![ ...respawnNames ].some(name => name.toLowerCase() === `respawn${respawn}`.toLowerCase()))
         errors.push(`respawn ausente: respawn${respawn}`)

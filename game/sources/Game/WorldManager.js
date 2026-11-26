@@ -206,7 +206,7 @@ export class WorldManager
             }
             else
             {
-                this.game.physicalVehicle.moveTo(new THREE.Vector3(-48, 2.5, 22), -0.6)
+                this.game.physicalVehicle.moveTo(new THREE.Vector3(-56, 2.2, 36), 0.75)
             }
 
             this.game.inputs.filters.clear()

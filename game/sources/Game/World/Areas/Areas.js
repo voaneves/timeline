@@ -1,15 +1,11 @@
 import { Game } from '../../Game.js'
 import { AltarArea } from './AltarArea.js'
-import { CookieArea } from './CookieArea.js'
 import { LandingArea } from './LandingArea.js'
 import { ProjectsArea } from './ProjectsArea.js'
 import { LabArea } from './LabArea.js'
 import { CareerArea } from './CareerArea.js'
 import { SocialArea } from './SocialArea.js'
-import { ToiletArea } from './ToiletArea.js'
-import { BowlingArea } from './BowlingArea.js'
 import { PassionParkArea } from './PassionParkArea.js'
-import { BehindTheSceneArea } from './BehindTheSceneArea.js'
 import { AchievementsArea } from './AchievementsArea.js'
 import { TimeMachineArea } from './TimeMachineArea.js'
 
@@ -22,16 +18,12 @@ export class Areas
         const list = [
             [ 'achievements', AchievementsArea ],
             [ 'altar', AltarArea ],
-            [ 'behindTheScene', BehindTheSceneArea ],
-            [ 'bowling', BowlingArea ],
             [ 'career', CareerArea ],
             [ 'circuit', PassionParkArea ],
-            [ 'cookie', CookieArea ],
             [ 'lab', LabArea ],
             [ 'landing', LandingArea ],
             [ 'projects', ProjectsArea ],
             [ 'social', SocialArea ],
-            [ 'toilet', ToiletArea ],
             [ 'timeMachine', TimeMachineArea ],
         ]
 
