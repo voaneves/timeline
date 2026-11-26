@@ -44,5 +44,6 @@ export default [
     [ 'underwaterCapsules', { 'pt-BR': 'Caçador de Cápsulas', en: 'Capsule Hunter' }, { 'pt-BR': 'Inspecione todas as <strong>4</strong> cápsulas técnicas submersas.', en: 'Inspect all <strong>4</strong> submerged tech capsules.' }, 4, true ],
     [ 'underwaterCourse', { 'pt-BR': 'Piloto das Profundezas', en: 'Deep Sea Pilot' }, { 'pt-BR': 'Atravesse todas as <strong>8</strong> argolas do slalom subaquático.', en: 'Pass through all <strong>8</strong> rings of the underwater slalom.' }, 1 ],
     [ 'underwaterReturn', { 'pt-BR': 'De Volta à Costa', en: 'Back to Shore' }, { 'pt-BR': 'Retorne à superfície a partir do mundo subaquático.', en: 'Return to the surface from the underwater world.' }, 1 ],
+    [ 'parkTrophies', { 'pt-BR': 'Caçamba Completa', en: 'Full Cargo Bed' }, { 'pt-BR': 'Conclua todos os <strong>5</strong> desafios do Parque das Paixões (Agro, Tech, Negócios, Música e Musculação).', en: 'Complete all <strong>5</strong> Passions Park challenges (Agri, Tech, Business, Music & Gym).' }, 5, true ],
     [ 'hacker', { 'pt-BR': 'Hacker', en: 'Hacker' }, { 'pt-BR': 'Esta conquista não pode ser alcançada.', en: 'This achievement cannot be reached.' }, 1 ],
 ]

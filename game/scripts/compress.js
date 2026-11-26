@@ -83,9 +83,9 @@ const hasToktx = () =>
             '--quantization-volume', 'mesh',
             '--quantize-position', 12,
             '--quantize-normal', 6,
-            '--quantize-texcoord', 6,
+            '--quantize-texcoord', 12,
             '--quantize-color', 2,
-            '--quantize-generic', 2
+            '--quantize-generic', 12
         ])
     }))
 }

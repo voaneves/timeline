@@ -170,19 +170,15 @@ for(const n of [ ...areasScene.listChildren() ])
         disposeNodeTree(n, null)
 }
 
-// Rotacionar circuit 180 graus ao redor da origem do mundo
+// Substituir o antigo circuit pelo Parque das Paixoes no Leste (34, 0, 10)
 const circuitNode = areasScene.listChildren().find(n => n.getName() === 'circuit')
 {
-    const t = circuitNode.getTranslation()
-    circuitNode.setTranslation([ -t[0], t[1], -t[2] ])
+    for(const child of [ ...circuitNode.listChildren() ])
+        disposeNodeTree(child, circuitNode)
+    circuitNode.setTranslation([ 34, 0, 10 ])
     circuitNode.setRotation([ 0, 0, 0, 1 ])
-
-    for(const child of circuitNode.listChildren())
-    {
-        const ct = child.getTranslation()
-        child.setTranslation([ -ct[0], ct[1], -ct[2] ])
-        child.setRotation(rotate180YQuat(child.getRotation()))
-    }
+    circuitNode.addChild(areasDoc.createNode('refZoneBounding.circuit').setTranslation([ 0, 3.27, 0 ]).setScale([ 52, 52, 52 ]))
+    circuitNode.addChild(areasDoc.createNode('refZoneFrustum.circuit').setTranslation([ 0, 3.27, 0 ]).setScale([ 58, 58, 58 ]))
 }
 
 // Reposicionar as 12 areas restantes
@@ -297,20 +293,32 @@ await areasDoc.transform(prune({
 await io.write(stat('areas/areas.glb'), areasDoc)
 
 // ============================================================================
-// 3. Atualizar scenery.glb (rotacionar pista 180 deg + mover pontes/pedras/degrau)
+// 3. Atualizar scenery.glb (remover pista de corrida antiga + mover pontes/pedras)
 // ============================================================================
 const sceneryDoc = await io.read(bkp('scenery/scenery.glb'))
 const sceneryScene = sceneryDoc.getRoot().listScenes()[0]
 const ROAD_NODES = new Set(['refRoad','Cube.001','Cube.049','Cube.059','Cube.064','Cube.066','Cube.067','Cube.071','Cube.072','Cube.074','Cube.075','Cube.076','Cube.078','Cube.079'])
+
+const disposeSceneryNode = (node) =>
+{
+    for(const c of [ ...node.listChildren() ])
+        disposeSceneryNode(c)
+    const mesh = node.getMesh()
+    if(mesh)
+    {
+        for(const p of mesh.listPrimitives()) p.dispose()
+        mesh.dispose()
+    }
+    sceneryScene.removeChild(node)
+    node.dispose()
+}
 
 for(const node of [ ...sceneryScene.listChildren() ])
 {
     const name = node.getName()
     if(ROAD_NODES.has(name))
     {
-        const t = node.getTranslation()
-        node.setTranslation([ -t[0], t[1], -t[2] ])
-        node.setRotation(rotate180YQuat(node.getRotation()))
+        disposeSceneryNode(node)
     }
     else if(name === 'bridgePhysicalFixed')
     {
@@ -352,65 +360,8 @@ for(const node of [ ...sceneryScene.listChildren() ])
 }
 await io.write(stat('scenery/scenery.glb'), sceneryDoc)
 
-// Extrair todos os triangulos da pista rotacionada para mascara exata de terreno e mapa 2D
+// Sem pista de corrida no Parque Leste
 const rotatedRoadTris = []
-{
-    const raw = readFileSync(stat('scenery/scenery.glb'))
-    const jLen = raw.readUInt32LE(12)
-    const j = JSON.parse(raw.subarray(20, 20 + jLen).toString('utf8'))
-    const binStart = 20 + jLen + 8
-    const readAccScalar = (accIdx, k) =>
-    {
-        const acc = j.accessors[accIdx]
-        const bv = j.bufferViews[acc.bufferView]
-        const off = binStart + (bv.byteOffset || 0) + (acc.byteOffset || 0)
-        if(acc.componentType === 5123) return raw.readUInt16LE(off + k * 2)
-        if(acc.componentType === 5125) return raw.readUInt32LE(off + k * 4)
-        return raw.readUInt8(off + k)
-    }
-    for(const name of ROAD_NODES)
-    {
-        const n = j.nodes.find(x => x.name === name)
-        if(!n || n.mesh === undefined) continue
-        const t = n.translation || [0,0,0]
-        const s = n.scale || [1,1,1]
-        const q = n.rotation ? new THREE.Quaternion(...n.rotation) : new THREE.Quaternion()
-        const readV = (acc, bv, i) =>
-        {
-            const stride = bv.byteStride || 12
-            const off = binStart + (bv.byteOffset || 0) + (acc.byteOffset || 0)
-            const v = new THREE.Vector3(
-                raw.readFloatLE(off + i * stride) * s[0],
-                0,
-                raw.readFloatLE(off + i * stride + 8) * s[2]
-            ).applyQuaternion(q)
-            return [ v.x + t[0], v.z + t[2] ]
-        }
-        for(const prim of j.meshes[n.mesh].primitives)
-        {
-            const acc = j.accessors[prim.attributes.POSITION]
-            const bv = j.bufferViews[acc.bufferView]
-            if(prim.indices !== undefined)
-            {
-                const iCount = j.accessors[prim.indices].count
-                for(let i = 0; i + 2 < iCount; i += 3)
-                {
-                    const a = readV(acc, bv, readAccScalar(prim.indices, i))
-                    const b = readV(acc, bv, readAccScalar(prim.indices, i + 1))
-                    const c = readV(acc, bv, readAccScalar(prim.indices, i + 2))
-                    rotatedRoadTris.push([ a, b, c ])
-                }
-            }
-            else
-            {
-                for(let i = 0; i + 2 < acc.count; i += 3)
-                {
-                    rotatedRoadTris.push([ readV(acc, bv, i), readV(acc, bv, i + 1), readV(acc, bv, i + 2) ])
-                }
-            }
-        }
-    }
-}
 
 // ============================================================================
 // 4. Atualizar respawnsReferences.glb
@@ -422,9 +373,8 @@ for(const node of respScene.listChildren())
     const name = node.getName()
     if(name === 'respawnCircuit')
     {
-        const t = node.getTranslation()
-        node.setTranslation([ -t[0], t[1], -t[2] ])
-        node.setRotation(rotate180YQuat(node.getRotation()))
+        node.setTranslation([ 34, 0.5, 10 ])
+        node.setRotation(yawQuat(0.3))
     }
     else if(RESPAWN_TARGETS[name])
     {
@@ -548,12 +498,18 @@ const ROAD_SEGMENTS = [
     [ -70, -24, -68, -48 ],
     [ -68, -48, -56, -59 ],
     [ -56, -59, -44, -61 ],
-    // Ramais Cookie, Bowling e Circuito
+    // Ramais Cookie, Bowling e Parque das Paixoes (Leste)
     [ -42, -8,  -69,  1 ],
     [ -42, -8,  -48,  6 ],
     [ -48,  6,  -44, 17 ],
-    [ -42, -8,  -12, -12 ],
-    [ -12, -12,  12, -15 ],
+    [ -42, -8,  -12, -10 ],
+    [ -12, -10,  20,  10 ],
+    [  20,  10,  34,  10 ],
+    // Trilhas dentro do Parque das Paixoes ligando as 5 arenas
+    [  34,  10,  24, -14 ], // Agro
+    [  34,  10,  52, -10 ], // Tech
+    [  34,  10,  54,  22 ], // Negocios
+    [  34,  10,  28,  34 ], // Musica
     // Passagem rasa de areia para TimeMachine na ilhota NE
     [  38, -46,  52, -43 ],
 ]
@@ -573,11 +529,15 @@ const LAND_CIRCLES = [
     // Peninsulas do Santuario Celestial & Cachoeira
     [ -14, -68, 12 ],
     [  11, -60, 13 ],
-    // Corredor Leste até o Circuito + Ilhota TimeMachine
-    [ -14, -14, 13 ],
-    [  14, -14, 16 ],
+    // Parque das Paixoes Leste & Ilhota TimeMachine
+    [ -12, -10, 14 ],
+    [  18,  10, 20 ],
+    [  36,   8, 30 ],
+    [  52, -10, 22 ],
+    [  54,  22, 22 ],
+    [  28,  34, 20 ],
     [  54, -46, 12 ],
-    [  54,  52, 13 ],
+    [  54,  52, 14 ],
 ]
 
 // Canais e lagoas cavadas (forcam agua onde queremos pontes e enseadas!)
@@ -605,6 +565,13 @@ const PAVED_CIRCLES = [
     [ -22, -36,  6.5 ], // BehindTheScene
     [  12, -68,  7.0 ], // Achievements
     [ -44, -66,  8.5 ], // Social
+    // Pracas do Parque das Paixoes
+    [  34,  10,  6.5 ], // Praca Central
+    [  24, -14,  7.5 ], // Agro
+    [  52, -10,  7.5 ], // Tech
+    [  54,  22,  7.5 ], // Negocios
+    [  28,  34,  8.0 ], // Musica
+    [  20,  10,  7.5 ], // Musculacao
 ]
 
 const evalTerrain = (wx, wz) =>
@@ -699,12 +666,21 @@ await sharp(terrainPng, { raw: { width: T_SIZE, height: T_SIZE, channels: 4 } })
 // ============================================================================
 // 6. Reposicionar Props, Vegetacao e Brisa Celestial sobre terra seca livre
 // ============================================================================
+const PARK_ARENAS = [
+    { x: 34, z: 10 },
+    { x: 24, z: -14 },
+    { x: 52, z: -10 },
+    { x: 54, z: 22 },
+    { x: 28, z: 34 },
+    { x: 20, z: 10 },
+]
+
 const isDryClearSpot = (wx, wz, minRoadDist = 4.8) =>
 {
     if(Math.abs(wx) > 84 || Math.abs(wz) > 84) return false
     const { b, dTrack, dRoad } = evalTerrain(wx, wz)
     if(b > 0.02 || dTrack < 6.8 || dRoad < minRoadDist) return false
-    for(const target of Object.values(AREA_TARGETS))
+    for(const target of [ ...Object.values(AREA_TARGETS), ...PARK_ARENAS ])
     {
         if(Math.hypot(wx - target.x, wz - target.z) < 11.5)
             return false
@@ -851,6 +827,18 @@ const renderMap = async(isNight) =>
     const [uwX, uwY] = toPx(-78, 68)
     const [landX, landY] = toPx(-42, -8)
 
+    const parkBadges = [
+        { x: 24, z: -14, c: '#2d8a4e', r: 16 },
+        { x: 52, z: -10, c: '#22d3ee', r: 16 },
+        { x: 54, z:  22, c: '#eab308', r: 16 },
+        { x: 28, z:  34, c: '#c67c3b', r: 17 },
+        { x: 20, z:  10, c: '#dc2626', r: 16 },
+    ].map(({ x, z, c, r }) =>
+    {
+        const [ px, py ] = toPx(x, z)
+        return `<circle cx="${px.toFixed(1)}" cy="${py.toFixed(1)}" r="${r}" fill="none" stroke="${c}" stroke-width="4" opacity="0.88"/><circle cx="${px.toFixed(1)}" cy="${py.toFixed(1)}" r="${r - 7}" fill="${c}" opacity="0.32"/>`
+    }).join('')
+
     const treeDots = [
         ...birchPts.map(([x, z]) => ({ x, z, c: isNight ? '#1f6e45' : '#2fa866', r: 9 })),
         ...oakPts.map(([x, z]) => ({ x, z, c: isNight ? '#9a7814' : '#f2b705', r: 8 })),
@@ -872,6 +860,7 @@ const renderMap = async(isNight) =>
         <circle cx="${sx}" cy="${sy}" r="14" fill="#ffe89c" opacity="${isNight ? 0.95 : 0.7}"/>
         <circle cx="${uwX}" cy="${uwY}" r="18" fill="none" stroke="#68e1fd" stroke-width="3" stroke-dasharray="6 5" opacity="0.7"/>
         <circle cx="${uwX}" cy="${uwY}" r="6" fill="#34cfc4" opacity="0.8"/>
+        ${parkBadges}
         ${treeDots}
     </svg>`)
 

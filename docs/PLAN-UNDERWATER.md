@@ -1,6 +1,6 @@
 # Plano Técnico — Iteração Fase 7: Passagem Oceânica & Mapa Underwater
 
-> **Status:** `T7.0`–`T7.5` + refinamentos (física 3D com amortecimento/leme/auto-estabilização, HUD subaquático `.js-underwater-hud`, pulso na argola alvo, esteira de bolhas e plâncton bioluminescente) implementados em **2026-11-25**. (`UnderwaterAtmosphere` foi integrado diretamente em `WorldManager.js` + `UnderwaterWorld.js`, e `VisualVehicle.js` adiciona o kit submarino proceduralmente sem necessidade de reexportar `.glb`).
+> **Status:** `T7.0`–`T7.5` + refinamentos (física 3D com amortecimento/leme/auto-estabilização, HUD subaquático `.js-underwater-hud`, pulso na argola alvo, esteira de bolhas, plâncton bioluminescente e troca visual completa de Agro-Rover ↔ Submarino de Pesquisa 3D no mergulho) implementados em **2026-11-25**. (`UnderwaterAtmosphere` foi integrado diretamente em `WorldManager.js` + `UnderwaterWorld.js`, e `VisualVehicle.js` alterna dinamicamente entre o Agro-Rover da superfície e o modelo 3D completo do Submarino sem necessidade de reexportar `.glb`).
 
 - **Projeto:** `C:\dev\voaneves\timeline\game` (Three.js WebGPU / TSL + Rapier3D)
 - **Pré-requisito concluído na Fase 5:** Baía Oceânica Aberta no Sudoeste (`X: -92..-62, Z: +48..+92`), marcada discretamente no `map-day` / `map-night` em `(-78, 0, +68)` com um anel turquesa pontilhado.

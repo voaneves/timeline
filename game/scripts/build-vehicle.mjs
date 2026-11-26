@@ -1,5 +1,7 @@
-// Gera um novo veiculo estilizado "Coastal Rally GT" em static/vehicle/default.glb
-// Mantem 100% de compatibilidade com VisualVehicle.js e PhysicsVehicle.js.
+// Gera o protagonista 3D "Agro-Rover Futurista" em static/vehicle/default.glb
+// Trator-Rover estilizado com capô chanfrado, cabine panoramica solar e cacamba traseira aberta
+// para exibir trofeus das 5 paixoes (Agro, Tech, Negocios, Musica, Musculacao).
+// Mantem 100% dos nomes de nos esperados por VisualVehicle.js e PhysicsVehicle.js.
 import { copyFileSync, existsSync, mkdirSync, statSync } from 'node:fs'
 import { resolve, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -19,13 +21,13 @@ if(!existsSync(backupPath))
 
 // Swatches exatos de static/palette.png (128x4, row 2)
 const UV = {
-    dark:     [ 89.5 / 128, 0.5 ], // #1e0603 borracha / friso escuro
+    dark:     [ 89.5 / 128, 0.5 ], // #1e0603 borracha / estrutura escura
     charcoal: [ 21.5 / 128, 0.5 ], // #4a413c para-choque / chassi
-    gunmetal: [ 25.5 / 128, 0.5 ], // #575a5e metal / difusor
+    gunmetal: [ 25.5 / 128, 0.5 ], // #575a5e metal / grade
     chrome:   [ 17.5 / 128, 0.5 ], // #c8c2c1 prata / escape / aro
     glass:    [ 13.5 / 128, 0.5 ], // #3dbbe7 vidro ciano-celeste
-    ivory:    [ 93.5 / 128, 0.5 ], // #fff2e8 detalhe esportivo branco
-    gold:     [ 33.5 / 128, 0.5 ], // #e4a90c emblema / pinca dourada
+    ivory:    [ 93.5 / 128, 0.5 ], // #fff2e8 detalhe branco
+    gold:     [ 33.5 / 128, 0.5 ], // #e4a90c emblema / detalhe dourado
 }
 
 const makeExtrudedProfile = (points, halfWidth, bevel = 0.04) =>
@@ -48,7 +50,7 @@ const makeExtrudedProfile = (points, halfWidth, bevel = 0.04) =>
     return geom
 }
 
-const partsToPrimitive = (doc, material, parts, { twoUV = false, bodyHeightRange = [-0.45, 0.65], bodyXRange = [-1.36, 1.38] } = {}) =>
+const partsToPrimitive = (doc, material, parts, { twoUV = false, bodyHeightRange = [-0.45, 0.72], bodyXRange = [-1.36, 1.40] } = {}) =>
 {
     let totalVerts = 0
     const normalized = parts.map(({ geometry, uv }) =>
@@ -131,9 +133,6 @@ const addGeo = (arr, geometry, uv, { tx = 0, ty = 0, tz = 0, rx = 0, ry = 0, rz 
     arr.push({ geometry, uv })
 }
 
-// -----------------------------------------------------------------------------
-// Documento GLTF
-// -----------------------------------------------------------------------------
 const doc = new Document()
 doc.createBuffer()
 
@@ -144,154 +143,135 @@ const matBlueEmissive = doc.createMaterial('emissiveBlueRadialGradient').setBase
 const matDarkGray = doc.createMaterial('darkGray').setBaseColorFactor([0.18, 0.2, 0.24, 1])
 
 const scene = doc.createScene('Scene')
-
-// Chassis root (alinhado com VisualVehicle.js)
 const chassisNode = doc.createNode('chassis').setTranslation([ 0, 0.9071759, 0 ])
 scene.addChild(chassisNode)
 
-// 1. Carroceria pintada (Coastal Rally GT Coupe)
+// 1. Carroceria pintada ("Agro-Rover Futurista" com cacamba traseira aberta)
 {
     const bodyParts = []
 
-    // Silhueta principal fastback esportiva (+X frente)
+    // Perfil robusto de Trator-Rover: frente elevada (+X), cabine panoramica no centro, cacamba baixa atras (-X)
     const mainProfile = [
         [-1.34, -0.32],
-        [-1.34,  0.14],
-        [-1.18,  0.22], // deck traseiro
-        [-0.78,  0.24],
-        [-0.42,  0.58], // teto fastback
-        [ 0.22,  0.58], // teto
-        [ 0.68,  0.22], // base para-brisa
-        [ 1.32,  0.04], // capo esportivo inclinado
-        [ 1.38, -0.18], // bico frontal
-        [ 1.28, -0.32],
+        [-1.34,  0.14], // tampa traseira baixa da cacamba
+        [-0.36,  0.14], // piso livre da cacamba (-1.30..-0.36)
+        [-0.24,  0.66], // teto traseiro da cabine
+        [ 0.34,  0.66], // teto frontal da cabine
+        [ 0.68,  0.24], // base do para-brisa
+        [ 1.30,  0.18], // capo alto de trator futurista
+        [ 1.40, -0.06], // bico chanfrado frontal
+        [ 1.32, -0.32],
     ]
-    addGeo(bodyParts, makeExtrudedProfile(mainProfile, 0.72, 0.055), 'heightGradient')
+    addGeo(bodyParts, makeExtrudedProfile(mainProfile, 0.68, 0.055), 'heightGradient')
 
-    // Ombros / para-lamas alargados (fender flares dianteiros e traseiros)
+    // Para-lamas alargados estilo trator-rover nas 4 rodas
     for(const sx of [-0.88, 0.88])
     {
         for(const sz of [-0.74, 0.74])
         {
-            const flare = new THREE.BoxGeometry(0.68, 0.26, 0.20)
-            addGeo(bodyParts, flare, 'heightGradient', { tx: sx, ty: -0.14, tz: sz })
+            addGeo(bodyParts, new THREE.BoxGeometry(0.72, 0.24, 0.22), 'heightGradient', { tx: sx, ty: -0.10, tz: sz })
         }
     }
 
-    // Saias laterais esportivas entre as rodas
-    for(const sz of [-0.75, 0.75])
-    {
-        const skirt = new THREE.BoxGeometry(1.12, 0.16, 0.16)
-        addGeo(bodyParts, skirt, 'heightGradient', { tx: 0, ty: -0.26, tz: sz })
-    }
+    // Laterais da cacamba aberta para guardar os trofeus com segurança
+    for(const sz of [-0.62, 0.62])
+        addGeo(bodyParts, new THREE.BoxGeometry(1.00, 0.20, 0.10), 'heightGradient', { tx: -0.84, ty: 0.22, tz: sz })
+    // Tampa traseira
+    addGeo(bodyParts, new THREE.BoxGeometry(0.10, 0.20, 1.32), 'heightGradient', { tx: -1.30, ty: 0.22, tz: 0 })
 
-    // Scoop de teto estilo rally
-    addGeo(bodyParts, new THREE.BoxGeometry(0.32, 0.08, 0.42), 'heightGradient', { tx: -0.05, ty: 0.62, tz: 0 })
-
-    // Aerofolio traseiro (asa superior)
-    addGeo(bodyParts, new THREE.BoxGeometry(0.34, 0.06, 1.48), 'heightGradient', { tx: -1.26, ty: 0.48, tz: 0, rz: 0.14 })
+    // Viseira superior do teto estilo trator
+    addGeo(bodyParts, new THREE.BoxGeometry(0.72, 0.07, 1.32), 'heightGradient', { tx: 0.06, ty: 0.69, tz: 0 })
 
     const prim = partsToPrimitive(doc, matRed, bodyParts, { twoUV: true })
     chassisNode.addChild(doc.createNode('bodyPainted').setMesh(doc.createMesh('bodyPainted').addPrimitive(prim)))
 }
 
-// 2. Pecas comuns (palette)
+// 2. Pecas estruturais comuns (palette)
 {
     const commonParts = []
 
-    // Chassi inferior / piso
-    addGeo(commonParts, new THREE.BoxGeometry(2.58, 0.14, 1.24), UV.dark, { tx: 0.02, ty: -0.36, tz: 0 })
+    // Chassi inferior reforcado + degraus laterais
+    addGeo(commonParts, new THREE.BoxGeometry(2.62, 0.14, 1.24), UV.dark, { tx: 0.02, ty: -0.36, tz: 0 })
+    for(const sz of [-0.74, 0.74])
+        addGeo(commonParts, new THREE.BoxGeometry(0.56, 0.08, 0.18), UV.chrome, { tx: 0.05, ty: -0.28, tz: sz })
 
-    // Para-choque dianteiro + splitter esportivo + skid plate
-    addGeo(commonParts, new THREE.BoxGeometry(0.18, 0.22, 1.50), UV.charcoal, { tx: 1.38, ty: -0.25, tz: 0 })
-    addGeo(commonParts, new THREE.BoxGeometry(0.24, 0.06, 1.56), UV.gunmetal, { tx: 1.42, ty: -0.34, tz: 0 })
-    // Grade frontal + barra de protecao rally
-    addGeo(commonParts, new THREE.BoxGeometry(0.08, 0.18, 0.92), UV.dark, { tx: 1.39, ty: -0.10, tz: 0 })
-    addGeo(commonParts, new THREE.BoxGeometry(0.10, 0.05, 0.86), UV.chrome, { tx: 1.45, ty: -0.20, tz: 0 })
+    // Piso da cacamba traseira em chassi escuro texturizado
+    addGeo(commonParts, new THREE.BoxGeometry(0.94, 0.06, 1.14), UV.charcoal, { tx: -0.84, ty: 0.14, tz: 0 })
 
-    // Difusor traseiro + para-choque traseiro
-    addGeo(commonParts, new THREE.BoxGeometry(0.16, 0.24, 1.48), UV.charcoal, { tx: -1.35, ty: -0.24, tz: 0 })
-    addGeo(commonParts, new THREE.BoxGeometry(0.20, 0.12, 1.18), UV.gunmetal, { tx: -1.36, ty: -0.32, tz: 0 })
+    // Para-choque dianteiro trator + quebra-mato cromado
+    addGeo(commonParts, new THREE.BoxGeometry(0.20, 0.24, 1.48), UV.charcoal, { tx: 1.40, ty: -0.22, tz: 0 })
+    addGeo(commonParts, new THREE.BoxGeometry(0.12, 0.07, 1.08), UV.chrome, { tx: 1.46, ty: -0.10, tz: 0 })
+    addGeo(commonParts, new THREE.BoxGeometry(0.10, 0.22, 0.10), UV.gold, { tx: 1.43, ty: 0.04, tz: 0 })
 
-    // Escapamentos duplos alinhados aos trails (-1.28, 0.1, +-0.55)
-    for(const sz of [-0.55, 0.55])
-    {
-        const pipe = new THREE.CylinderGeometry(0.075, 0.085, 0.26, 12)
-        addGeo(commonParts, pipe, UV.chrome, { tx: -1.36, ty: -0.22, tz: sz, rz: Math.PI * 0.5 })
-    }
+    // Grade do motor com aletas e painel visor frontal (onde ficam os olhos expressivos!)
+    addGeo(commonParts, new THREE.BoxGeometry(0.08, 0.26, 0.96), UV.dark, { tx: 1.38, ty: 0.08, tz: 0 })
 
-    // Cabine envidracada (para-brisa inclinado, teto escuro, vidros laterais e vigia traseiro)
+    // Chamine de escapamento vertical lateral cromada (personalidade de trator!)
+    addGeo(commonParts, new THREE.CylinderGeometry(0.065, 0.075, 0.78, 12), UV.chrome, { tx: 0.44, ty: 0.56, tz: -0.74 })
+    addGeo(commonParts, new THREE.CylinderGeometry(0.08, 0.065, 0.12, 12), UV.dark, { tx: 0.44, ty: 0.96, tz: -0.74 })
+
+    // Cabine panoramica envidracada + modulo solar no teto
     const cabinProfile = [
-        [-0.72, 0.22],
-        [-0.40, 0.54],
-        [ 0.20, 0.54],
-        [ 0.66, 0.21],
+        [-0.24, 0.20],
+        [-0.20, 0.62],
+        [ 0.30, 0.62],
+        [ 0.64, 0.24],
     ]
-    addGeo(commonParts, makeExtrudedProfile(cabinProfile, 0.64, 0.02), UV.glass)
+    addGeo(commonParts, makeExtrudedProfile(cabinProfile, 0.60, 0.02), UV.glass)
+    addGeo(commonParts, new THREE.BoxGeometry(0.42, 0.04, 0.92), UV.glass, { tx: 0.04, ty: 0.73, tz: 0 })
+    addGeo(commonParts, new THREE.BoxGeometry(0.50, 0.05, 1.02), UV.dark, { tx: 0.04, ty: 0.71, tz: 0 })
 
-    // Colunas e moldura do teto
-    addGeo(commonParts, new THREE.BoxGeometry(0.60, 0.05, 1.24), UV.dark, { tx: -0.10, ty: 0.57, tz: 0 })
+    // Roll-bar santo-antonio cromado atras da cabine
+    for(const sz of [-0.54, 0.54])
+        addGeo(commonParts, new THREE.BoxGeometry(0.10, 0.36, 0.08), UV.chrome, { tx: -0.28, ty: 0.42, tz: sz })
+    addGeo(commonParts, new THREE.BoxGeometry(0.09, 0.08, 1.16), UV.chrome, { tx: -0.28, ty: 0.58, tz: 0 })
 
-    // Retrovisores laterais
-    for(const sz of [-0.80, 0.80])
-        addGeo(commonParts, new THREE.BoxGeometry(0.14, 0.10, 0.16), UV.charcoal, { tx: 0.44, ty: 0.26, tz: sz })
-
-    // Suportes do aerofolio traseiro
-    for(const sz of [-0.46, 0.46])
-        addGeo(commonParts, new THREE.BoxGeometry(0.14, 0.26, 0.06), UV.dark, { tx: -1.22, ty: 0.34, tz: sz })
-
-    // Rack de teto + barra para farois auxiliares
-    addGeo(commonParts, new THREE.BoxGeometry(0.12, 0.06, 0.94), UV.charcoal, { tx: 0.16, ty: 0.62, tz: 0 })
-    for(const sz of [-0.26, 0.26])
-        addGeo(commonParts, new THREE.CylinderGeometry(0.09, 0.09, 0.12, 10), UV.dark, { tx: 0.20, ty: 0.67, tz: sz, rz: Math.PI * 0.5 })
-
-    // Emblema esportivo frontal + faixa ivory
-    addGeo(commonParts, new THREE.BoxGeometry(0.05, 0.08, 0.16), UV.gold, { tx: 1.43, ty: -0.09, tz: 0 })
-    addGeo(commonParts, new THREE.BoxGeometry(0.60, 0.02, 0.18), UV.ivory, { tx: 0.96, ty: 0.14, tz: 0, rz: -0.22 })
+    // Para-choque traseiro + engate dourado
+    addGeo(commonParts, new THREE.BoxGeometry(0.18, 0.20, 1.44), UV.charcoal, { tx: -1.36, ty: -0.24, tz: 0 })
+    addGeo(commonParts, new THREE.BoxGeometry(0.16, 0.12, 0.24), UV.gold, { tx: -1.42, ty: -0.20, tz: 0 })
 
     const prim = partsToPrimitive(doc, matPalette, commonParts)
     chassisNode.addChild(doc.createNode('common').setMesh(doc.createMesh('common').addPrimitive(prim)))
 }
 
-// 3. Farois dianteiros + DRL + auxiliares do teto
+// 3. Farois dianteiros & barra LED do teto
 {
     const parts = []
-    for(const sz of [-0.52, 0.52])
+    for(const sz of [-0.56, 0.56])
     {
-        addGeo(parts, new THREE.BoxGeometry(0.12, 0.11, 0.26), [0.5, 0.5], { tx: 1.35, ty: -0.03, tz: sz, rz: -0.2 })
-        addGeo(parts, new THREE.CylinderGeometry(0.07, 0.07, 0.04, 10), [0.5, 0.5], { tx: 0.26, ty: 0.67, tz: sz * 0.5, rz: Math.PI * 0.5 })
+        addGeo(parts, new THREE.CylinderGeometry(0.10, 0.10, 0.08, 12), [0.5, 0.5], { tx: 1.39, ty: -0.02, tz: sz, rz: Math.PI * 0.5 })
+        addGeo(parts, new THREE.BoxGeometry(0.08, 0.07, 0.22), [0.5, 0.5], { tx: 0.42, ty: 0.70, tz: sz * 0.65 })
     }
     const prim = partsToPrimitive(doc, matOrangeEmissive, parts)
     chassisNode.addChild(doc.createNode('headlights').setMesh(doc.createMesh('headlights').addPrimitive(prim)))
 }
 
-// 4. Lanternas traseiras + luz de freio + setas
+// 4. Lanternas traseiras, luz de freio & setas
 {
     const backParts = []
-    addGeo(backParts, new THREE.BoxGeometry(0.06, 0.09, 1.18), [0.5, 0.5], { tx: -1.35, ty: 0.06, tz: 0 })
+    addGeo(backParts, new THREE.BoxGeometry(0.06, 0.09, 1.18), [0.5, 0.5], { tx: -1.36, ty: -0.05, tz: 0 })
     chassisNode.addChild(doc.createNode('backLights').setMesh(doc.createMesh('backLights').addPrimitive(partsToPrimitive(doc, matOrangeEmissive, backParts))))
 
     const stopParts = []
-    addGeo(stopParts, new THREE.BoxGeometry(0.06, 0.05, 0.72), [0.5, 0.5], { tx: -1.39, ty: 0.49, tz: 0 })
+    addGeo(stopParts, new THREE.BoxGeometry(0.06, 0.06, 0.78), [0.5, 0.5], { tx: -0.32, ty: 0.66, tz: 0 })
     chassisNode.addChild(doc.createNode('stopLights').setMesh(doc.createMesh('stopLights').addPrimitive(partsToPrimitive(doc, matOrangeEmissive, stopParts))))
 
     const leftParts = []
-    addGeo(leftParts, new THREE.BoxGeometry(0.12, 0.07, 0.14), [0.5, 0.5], { tx: 1.32, ty: -0.10, tz: -0.68 })
-    addGeo(leftParts, new THREE.BoxGeometry(0.10, 0.07, 0.16), [0.5, 0.5], { tx: -1.35, ty: 0.06, tz: -0.66 })
+    addGeo(leftParts, new THREE.BoxGeometry(0.10, 0.07, 0.14), [0.5, 0.5], { tx: 1.34, ty: -0.10, tz: -0.68 })
+    addGeo(leftParts, new THREE.BoxGeometry(0.10, 0.07, 0.16), [0.5, 0.5], { tx: -1.36, ty: 0.08, tz: -0.66 })
     chassisNode.addChild(doc.createNode('blinkerLeft').setMesh(doc.createMesh('blinkerLeft').addPrimitive(partsToPrimitive(doc, matOrangeEmissive, leftParts))))
 
     const rightParts = []
-    addGeo(rightParts, new THREE.BoxGeometry(0.12, 0.07, 0.14), [0.5, 0.5], { tx: 1.32, ty: -0.10, tz: 0.68 })
-    addGeo(rightParts, new THREE.BoxGeometry(0.10, 0.07, 0.16), [0.5, 0.5], { tx: -1.35, ty: 0.06, tz: 0.66 })
+    addGeo(rightParts, new THREE.BoxGeometry(0.10, 0.07, 0.14), [0.5, 0.5], { tx: 1.34, ty: -0.10, tz: 0.68 })
+    addGeo(rightParts, new THREE.BoxGeometry(0.10, 0.07, 0.16), [0.5, 0.5], { tx: -1.36, ty: 0.08, tz: 0.66 })
     chassisNode.addChild(doc.createNode('blinkerRight').setMesh(doc.createMesh('blinkerRight').addPrimitive(partsToPrimitive(doc, matOrangeEmissive, rightParts))))
 }
 
-// 5. Faixas de energia do Boost (`energy`) + 3 celulas no deck traseiro (`cell1..3`)
+// 5. Faixas de energia do Boost + 3 celulas no santo-antonio traseiro
 {
     const energyParts = []
-    for(const sz of [-0.77, 0.77])
-        addGeo(energyParts, new THREE.BoxGeometry(0.86, 0.07, 0.05), [0.5, 0.5], { tx: -0.04, ty: -0.08, tz: sz })
-    addGeo(energyParts, new THREE.BoxGeometry(0.18, 0.06, 0.64), [0.5, 0.5], { tx: -0.98, ty: 0.24, tz: 0 })
+    for(const sz of [-0.74, 0.74])
+        addGeo(energyParts, new THREE.BoxGeometry(0.84, 0.07, 0.05), [0.5, 0.5], { tx: 0.02, ty: -0.04, tz: sz })
     const prim = partsToPrimitive(doc, matDarkGray, energyParts, { twoUV: true })
     chassisNode.addChild(doc.createNode('energy').setMesh(doc.createMesh('energy').addPrimitive(prim)))
 
@@ -300,10 +280,10 @@ scene.addChild(chassisNode)
     {
         const cellNode = doc.createNode(`cell${i + 1}`).setTranslation([ 0, 0.2, 0 ])
         const cagePrim = partsToPrimitive(doc, matPalette, [
-            { geometry: (() => { const g = new THREE.BoxGeometry(0.14, 0.10, 0.14); g.translate(-0.98, 0.14, cellPositionsZ[i]); return g })(), uv: UV.chrome }
+            { geometry: (() => { const g = new THREE.BoxGeometry(0.12, 0.10, 0.12); g.translate(-0.26, 0.66, cellPositionsZ[i]); return g })(), uv: UV.chrome }
         ])
         const corePrim = partsToPrimitive(doc, matBlueEmissive, [
-            { geometry: (() => { const g = new THREE.BoxGeometry(0.10, 0.12, 0.10); g.translate(-0.98, 0.17, cellPositionsZ[i]); return g })(), uv: [0.5, 0.5] }
+            { geometry: (() => { const g = new THREE.BoxGeometry(0.08, 0.12, 0.08); g.translate(-0.26, 0.69, cellPositionsZ[i]); return g })(), uv: [0.5, 0.5] }
         ])
         cellNode.addChild(doc.createNode(`cellsCage.${i + 1}`).setMesh(doc.createMesh(`cellsCage.${i + 1}`).addPrimitive(cagePrim)))
         cellNode.addChild(doc.createNode(`cellsEnergy.${i + 1}`).setMesh(doc.createMesh(`cellsEnergy.${i + 1}`).addPrimitive(corePrim)))
@@ -311,7 +291,7 @@ scene.addChild(chassisNode)
     }
 }
 
-// 6. Roda modelo (`wheelContainer` — clonada 4x por VisualVehicle.js)
+// 6. Roda Trator-Rover robusta (`wheelContainer`)
 {
     const wheelContainer = doc.createNode('wheelContainer').setTranslation([ 0.9, -0.42, -0.75 ])
     scene.addChild(wheelContainer)
@@ -319,46 +299,51 @@ scene.addChild(chassisNode)
     const wheelCylinder = doc.createNode('wheelCylinder')
     wheelContainer.addChild(wheelCylinder)
 
-    // Pneu + cubos + raios esportivos
     const tireParts = []
-    const tire = new THREE.CylinderGeometry(0.41, 0.41, 0.34, 24)
+    const tire = new THREE.CylinderGeometry(0.42, 0.42, 0.38, 24)
     addGeo(tireParts, tire, UV.dark, { rx: Math.PI * 0.5 })
-    const sidewall = new THREE.CylinderGeometry(0.32, 0.32, 0.355, 20)
-    addGeo(tireParts, sidewall, UV.charcoal, { rx: Math.PI * 0.5 })
-    const hub = new THREE.CylinderGeometry(0.24, 0.24, 0.37, 16)
-    addGeo(tireParts, hub, UV.gunmetal, { rx: Math.PI * 0.5 })
-    // 5 raios esportivos
-    for(let k = 0; k < 5; k++)
+    // Garras/gomes todo-terreno
+    for(let t = 0; t < 12; t++)
     {
-        const ang = (k / 5) * Math.PI * 2
-        const spoke = new THREE.BoxGeometry(0.22, 0.055, 0.04)
+        const ang = (t / 12) * Math.PI * 2
+        const lug = new THREE.BoxGeometry(0.07, 0.05, 0.36)
+        addGeo(tireParts, lug, UV.charcoal, {
+            tx: Math.cos(ang) * 0.415,
+            ty: Math.sin(ang) * 0.415,
+            rz: ang - Math.PI * 0.5,
+        })
+    }
+    const hub = new THREE.CylinderGeometry(0.24, 0.24, 0.40, 16)
+    addGeo(tireParts, hub, UV.gunmetal, { rx: Math.PI * 0.5 })
+    for(let k = 0; k < 6; k++)
+    {
+        const ang = (k / 6) * Math.PI * 2
+        const spoke = new THREE.BoxGeometry(0.22, 0.06, 0.04)
         addGeo(tireParts, spoke, UV.chrome, {
             tx: Math.cos(ang) * 0.12,
             ty: Math.sin(ang) * 0.12,
-            tz: -0.175,
+            tz: -0.195,
             rz: ang,
         })
     }
     wheelCylinder.addChild(doc.createNode('wheel').setMesh(doc.createMesh('wheel').addPrimitive(partsToPrimitive(doc, matPalette, tireParts))))
 
-    // Aro pintado (muda com as recompensas de pintura!)
     const paintedParts = []
-    const lip = new THREE.TorusGeometry(0.24, 0.032, 8, 20)
-    addGeo(paintedParts, lip, [0.5, 0.5], { tz: -0.175 })
-    const cap = new THREE.CylinderGeometry(0.08, 0.08, 0.04, 12)
-    addGeo(paintedParts, cap, [0.5, 0.5], { rx: Math.PI * 0.5, tz: -0.18 })
+    const lip = new THREE.TorusGeometry(0.24, 0.036, 8, 20)
+    addGeo(paintedParts, lip, [0.5, 0.5], { tz: -0.195 })
+    const cap = new THREE.CylinderGeometry(0.09, 0.09, 0.05, 12)
+    addGeo(paintedParts, cap, [0.5, 0.5], { rx: Math.PI * 0.5, tz: -0.20 })
     wheelCylinder.addChild(doc.createNode('wheelPainted').setMesh(doc.createMesh('wheelPainted').addPrimitive(partsToPrimitive(doc, matRed, paintedParts))))
 
-    // Para-lama e suspensao
     const guardParts = []
-    addGeo(guardParts, new THREE.BoxGeometry(0.56, 0.10, 0.32), UV.charcoal, { tx: 0, ty: 0.44, tz: 0 })
+    addGeo(guardParts, new THREE.BoxGeometry(0.62, 0.11, 0.36), UV.charcoal, { tx: 0, ty: 0.46, tz: 0 })
     wheelContainer.addChild(doc.createNode('wheelGuard').setMesh(doc.createMesh('wheelGuard').addPrimitive(partsToPrimitive(doc, matPalette, guardParts))))
 
     const suspParts = []
-    addGeo(suspParts, new THREE.CylinderGeometry(0.055, 0.055, 0.85, 8), UV.gold, { tx: 0, ty: 0.44, tz: 0 })
+    addGeo(suspParts, new THREE.CylinderGeometry(0.06, 0.06, 0.85, 8), UV.gold, { tx: 0, ty: 0.44, tz: 0 })
     wheelContainer.addChild(doc.createNode('wheelSuspension').setTranslation([ 0, 0.48, 0 ]).setMesh(doc.createMesh('wheelSuspension').addPrimitive(partsToPrimitive(doc, matPalette, suspParts))))
 }
 
 const io = new NodeIO().registerExtensions(ALL_EXTENSIONS).setVertexLayout(VertexLayout.SEPARATE)
 await io.write(vehiclePath, doc)
-console.log(`Novo veiculo salvo em ${vehiclePath} (${(statSync(vehiclePath).size / 1024).toFixed(1)} KB)`)
+console.log(`Agro-Rover Futurista salvo em ${vehiclePath} (${(statSync(vehiclePath).size / 1024).toFixed(1)} KB)`)

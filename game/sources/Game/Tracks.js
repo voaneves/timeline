@@ -12,6 +12,8 @@ export class Tracks
         this.size = 40
         this.halfSize = this.size / 2
         this.tracks = []
+        this.enabled = false
+        this.clearedOnce = false
 
         this.focusPoint = new THREE.Vector2()
         
@@ -63,6 +65,8 @@ export class Tracks
 
     add(track)
     {
+        if(!this.enabled)
+            return track
         this.tracks.push(track)
         this.scene.add(track.trail.mesh)
         return track
@@ -75,6 +79,13 @@ export class Tracks
 
     update()
     {
+        if(!this.enabled)
+        {
+            if(this.clearedOnce)
+                return
+            this.clearedOnce = true
+        }
+
         this.camera.position.x = this.focusPoint.x
         this.camera.position.z = this.focusPoint.y
 

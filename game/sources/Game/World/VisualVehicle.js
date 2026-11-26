@@ -27,6 +27,8 @@ export class VisualVehicle
         this.setScreenPosition()
         this.setPaints()
         this.setSubmarineKit()
+        this.setCharacterFace()
+        this.setCargoTrophies()
 
         this.tickCallback = () =>
         {
@@ -253,43 +255,153 @@ export class VisualVehicle
             active: false,
             group: new THREE.Group(),
             propellers: [],
-            bubbles: []
+            bubbles: [],
+            eyes: null,
+            savedVisibility: new Map(),
+            savedAntennaVisible: true
         }
         this.submarineKit.group.visible = false
         this.parts.chassis.add(this.submarineKit.group)
 
-        // Domo panoramico ciano sobre a cabine
-        const domeMat = new THREE.MeshLambertNodeMaterial({ transparent: true, opacity: 0.42 })
-        domeMat.colorNode = color('#7ce8ff')
-        const dome = new THREE.Mesh(new THREE.SphereGeometry(0.68, 18, 12, 0, Math.PI * 2, 0, Math.PI * 0.55), domeMat)
-        dome.position.set(-0.08, 0.38, 0)
-        dome.scale.set(1.25, 0.72, 1.0)
+        const hullMat = new MeshDefaultMaterial({ colorNode: color('#f6be2c'), hasWater: false, hasLightBounce: false })
+        const keelMat = new MeshDefaultMaterial({ colorNode: color('#163a5f'), hasWater: false, hasLightBounce: false })
+        const podMat = new MeshDefaultMaterial({ colorNode: color('#2a4365'), hasWater: false, hasLightBounce: false })
+        const trimMat = new MeshDefaultMaterial({ colorNode: color('#20b2aa'), hasWater: false, hasLightBounce: false })
+        const ivoryMat = new MeshDefaultMaterial({ colorNode: color('#f4f9ff'), hasWater: false, hasLightBounce: false })
+        const brassMat = new MeshDefaultMaterial({ colorNode: color('#f5c542'), hasWater: false, hasLightBounce: false })
+        const bladeMat = new THREE.MeshBasicNodeMaterial()
+        bladeMat.colorNode = color('#34cfc4').mul(1.25)
+        const portGlowMat = new THREE.MeshBasicNodeMaterial()
+        portGlowMat.colorNode = color('#7ef2ff').mul(1.45)
+
+        const addSolid = (mesh) =>
+        {
+            mesh.castShadow = true
+            mesh.receiveShadow = true
+            this.submarineKit.group.add(mesh)
+            return mesh
+        }
+
+        // Casco principal pressurizado amarelo (pesquisa oceanica)
+        const mainHull = addSolid(new THREE.Mesh(new THREE.CylinderGeometry(0.68, 0.72, 2.25, 20), hullMat))
+        mainHull.rotation.z = Math.PI * 0.5
+        mainHull.position.set(0.05, 0.10, 0)
+
+        const bowCap = addSolid(new THREE.Mesh(new THREE.SphereGeometry(0.68, 20, 14), hullMat))
+        bowCap.position.set(1.15, 0.10, 0)
+        bowCap.scale.set(0.75, 1.0, 1.0)
+
+        const sternCone = addSolid(new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.68, 0.92, 20), hullMat))
+        sternCone.rotation.z = Math.PI * 0.5
+        sternCone.position.set(-1.53, 0.10, 0)
+
+        // Quilha inferior azul-marinho e faixas hidrodinamicas turquesa
+        const keel = addSolid(new THREE.Mesh(new THREE.BoxGeometry(2.38, 0.34, 0.84), keelMat))
+        keel.position.set(-0.02, -0.44, 0)
+
+        const bowKeel = addSolid(new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.24, 0.62), keelMat))
+        bowKeel.position.set(1.25, -0.38, 0)
+        bowKeel.rotation.z = 0.25
+
+        for(const sz of [ -0.71, 0.71 ])
+        {
+            const stripe = addSolid(new THREE.Mesh(new THREE.BoxGeometry(2.15, 0.10, 0.08), trimMat))
+            stripe.position.set(0.05, 0.04, sz)
+
+            // Escotilhas laterais iluminadas (3 por lado)
+            for(const px of [ -0.58, 0.02, 0.62 ])
+            {
+                const frame = addSolid(new THREE.Mesh(new THREE.TorusGeometry(0.14, 0.032, 8, 16), brassMat))
+                frame.position.set(px, 0.22, sz)
+                const glass = new THREE.Mesh(new THREE.CylinderGeometry(0.125, 0.125, 0.04, 14), portGlowMat)
+                glass.rotation.x = Math.PI * 0.5
+                glass.position.set(px, 0.22, sz)
+                this.submarineKit.group.add(glass)
+            }
+        }
+
+        // Cupula frontal panoramica ciano + anel de latao
+        const domeMat = new THREE.MeshLambertNodeMaterial({ transparent: true, opacity: 0.44 })
+        domeMat.colorNode = color('#8beeff')
+        const dome = new THREE.Mesh(new THREE.SphereGeometry(0.62, 20, 14, 0, Math.PI * 2, 0, Math.PI * 0.54), domeMat)
+        dome.rotation.z = -Math.PI * 0.5
+        dome.position.set(1.32, 0.10, 0)
+        dome.scale.set(1.0, 1.08, 1.0)
         this.submarineKit.group.add(dome)
 
-        // Anel dourado da escotilha
-        const collarMat = new THREE.MeshBasicNodeMaterial()
-        collarMat.colorNode = color('#ffe082')
-        const collar = new THREE.Mesh(new THREE.TorusGeometry(0.66, 0.04, 8, 24), collarMat)
-        collar.rotation.x = Math.PI * 0.5
-        collar.position.set(-0.08, 0.39, 0)
-        collar.scale.set(1.25, 1.0, 1.0)
-        this.submarineKit.group.add(collar)
+        const bowCollar = addSolid(new THREE.Mesh(new THREE.TorusGeometry(0.61, 0.055, 8, 24), brassMat))
+        bowCollar.rotation.y = Math.PI * 0.5
+        bowCollar.position.set(1.30, 0.10, 0)
 
-        // Turbinas hidro laterais com helices giratorias
-        const podMat = new THREE.MeshLambertNodeMaterial()
-        podMat.colorNode = color('#2a4365')
-        const bladeMat = new THREE.MeshBasicNodeMaterial()
-        bladeMat.colorNode = color('#34cfc4')
+        // Olhos LED amigaveis dentro da cupula frontal do submarino
+        const eyeMat = new THREE.MeshBasicNodeMaterial()
+        eyeMat.colorNode = color('#a8f8ff').mul(1.85)
+        const leftEye = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.12, 0.14), eyeMat)
+        leftEye.position.set(1.62, 0.19, -0.22)
+        const rightEye = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.12, 0.14), eyeMat)
+        rightEye.position.set(1.62, 0.19, 0.22)
+        const smile = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.035, 0.22), eyeMat)
+        smile.position.set(1.62, 0.06, 0)
+        this.submarineKit.group.add(leftEye, rightEye, smile)
+        this.submarineKit.eyes = { leftEye, rightEye, smile }
 
-        for(const sz of [ -0.92, 0.92 ])
+        // Torre de comando superior (sail), lemes de profundidade e periscopio
+        const sail = addSolid(new THREE.Mesh(new THREE.BoxGeometry(0.92, 0.52, 0.44), hullMat))
+        sail.position.set(0.10, 0.90, 0)
+
+        const hatchRing = addSolid(new THREE.Mesh(new THREE.CylinderGeometry(0.20, 0.22, 0.08, 14), ivoryMat))
+        hatchRing.position.set(0.04, 1.18, 0)
+
+        const divePlanes = addSolid(new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.06, 1.38), trimMat))
+        divePlanes.position.set(0.16, 0.92, 0)
+
+        const periscopeMast = addSolid(new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.055, 0.36, 10), brassMat))
+        periscopeMast.position.set(0.28, 1.32, 0)
+        const periscopeHead = addSolid(new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.09, 0.09), brassMat))
+        periscopeHead.position.set(0.35, 1.48, 0)
+        const periscopeLens = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.07, 0.07), portGlowMat)
+        periscopeLens.position.set(0.45, 1.48, 0)
+        this.submarineKit.group.add(periscopeLens)
+
+        // Estabilizadores cruciformes de popa e helice central de latao (4 pas)
+        const rudderTop = addSolid(new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.46, 0.07), keelMat))
+        rudderTop.position.set(-1.72, 0.42, 0)
+        const rudderBottom = addSolid(new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.40, 0.07), keelMat))
+        rudderBottom.position.set(-1.72, -0.26, 0)
+        const sternPlanes = addSolid(new THREE.Mesh(new THREE.BoxGeometry(0.40, 0.07, 1.18), trimMat))
+        sternPlanes.position.set(-1.72, 0.10, 0)
+
+        const tailHub = new THREE.Group()
+        tailHub.position.set(-2.06, 0.10, 0)
+        const tailSpinner = addSolid(new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.10, 0.18, 10), brassMat))
+        tailSpinner.rotation.z = Math.PI * 0.5
+        tailHub.add(tailSpinner)
+        for(let k = 0; k < 4; k++)
         {
-            const pod = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.18, 0.62, 10), podMat)
+            const blade = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.32, 0.08), brassMat)
+            blade.rotation.x = (k / 4) * Math.PI * 2
+            blade.castShadow = true
+            tailHub.add(blade)
+        }
+        this.submarineKit.group.add(tailHub)
+        this.submarineKit.propellers.push(tailHub)
+
+        // Turbinas hidro laterais com helices giratorias (3 pas ciano)
+        for(const sz of [ -0.94, 0.94 ])
+        {
+            const pylon = addSolid(new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.10, 0.36), keelMat))
+            pylon.position.set(-1.05, 0.02, sz * 0.74)
+
+            const pod = addSolid(new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.18, 0.64, 12), podMat))
             pod.rotation.z = Math.PI * 0.5
-            pod.position.set(-1.12, -0.02, sz)
-            this.submarineKit.group.add(pod)
+            pod.position.set(-1.12, 0.02, sz)
+
+            const nozzle = addSolid(new THREE.Mesh(new THREE.TorusGeometry(0.16, 0.028, 8, 14), trimMat))
+            nozzle.rotation.y = Math.PI * 0.5
+            nozzle.position.set(-0.82, 0.02, sz)
 
             const hub = new THREE.Group()
-            hub.position.set(-1.46, -0.02, sz)
+            hub.position.set(-1.47, 0.02, sz)
             for(let k = 0; k < 3; k++)
             {
                 const blade = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.24, 0.06), bladeMat)
@@ -312,26 +424,33 @@ export class VisualVehicle
             const fade = uv().y.smoothstep(0.0, 0.85).oneMinus()
             return vec4(color('#8beeff').mul(1.2), fade.mul(0.22))
         })()
-        const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 1.65, 6.5, 16, 1, true), beamMat)
+        const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.20, 1.75, 6.8, 16, 1, true), beamMat)
         beam.rotation.z = -Math.PI * 0.5
-        beam.position.set(4.65, 0.05, 0)
+        beam.position.set(5.15, 0.08, 0)
         this.submarineKit.group.add(beam)
 
-        // Rastro de bolhas atras das turbinas hidro
+        // Rastro de bolhas atras das turbinas laterais e helice central
         const bubbleGeo = new THREE.SphereGeometry(0.085, 7, 6)
         const bubbleMat = new THREE.MeshBasicNodeMaterial({ transparent: true, opacity: 0.72 })
         bubbleMat.colorNode = color('#a8f4ff')
-        for(let i = 0; i < 18; i++)
+        const bubbleAnchors = [
+            { x: -1.56, y: 0.02, z: -0.94 },
+            { x: -1.56, y: 0.02, z: 0.94 },
+            { x: -2.14, y: 0.10, z: 0.0 }
+        ]
+        for(let i = 0; i < 21; i++)
         {
             const b = new THREE.Mesh(bubbleGeo, bubbleMat)
-            const side = (i % 2 === 0 ? -0.92 : 0.92) + (Math.random() - 0.5) * 0.16
+            const anchor = bubbleAnchors[i % bubbleAnchors.length]
             this.submarineKit.group.add(b)
             this.submarineKit.bubbles.push({
                 mesh: b,
-                phase: i / 18,
-                baseZ: side,
-                driftY: (Math.random() - 0.3) * 0.45,
-                driftZ: (Math.random() - 0.5) * 0.3,
+                phase: i / 21,
+                baseX: anchor.x,
+                baseY: anchor.y,
+                baseZ: anchor.z + (Math.random() - 0.5) * 0.14,
+                driftY: (Math.random() - 0.25) * 0.45,
+                driftZ: (Math.random() - 0.5) * 0.28,
             })
         }
     }
@@ -340,8 +459,206 @@ export class VisualVehicle
     {
         if(!this.submarineKit)
             return
-        this.submarineKit.active = !!active
-        this.submarineKit.group.visible = this.submarineKit.active
+
+        const next = !!active
+        if(this.submarineKit.active === next)
+            return
+
+        this.submarineKit.active = next
+        this.submarineKit.group.visible = next
+
+        if(next)
+        {
+            this.submarineKit.savedVisibility.clear()
+            for(const child of this.parts.chassis.children)
+            {
+                if(
+                    child === this.submarineKit.group ||
+                    child === this.boostTrails?.leftReference ||
+                    child === this.boostTrails?.rightReference
+                )
+                    continue
+
+                this.submarineKit.savedVisibility.set(child, child.visible)
+                child.visible = false
+            }
+
+            if(this.antenna?.head)
+            {
+                this.submarineKit.savedAntennaVisible = this.antenna.head.visible
+                this.antenna.head.visible = false
+            }
+        }
+        else
+        {
+            for(const [ child, prevVisible ] of this.submarineKit.savedVisibility.entries())
+            {
+                child.visible = prevVisible
+            }
+            this.submarineKit.savedVisibility.clear()
+
+            if(this.parts.blinkerLeft)
+                this.parts.blinkerLeft.visible = false
+            if(this.parts.blinkerRight)
+                this.parts.blinkerRight.visible = false
+            if(this.parts.stopLights)
+                this.parts.stopLights.visible = false
+            if(this.parts.backLights)
+                this.parts.backLights.visible = false
+
+            if(this.antenna?.head)
+                this.antenna.head.visible = this.submarineKit.savedAntennaVisible
+        }
+    }
+
+    setCharacterFace()
+    {
+        const eyeMat = new THREE.MeshBasicNodeMaterial()
+        eyeMat.colorNode = color('#7ef2ff').mul(1.9)
+
+        const leftEye = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.11, 0.14), eyeMat)
+        leftEye.position.set(1.425, 0.09, -0.24)
+        const rightEye = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.11, 0.14), eyeMat)
+        rightEye.position.set(1.425, 0.09, 0.24)
+
+        const smile = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.035, 0.24), eyeMat)
+        smile.position.set(1.425, -0.01, 0)
+
+        this.parts.chassis.add(leftEye, rightEye, smile)
+        this.characterFace = { leftEye, rightEye, smile }
+    }
+
+    setCargoTrophies()
+    {
+        const group = new THREE.Group()
+        this.parts.chassis.add(group)
+
+        const goldMat = new MeshDefaultMaterial({ colorNode: color('#f5c542'), hasWater: false, hasLightBounce: false })
+        const greenMat = new MeshDefaultMaterial({ colorNode: color('#2d8a4e'), hasWater: false, hasLightBounce: false })
+        const cyanMat = new THREE.MeshBasicNodeMaterial()
+        cyanMat.colorNode = color('#38bdf8').mul(1.7)
+        const darkMat = new MeshDefaultMaterial({ colorNode: color('#1e293b'), hasWater: false, hasLightBounce: false })
+        const cedarMat = new MeshDefaultMaterial({ colorNode: color('#c67c3b'), hasWater: false, hasLightBounce: false })
+        const silverMat = new MeshDefaultMaterial({ colorNode: color('#cbd5e1'), hasWater: false, hasLightBounce: false })
+        const redMat = new MeshDefaultMaterial({ colorNode: color('#dc2626'), hasWater: false, hasLightBounce: false })
+
+        const items = new Map()
+
+        // 1. Agro: mini fardo dourado + broto verde
+        {
+            const m = new THREE.Group()
+            const roll = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, 0.24, 12), goldMat)
+            roll.rotation.z = Math.PI * 0.5
+            m.add(roll)
+            const leaf = new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.16, 6), greenMat)
+            leaf.position.y = 0.18
+            m.add(leaf)
+            m.position.set(-0.62, 0.28, -0.32)
+            m.visible = false
+            group.add(m)
+            items.set('agro', m)
+        }
+
+        // 2. Tech: mini rack servidor brilhante
+        {
+            const m = new THREE.Group()
+            const rack = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.34, 0.22), darkMat)
+            m.add(rack)
+            const led = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.05, 0.14), cyanMat)
+            led.position.y = 0.08
+            m.add(led)
+            m.position.set(-1.04, 0.33, -0.32)
+            m.visible = false
+            group.add(m)
+            items.set('tech', m)
+        }
+
+        // 3. Negocios: mini grafico 3D dourado
+        {
+            const m = new THREE.Group()
+            for(let b = 0; b < 3; b++)
+            {
+                const h = 0.12 + b * 0.09
+                const bar = new THREE.Mesh(new THREE.BoxGeometry(0.08, h, 0.08), b === 2 ? goldMat : cyanMat)
+                bar.position.set(0, h * 0.5 - 0.1, -0.10 + b * 0.10)
+                m.add(bar)
+            }
+            m.position.set(-0.62, 0.27, 0.32)
+            m.visible = false
+            group.add(m)
+            items.set('business', m)
+        }
+
+        // 4. Musica: mini violao apoiado perto da cabine
+        {
+            const m = new THREE.Group()
+            const body = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, 0.07, 12), cedarMat)
+            body.rotation.x = Math.PI * 0.5
+            m.add(body)
+            const neck = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.30, 0.03), darkMat)
+            neck.position.y = 0.22
+            m.add(neck)
+            m.rotation.set(-0.45, Math.PI * 0.5, 0)
+            m.position.set(-0.56, 0.36, 0.0)
+            m.visible = false
+            group.add(m)
+            items.set('music', m)
+        }
+
+        // 5. Musculacao: mini barra olimpica com anilhas vermelhas
+        {
+            const m = new THREE.Group()
+            const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.42, 8), silverMat)
+            bar.rotation.x = Math.PI * 0.5
+            m.add(bar)
+            for(const pz of [ -0.16, 0.16 ])
+            {
+                const p = new THREE.Mesh(new THREE.CylinderGeometry(0.10, 0.10, 0.04, 12), redMat)
+                p.rotation.x = Math.PI * 0.5
+                p.position.z = pz
+                m.add(p)
+            }
+            m.position.set(-1.04, 0.26, 0.30)
+            m.visible = false
+            group.add(m)
+            items.set('gym', m)
+        }
+
+        const unlocked = new Set()
+        try
+        {
+            const saved = JSON.parse(localStorage.getItem('vn_park_trophies_v1') || '[]')
+            if(Array.isArray(saved))
+            {
+                for(const id of saved)
+                {
+                    if(items.has(id))
+                    {
+                        unlocked.add(id)
+                        items.get(id).visible = true
+                    }
+                }
+            }
+        }
+        catch(e) {}
+
+        this.cargoTrophies = { group, items, unlocked }
+    }
+
+    unlockCargoTrophy(id)
+    {
+        const mesh = this.cargoTrophies?.items.get(id)
+        if(!mesh)
+            return false
+        const isNew = !this.cargoTrophies.unlocked.has(id)
+        this.cargoTrophies.unlocked.add(id)
+        mesh.visible = true
+        try
+        {
+            localStorage.setItem('vn_park_trophies_v1', JSON.stringify([ ...this.cargoTrophies.unlocked ]))
+        }
+        catch(e) {}
+        return isNew
     }
 
     setMainGroundTrack()
@@ -416,8 +733,16 @@ export class VisualVehicle
         {
             on = !on
 
-            this.parts.blinkerLeft.visible = this.game.inputs.actions.get('left').active ? on : false
-            this.parts.blinkerRight.visible = this.game.inputs.actions.get('right').active ? on : false
+            if(this.submarineKit?.active)
+            {
+                this.parts.blinkerLeft.visible = false
+                this.parts.blinkerRight.visible = false
+            }
+            else
+            {
+                this.parts.blinkerLeft.visible = this.game.inputs.actions.get('left').active ? on : false
+                this.parts.blinkerRight.visible = this.game.inputs.actions.get('right').active ? on : false
+            }
 
             if(!this.game.inputs.actions.get('left').active && !this.game.inputs.actions.get('right').active && !on)
             {
@@ -561,12 +886,14 @@ export class VisualVehicle
                 visualWheel.suspension.scale.y = suspensionScale
             }
 
-            // Ground tracks
-            visualWheel.groundTrack.update(physicalWheel.contactPoint, physicalWheel.inContact)
+            // Ground tracks (desativado quando tracks.enabled = false)
+            if(this.game.tracks.enabled)
+                visualWheel.groundTrack.update(physicalWheel.contactPoint, physicalWheel.inContact)
         }
 
         // Main ground track
-        this.mainGroundTrack.update(physicalVehicle.position, physicalVehicle.position.y < 1.5)
+        if(this.game.tracks.enabled)
+            this.mainGroundTrack.update(physicalVehicle.position, physicalVehicle.position.y < 1.5)
 
         // Antenna
         if(this.antenna)
@@ -583,7 +910,15 @@ export class VisualVehicle
         }
 
         // Stop/back lights
-        if(this.game.player.braking)
+        if(this.submarineKit?.active)
+        {
+            if(this.parts.stopLights)
+                this.parts.stopLights.visible = false
+
+            if(this.parts.backLights)
+                this.parts.backLights.visible = false
+        }
+        else if(this.game.player.braking)
         {
             if(this.parts.stopLights)
                 this.parts.stopLights.visible = true
@@ -655,13 +990,30 @@ export class VisualVehicle
             {
                 const p = (t * (0.9 + speedMag * 0.04) + b.phase) % 1
                 b.mesh.position.set(
-                    -1.55 - p * wakeLen,
-                    0.02 + p * (0.45 + b.driftY),
+                    b.baseX - p * wakeLen,
+                    b.baseY + p * (0.45 + b.driftY),
                     b.baseZ + Math.sin(t * 6 + b.phase * 10) * 0.06 + p * b.driftZ
                 )
                 const s = Math.sin(p * Math.PI) * (0.65 + (b.phase % 0.4))
                 b.mesh.scale.setScalar(Math.max(0.01, s))
             }
+
+            if(this.submarineKit.eyes)
+            {
+                const blink = (t % 4.2) > 4.08 ? 0.12 : (this.game.player.boosting ? 1.25 : 1.0)
+                this.submarineKit.eyes.leftEye.scale.y = blink
+                this.submarineKit.eyes.rightEye.scale.y = blink
+                this.submarineKit.eyes.smile.scale.z = this.game.player.boosting ? 1.25 : 1.0
+            }
+        }
+
+        if(this.characterFace)
+        {
+            const t = this.game.ticker.elapsedScaled
+            const blink = (t % 4.2) > 4.08 ? 0.12 : (this.game.player.boosting ? 1.25 : 1.0)
+            this.characterFace.leftEye.scale.y = blink
+            this.characterFace.rightEye.scale.y = blink
+            this.characterFace.smile.scale.z = this.game.player.boosting ? 1.25 : 1.0
         }
     }
 }

@@ -8,7 +8,7 @@ import { CareerArea } from './CareerArea.js'
 import { SocialArea } from './SocialArea.js'
 import { ToiletArea } from './ToiletArea.js'
 import { BowlingArea } from './BowlingArea.js'
-import { CircuitArea } from './CircuitArea.js'
+import { PassionParkArea } from './PassionParkArea.js'
 import { BehindTheSceneArea } from './BehindTheSceneArea.js'
 import { AchievementsArea } from './AchievementsArea.js'
 import { TimeMachineArea } from './TimeMachineArea.js'
@@ -25,7 +25,7 @@ export class Areas
             [ 'behindTheScene', BehindTheSceneArea ],
             [ 'bowling', BowlingArea ],
             [ 'career', CareerArea ],
-            [ 'circuit', CircuitArea ],
+            [ 'circuit', PassionParkArea ],
             [ 'cookie', CookieArea ],
             [ 'lab', LabArea ],
             [ 'landing', LandingArea ],

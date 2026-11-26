@@ -76,7 +76,7 @@ export class Map
             { key: 'map.behindTheScene', respawnName: 'behindTheScene', offset: { x: 0, y: 0 } },
             { key: 'map.bowling', respawnName: 'bowling', offset: { x: -0.04, y: 0.01 } },
             { key: 'map.career', respawnName: 'career', offset: { x: 0, y: -0.03 } },
-            { key: 'map.circuit', respawnName: 'circuit', offset: { x: 0.04, y: 0.02 } },
+            { key: 'map.circuit', respawnName: 'circuit', offset: { x: 0, y: 0 } },
             { key: 'map.cookie', respawnName: 'cookie', offset: { x: -0.01, y: 0 } },
             { key: 'map.lab', respawnName: 'lab', offset: { x: -0.01, y: 0 } },
             { key: 'map.landing', respawnName: 'landing', offset: { x: 0.02, y: 0 } },
@@ -307,11 +307,6 @@ export class Map
         
         element.addEventListener('click', (event) =>
         {
-            // Teleporting out of a running circuit race would leave it in an inconsistent state
-            const circuitState = this.game.world.areas?.circuit?.state
-            if(circuitState === 2 || circuitState === 3 || circuitState === 4) // STARTING, RUNNING, ENDING
-                return
-
             this.game.modals.open('map')
         })
         element.addEventListener('keydown', (event) =>

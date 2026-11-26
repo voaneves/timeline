@@ -99,7 +99,11 @@ export class CareerArea extends Area
             {
                 line.textMesh = line.stone.children.find(child => child.name.startsWith('careerText'))
 
-                const material = new THREE.MeshLambertNodeMaterial({ transparent: true })
+                const material = new THREE.MeshLambertNodeMaterial({
+                    transparent: true,
+                    depthWrite: false,
+                    side: THREE.DoubleSide,
+                })
                 
                 const baseColor = colors[line.color]
 
@@ -203,7 +207,9 @@ export class CareerArea extends Area
 
         this.year.digits = []
 
-        const digitMeshes = this.year.group.children.filter(child => child.name.startsWith('digit'))
+        const digitMeshes = this.year.group.children
+            .filter(child => child.name.startsWith('digit'))
+            .sort((a, b) => a.position.x - b.position.x)
 
         for(const mesh of digitMeshes)
         {
