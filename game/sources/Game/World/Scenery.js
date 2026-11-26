@@ -47,7 +47,10 @@ export class Scenery
         this.road = {}
 
         // Mesh and material
-        const mesh = this.references.items.get('road')[0]
+        const roadRefs = this.references.items.get('road')
+        const mesh = roadRefs?.[0]
+        if(!mesh)
+            return
         
         this.road.color = uniform(color('#383039'))
         this.road.glitterVariation = uniform(0)
@@ -114,6 +117,9 @@ export class Scenery
 
     update()
     {
+        if(!this.road?.glitterVariation)
+            return
+
         this.road.glitterVariation.value += this.game.ticker.deltaScaled * 0.004 + this.game.view.delta.length() * 0.004
     }
 }

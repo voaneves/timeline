@@ -514,7 +514,7 @@ export class VisualVehicle
     setCharacterFace()
     {
         const eyeMat = new THREE.MeshBasicNodeMaterial()
-        eyeMat.colorNode = color('#7ef2ff').mul(1.9)
+        eyeMat.outputNode = Fn(() => vec4(MeshDefaultMaterial.revealDiscardNodeBuilder(this.game, color('#7ef2ff').mul(1.9)), 1))()
 
         const leftEye = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.11, 0.14), eyeMat)
         leftEye.position.set(1.425, 0.09, -0.24)
@@ -536,7 +536,7 @@ export class VisualVehicle
         const goldMat = new MeshDefaultMaterial({ colorNode: color('#f5c542'), hasWater: false, hasLightBounce: false })
         const greenMat = new MeshDefaultMaterial({ colorNode: color('#2d8a4e'), hasWater: false, hasLightBounce: false })
         const cyanMat = new THREE.MeshBasicNodeMaterial()
-        cyanMat.colorNode = color('#38bdf8').mul(1.7)
+        cyanMat.outputNode = Fn(() => vec4(MeshDefaultMaterial.revealDiscardNodeBuilder(this.game, color('#38bdf8').mul(1.7)), 1))()
         const darkMat = new MeshDefaultMaterial({ colorNode: color('#1e293b'), hasWater: false, hasLightBounce: false })
         const cedarMat = new MeshDefaultMaterial({ colorNode: color('#c67c3b'), hasWater: false, hasLightBounce: false })
         const silverMat = new MeshDefaultMaterial({ colorNode: color('#cbd5e1'), hasWater: false, hasLightBounce: false })

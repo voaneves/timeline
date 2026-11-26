@@ -461,8 +461,12 @@ export class HeavenlySky
         wingsGeo.setAttribute('position', new THREE.Float32BufferAttribute(wingPositions, 3))
         wingsGeo.computeVertexNormals()
 
-        const birdGeo = mergeGeometries([ bodyGeo, tailGeo, wingsGeo ])
-        bodyGeo.dispose(); tailGeo.dispose(); wingsGeo.dispose()
+        const bodyNonIdx = bodyGeo.toNonIndexed()
+        bodyNonIdx.deleteAttribute('uv')
+        const tailNonIdx = tailGeo.toNonIndexed()
+        tailNonIdx.deleteAttribute('uv')
+        const birdGeo = mergeGeometries([ bodyNonIdx, tailNonIdx, wingsGeo ])
+        bodyGeo.dispose(); tailGeo.dispose(); bodyNonIdx.dispose(); tailNonIdx.dispose(); wingsGeo.dispose()
 
         const material = new THREE.MeshBasicNodeMaterial({ side: THREE.DoubleSide })
         material.positionNode = Fn(() =>

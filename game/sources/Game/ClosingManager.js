@@ -27,7 +27,7 @@ export class ClosingManager
                     this.game.world.whispers.menu.inputFlag.close()
 
                 // Circuit flag select => Close
-                else if(this.game.world.areas?.circuit?.menu.inputFlag.isOpen)
+                else if(this.game.world.areas?.circuit?.menu?.inputFlag?.isOpen)
                     this.game.world.areas.circuit.menu.inputFlag.close()
                 
                 // Modal open => Close
